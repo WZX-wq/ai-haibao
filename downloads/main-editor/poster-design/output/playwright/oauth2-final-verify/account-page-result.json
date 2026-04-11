@@ -1,0 +1,15 @@
+{
+  "url": "http://127.0.0.1:5173/account",
+  "title": "鲲穹设计",
+  "body": "ACCOUNT CENTER\n\n账户中心\n回到编辑器\n去登录\n当前未登录\n\n统一登录、MySQL 会话和账户中心骨架已经接好。补齐 OAuth2 参数后，就可以直接走完整登录流程。\n\n前往登录页",
+  "consoleMessages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+/*
+ * @Author: ShawnPhang
+ * @Date: 2022-03-09 16:29:54
+ * @Description: 处理和ctrl建相关的操作
+ * @LastEditors: ShawnPhang <https://m.palxp.cn>
+ * @LastEditTime: 2025-03-22 12:56:29
+ */
+// import store from '@/store'
+import handlePaste from './handlePaste';
+import { useGroupStore, useHistoryStore, useWidgetStore } from '@/store';
+export default function dealWithCtrl(e, _this) {
+    const groupStore = useGroupStore();
+    switch (e.keyCode) {
+        case 71: // g
+            e.preventDefault();
+            groupStore.realCombined();
+            // store.dispatch('realCombined')
+            break;
+        case 67: // c
+            copy();
+            break;
+        case 86: // v
+            paste();
+            break;
+        case 90: // z
+            undo(e.shiftKey);
+            break;
+        case 83: // s
+            e.preventDefault();
+            _this.save();
+            break;
+        case 187: // +
+            e.preventDefault();
+            _this.zoomAdd();
+            break;
+        case 189: // -
+            e.preventDefault();
+            _this.zoomSub();
+            break;
+    }
+}
+/**
+ * 对组合的子元素某个值进行判断
+ */
+function checkGroupChild(pid, key) {
+    const widgetStore = useWidgetStore();
+    let itHas = false;
+    const childs = widgetStore.dWidgets.filter((x) => x.parent === pid) || [];
+    childs.forEach((element) => {
+        element[key] && (itHas = true);
+    });
+    return itHas;
+}
+/**
+ * 复制元素
+ */
+function copy() {
+    const widgetStore = useWidgetStore();
+    if (widgetStore.dActiveElement?.uuid === '-1') {
+        return;
+    }
+    else if (widgetStore.dActiveElement?.isContainer && checkGroupChild(widgetStore.dActiveElement?.uuid, 'editable')) {
+        return;
+    }
+    !widgetStore.dActiveElement?.editable && widgetStore.copyWidget();
+    // !widgetStore.dActiveElement?.editable && store.dispatch('copyWidget')
+}
+/**
+ * 粘贴
+ */
+let pasteImageFile = null;
+document.addEventListener('paste', async (e) => {
+    const file = e.clipboardData.files[0];
+    pasteImageFile = file && file.type.startsWith('image') ? file : null;
+});
+async function paste() {
+    setTimeout(() => {
+        handlePaste(pasteImageFile).then(() => {
+            const widgetStore = useWidgetStore();
+            if (widgetStore.dCopyElement.length === 0) {
+                return;
+            }
+            else if (widgetStore.dActiveElement?.isContainer && checkGroupChild(widgetStore.dActiveElement?.uuid, 'editable')) {
+                return;
+            }
+            !widgetStore.dActiveElement?.editable && widgetStore.pasteWidget();
+        });
+    }, 10);
+}
+/**
+ * 撤销
+ */
+function undo(shiftKey) {
+    const widgetStore = useWidgetStore();
+    const historyStore = useHistoryStore();
+    const { type, editable } = widgetStore.dActiveElement;
+    if (type === 'w-text') {
+        // 不在编辑状态则执行撤销操作
+        !editable && (shiftKey ? historyStore.handleHistory('redo') : historyStore.handleHistory('undo'));
+    }
+    else
+        shiftKey ? historyStore.handleHistory('redo') : historyStore.handleHistory('undo');
+}
+//# sourceMappingURL=dealWithCtrl.js.map

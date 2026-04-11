@@ -1,0 +1,226 @@
+{
+  "ok": true,
+  "generatedAt": "2026-04-10T01:13:13.342Z",
+  "logs": {
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "pageErrors": [],
+    "requestFailed": [],
+    "badResponses": []
+  },
+  "results": [
+    {
+      "type": "route",
+      "label": "welcome",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-welcome.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/welcome",
+        "title": "欢迎页 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 1161,
+        "textSample": "鲲穹设计\n进入编辑器\nAI 快速生成\nAI 海报工作台\n输入一句话，快速生成可编辑海报\n\n先出第一版，再微调文字、配色、主图和背景，最后应用到编辑器继续精修或直接导出。\n\n场景\n活动\n招聘\n电商\n课程\n行业\n活动\n招聘\n电商\n课程\n餐饮\n健身\n尺寸\n小红书封面\n公众号封面\n朋友圈\n电商主图\n立即生成海报\n从模板开始\n生成预览\n春启 · 城市会客厅\n\n输入主题后，先得到一版可用海报，再决定怎么继续精修。\n\n主题\n配色\n主图\n导出\n生成快\n10 到 20 秒得到第一版\n可编辑\n不是死图，回到编辑器还能继续改\n生成快\n10 到 20 秒得到第一版可用海报。\n可编辑\n不是死图，回到编辑器还能继续精修。\n可导出\n支持 PNG、JPG、PDF，直接拿去用。\n三步完成\n更像一个顺手的工作流，而不是一堆表单\n01\n输入主题\n\n先告诉 AI 你想做什么海报。\n\n02\n选择行业和尺寸\n\n快速锁定适合的内容风格和画布规格。\n\n03\n生成并导出\n\n先看预览，再决定应用到编辑器还是直接导出。"
+      },
+      "passed": true
+    },
+    {
+      "type": "hero",
+      "label": "home-hero-entry",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\home-hero-entry.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/create?returnTo=/home&theme=%E5%BC%80%E4%B8%9A%E6%B4%BB%E5%8A%A8%E4%B8%BB%E8%A7%86%E8%A7%89&industry=%E9%A4%90%E9%A5%AE&sizeKey=wechat-cover&presetKey=campaign",
+        "title": "AI海报助手 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "返回编辑器\nAI 海报助手\n\n先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。\n\n导出\n生成预览\n\n工作流程\n\n先定方向，再细调结果\n基础设置\n微调结果\n\n第一步\n\n选一个场景起点\n场景推荐\n活动主视觉\n活动 / 高级简约\n招聘招募\n招聘 / 专业商务\n电商促销\n电商 / 活力促销\n课程招生\n课程 / 清新温暖\n健身打卡\n健身 / 年轻潮流\n餐饮上新\n餐饮 / 活力促销\n\n第二步\n\n关键参数\n引流 · 公众号封面\n主题\n7 / 36\n行业\n餐饮\n尺寸\n公众号封面 (900 x 383)\n展开高级设置\n开业活动主视觉\n公众号封面 · 餐饮 · 高级简约\n生成预览\n等待生成\n公众号封面\n900 x 383\n适应屏幕\n100%\n150%\n先生成一版草稿\n输入主题后即可生成海报预览\n\n右侧会始终保留可见预览，你不需要下载文件才能确认效果。"
+      },
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "home",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-home.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/home?tempid=101",
+        "title": "编辑器 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "鲲穹设计\n文件\n帮助\n修改模板\n鲲穹设计水印\n下载模板\n\n模板\n\n素材\n\n文字\n\n照片\n\n工具箱\n\n我的\n\n示例模板\n导入 PSD 创建模板\n已经到底了\n鲜味上新，活力开吃！\n活动主视觉 · 活力促销 · 餐饮\n清爽夏日味 × 爆款新搭配\n· 首单立减15元 · 消费满88赠限定周边\n· 到店打卡送手打柠檬茶一杯\n（活动时间：即日起至X月X日）\n立即了解\n画板 1/1\n设置\n图层\n画布尺寸\n宽\n高\n背景设置\n在背景库中选择\n颜色\n图片\n上传图片\n背景库\n将背景分离为图层\n适应屏幕"
+      },
+      "passed": true
+    },
+    {
+      "type": "panel",
+      "label": "templates",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\panel-templates.png",
+      "beforeUrl": "http://127.0.0.1:5173/home?tempid=101",
+      "afterUrl": "http://127.0.0.1:5173/home?tempid=101",
+      "passed": true
+    },
+    {
+      "type": "panel",
+      "label": "materials",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\panel-materials.png",
+      "before": 4,
+      "after": 5,
+      "passed": true
+    },
+    {
+      "type": "panel",
+      "label": "text",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\panel-text.png",
+      "before": 5,
+      "after": 6,
+      "passed": true
+    },
+    {
+      "type": "panel",
+      "label": "photos",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\panel-photos.png",
+      "before": 6,
+      "after": 7,
+      "passed": true
+    },
+    {
+      "type": "toolbox",
+      "label": "qrcode",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\toolbox-qrcode.png",
+      "beforeQr": 0,
+      "afterQr": 1,
+      "passed": true
+    },
+    {
+      "type": "toolbox",
+      "label": "cutout",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\toolbox-cutout.png",
+      "providerTip": "真实 AI 抠图 / rembg / u2net: Universal cutout completed with local rembg model.",
+      "passed": true
+    },
+    {
+      "type": "panel",
+      "label": "user-assets",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\panel-user-assets.png",
+      "beforeCount": 1,
+      "afterCount": 2,
+      "widgetBefore": 8,
+      "widgetAfter": 9,
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "create",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-create.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/create?returnTo=/home?tempid=101&theme=%E6%98%A5%E5%AD%A3%E6%B4%BB%E5%8A%A8%E4%B8%BB%E8%A7%86%E8%A7%89&industry=%E6%B4%BB%E5%8A%A8&sizeKey=xiaohongshu&presetKey=campaign",
+        "title": "AI海报助手 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "返回编辑器\nAI 海报助手\n\n先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。\n\n导出\n生成预览\n\n工作流程\n\n先定方向，再细调结果\n基础设置\n微调结果\n\n第一步\n\n选一个场景起点\n场景推荐\n活动主视觉\n活动 / 高级简约\n招聘招募\n招聘 / 专业商务\n电商促销\n电商 / 活力促销\n课程招生\n课程 / 清新温暖\n健身打卡\n健身 / 年轻潮流\n餐饮上新\n餐饮 / 活力促销\n\n第二步\n\n关键参数\n引流 · 小红书封面\n主题\n7 / 36\n行业\n活动\n尺寸\n小红书封面 (1242 x 1660)\n展开高级设置\n春季活动主视觉\n小红书封面 · 活动 · 高级简约\n生成预览\n等待生成\n小红书封面\n1242 x 1660\n适应屏幕\n100%\n150%\n先生成一版草稿\n输入主题后即可生成海报预览\n\n右侧会始终保留可见预览，你不需要下载文件才能确认效果。"
+      },
+      "passed": true
+    },
+    {
+      "type": "ai-flow",
+      "label": "create-generated",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\create-generated.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/create?returnTo=/home?tempid=101&theme=%E6%98%A5%E5%AD%A3%E6%B4%BB%E5%8A%A8%E4%B8%BB%E8%A7%86%E8%A7%89&industry=%E6%B4%BB%E5%8A%A8&sizeKey=xiaohongshu&presetKey=campaign",
+        "title": "AI海报助手 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "返回编辑器\nAI 海报助手\n\n先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。\n\n导出\n生成预览\n应用到编辑器\n\n工作流程\n\n先定方向，再细调结果\n基础设置\n微调结果\n\n快速微调\n\n只更新预览，不改主画布\n更新预览文案\n推荐标题 / 配色\n更新预览主图\n更新预览背景\n尺寸适配预览\n\n这些操作只会更新当前预览，让你先看结果，再决定要不要应用到编辑器。\n\n所见即所得\n\n直接编辑当前结果\n主标题\n副标题\n正文\n按钮文案\n推荐配色\n春季活动主视觉\n小红书封面 · 活动 · 高级简约\n重新生成预览\n下一步\n现在可以决定怎么继续\n\n先看右侧预览效果。如果满意，就应用到编辑器继续精修，或者直接导出文件。\n\n应用到编辑器精修\n导出 PNG\n导出 PDF\n最近一次结果\n重新生成前，先看一下这版方向\n小红书封面\n春启·城市会客厅\n\n春季活动主视觉 · 高级简约 · 活动\n\n预览已就绪\n小红书封面\n1242 x 1660\n适应屏幕\n100%\n150%\n春启·城市会客厅\n春季活动主视觉 · 高级简约 · 活动\n高级简约风春季限定活动\n📍 城市会客厅｜🌸 春日灵感场域\n🎫 限量早鸟票开放中｜🎁 到场即享专属福利\n—— 小红书专属引流视觉，留白呼吸感 × 低饱和春色 ——\n扫码咨询\n最近更新时间\n09:12:29\n当前状态\n预览尚未应用到编辑器\n春启·城市会客厅\n春季活动主视觉 · 高级简约 · 活动\n高级简约风春季限定活动\n📍 城市会客厅｜🌸 春日灵感场域\n🎫 限量早鸟票开放中｜🎁 到场即享专属福利\n—— 小红书专属引流视觉，留白呼吸感 × 低饱和春色 ——\n扫码咨询\n\n第 1 版已生成，现在可以直接在右侧查看效果。"
+      },
+      "passed": true
+    },
+    {
+      "type": "ai-flow",
+      "label": "create-refine",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\create-refine.png",
+      "passed": true
+    },
+    {
+      "type": "ai-flow",
+      "label": "create-export",
+      "downloads": [
+        "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\downloads\\create-png-春启·城市会客厅.png",
+        "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\downloads\\create-jpg-春启·城市会客厅.jpg",
+        "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\downloads\\create-pdf-春启·城市会客厅.pdf"
+      ],
+      "passed": true
+    },
+    {
+      "type": "ai-flow",
+      "label": "create-apply-return",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\create-apply-return.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/home?tempid=101",
+        "title": "编辑器 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "鲲穹设计\n文件\n帮助\n修改模板\n鲲穹设计水印\n下载模板\n\n模板\n\n素材\n\n文字\n\n照片\n\n工具箱\n\n我的\n\n示例模板\n导入 PSD 创建模板\n已经到底了\n春启·城市会客厅\n春季活动主视觉 · 高级简约 · 活动\n高级简约风春季限定活动\n📍 城市会客厅｜🌸 春日灵感场域\n🎫 限量早鸟票开放中｜🎁 到场即享专属福利\n—— 小红书专属引流主视觉 ——\n扫码咨询\n画板 1/1\n设置\n图层\n画布尺寸\n宽\n高\n背景设置\n在背景库中选择\n颜色\n图片\n上传图片\n背景库\n将背景分离为图层\n适应屏幕\n\n导出成功，PDF 文件已保存到本地。\n\n已应用到编辑器，可继续精修文字、图片和布局。"
+      },
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "draw",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-draw.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/draw?tempid=101",
+        "title": "画板预览 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 2051,
+        "textSample": "鲜味上新，活力开吃！\n活动主视觉 · 活力促销 · 餐饮\n清爽夏日味 × 爆款新搭配\n· 首单立减15元 · 消费满88赠限定周边\n· 到店打卡送手打柠檬茶一杯\n（活动时间：即日起至X月X日）\n立即了解"
+      },
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "html",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-html.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/html?tempid=101",
+        "title": "导出预览 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "鲜味上新，活力开吃！\n活动主视觉 · 活力促销 · 餐饮\n清爽夏日味 × 爆款新搭配\n· 首单立减15元 · 消费满88赠限定周边\n· 到店打卡送手打柠檬茶一杯\n（活动时间：即日起至X月X日）\n立即了解"
+      },
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "psd",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-psd.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/psd",
+        "title": "PSD 导入 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "在线 PSD 解析\n设计 PSD 规范\n在此拖入或选择 PSD 文件"
+      },
+      "passed": true
+    },
+    {
+      "type": "route",
+      "label": "ai-poster",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\full-coverage-qa\\screenshots\\route-ai-poster.png",
+      "state": {
+        "url": "http://127.0.0.1:5173/ai-poster?returnTo=/home?tempid=101",
+        "title": "AI海报助手 - 鲲穹设计",
+        "innerHeight": 960,
+        "scrollTop": 0,
+        "scrollHeight": 960,
+        "textSample": "返回编辑器\nAI 海报助手\n\n先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。\n\n导出\n生成预览\n\n工作流程\n\n先定方向，再细调结果\n基础设置\n微调结果\n\n第一步\n\n选一个场景起点\n场景推荐\n活动主视觉\n活动 / 高级简约\n招聘招募\n招聘 / 专业商务\n电商促销\n电商 / 活力促销\n课程招生\n课程 / 清新温暖\n健身打卡\n健身 / 年轻潮流\n餐饮上新\n餐饮 / 活力促销\n\n第二步\n\n关键参数\n引流 · 小红书封面\n主题\n5 / 36\n行业\n活动\n尺寸\n小红书封面 (1242 x 1660)\n展开高级设置\n活动主视觉\n小红书封面 · 活动 · 高级简约\n生成预览\n等待生成\n小红书封面\n1242 x 1660\n适应屏幕\n100%\n150%\n先生成一版草稿\n输入主题后即可生成海报预览\n\n右侧会始终保留可见预览，你不需要下载文件才能确认效果。"
+      },
+      "passed": true
+    }
+  ]
+}

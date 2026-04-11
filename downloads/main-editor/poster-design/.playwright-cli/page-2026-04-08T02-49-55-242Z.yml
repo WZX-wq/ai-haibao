@@ -1,0 +1,109 @@
+- generic [active]:
+  - generic [ref=e1]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5] [cursor=pointer]: 迅排设计
+        - generic [ref=e6]:
+          - generic [ref=e8]: 
+          - generic [ref=e10]: 
+        - separator [ref=e11]
+        - button " 文件" [ref=e13]:
+          - generic [ref=e14] [cursor=pointer]:
+            - generic [ref=e15]: 
+            - generic [ref=e16]: 文件
+        - button " 帮助" [ref=e18]:
+          - generic [ref=e19] [cursor=pointer]:
+            - generic [ref=e20]: 
+            - generic [ref=e21]: 帮助
+        - separator [ref=e22]
+      - textbox "未命名的设计" [ref=e26]
+      - generic [ref=e27]:
+        - button "修改模板" [ref=e28] [cursor=pointer]:
+          - generic [ref=e29]: 修改模板
+        - generic [ref=e30]:
+          - switch
+          - generic [ref=e33] [cursor=pointer]: 官方水印
+        - button "下载模版" [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: 下载模版
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - list [ref=e40]:
+            - listitem [ref=e41] [cursor=pointer]:
+              - generic [ref=e43]: 
+              - paragraph [ref=e44]: 模板
+            - listitem [ref=e45] [cursor=pointer]:
+              - generic [ref=e47]: 
+              - paragraph [ref=e48]: 素材
+            - listitem [ref=e49] [cursor=pointer]:
+              - generic [ref=e51]: 
+              - paragraph [ref=e52]: 文字
+            - listitem [ref=e53] [cursor=pointer]:
+              - generic [ref=e55]: 
+              - paragraph [ref=e56]: 照片
+            - listitem [ref=e57] [cursor=pointer]:
+              - generic [ref=e59]: 
+              - paragraph [ref=e60]: 工具箱
+            - listitem [ref=e61] [cursor=pointer]:
+              - generic [ref=e63]: 
+              - paragraph [ref=e64]: 我的
+          - link "Github 源码" [ref=e65] [cursor=pointer]:
+            - /url: https://github.com/palxiao/poster-design
+            - img "Github" [ref=e66]
+            - text: 源码
+        - generic [ref=e68]:
+          - generic [ref=e69] [cursor=pointer]:
+            - button "" [ref=e71]:
+              - generic [ref=e72]: 
+            - generic [ref=e73]:
+              - textbox "输入关键词搜索" [ref=e75]
+              - button "" [ref=e77]:
+                - generic [ref=e79]: 
+          - separator [ref=e80]:
+            - generic [ref=e81]: 示例模板
+          - button "导入 PSD 创建模板" [ref=e82] [cursor=pointer]:
+            - generic [ref=e83]: 导入 PSD 创建模板
+          - list [ref=e84]:
+            - img [ref=e88] [cursor=pointer]
+            - generic [ref=e91]: 正在加载中...
+            - generic [ref=e92]: 已经到底了
+      - generic [ref=e105] [cursor=pointer]:
+        - text: 画板 1/1
+        - generic [ref=e106]: 
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - generic [ref=e116] [cursor=pointer]: 设置
+          - generic [ref=e117] [cursor=pointer]: 图层
+        - generic [ref=e118]:
+          - text:      
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - button "画布尺寸" [expanded] [ref=e122] [cursor=pointer]:
+                - text: 画布尺寸
+                - img [ref=e124]
+              - region "画布尺寸" [ref=e126]:
+                - generic [ref=e128]:
+                  - generic [ref=e129] [cursor=pointer]:
+                    - textbox [ref=e131]: "1920"
+                    - generic [ref=e132]: 宽
+                  - generic [ref=e133] [cursor=pointer]: 
+                  - generic [ref=e134] [cursor=pointer]:
+                    - textbox [ref=e136]: "1080"
+                    - generic [ref=e137]: 高
+                  - generic [ref=e138] [cursor=pointer]: 
+            - generic [ref=e139]:
+              - button "背景设置" [expanded] [ref=e140] [cursor=pointer]:
+                - text: 背景设置
+                - img [ref=e142]
+              - region "背景设置" [ref=e144]:
+                - generic [ref=e145]:
+                  - button "在背景库中选择" [ref=e146] [cursor=pointer]:
+                    - generic [ref=e147]: 在背景库中选择
+                  - generic [ref=e150]:
+                    - generic [ref=e151]: 颜色
+                    - generic [ref=e152]: 图片
+    - generic [ref=e158]:
+      - generic [ref=e160] [cursor=pointer]: 
+      - generic [ref=e161] [cursor=pointer]: 适应屏幕
+      - generic [ref=e163] [cursor=pointer]: 
+  - generic:  ° 

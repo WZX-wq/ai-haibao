@@ -1,0 +1,10 @@
+- generic [ref=e6]:
+  - generic [ref=e7]: DRAW
+  - heading "预览链接已打开，但缺少海报数据" [level=1] [ref=e8]
+  - paragraph [ref=e9]:
+    - text: 请从模板、我的作品或导出流程进入该页面，并携带
+    - code [ref=e10]: tempid
+    - text: 或
+    - code [ref=e11]: id
+    - text: 参数。
+  - button "返回编辑器" [ref=e13] [cursor=pointer]

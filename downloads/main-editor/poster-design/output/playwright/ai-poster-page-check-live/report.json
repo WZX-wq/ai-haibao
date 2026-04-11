@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "scrollTop": 849,
+  "footer": "真实模型 / aliyun-bailian / qwen-plus-latest: 已使用阿里百炼真实文案模型生成推荐文案。",
+  "url": "http://127.0.0.1:5173/home?tempid=2",
+  "logs": {
+    "consoleErrors": [],
+    "pageErrors": [],
+    "badResponses": [],
+    "requestFailed": []
+  }
+}

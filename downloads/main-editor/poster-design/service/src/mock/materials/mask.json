@@ -1,0 +1,80 @@
+[
+  {
+    "id": 1,
+    "title": "遮罩容器-圆角矩形",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='36' fill='%23f8fafc'/%3E%3Crect x='36' y='48' width='168' height='144' rx='32' fill='%232b2b2b'/%3E%3C/svg%3E",
+    "url": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Crect x='36' y='48' width='168' height='144' rx='32' fill='white'/%3E%3C/svg%3E",
+    "created_time": "2023-08-20T21:46:49.000Z",
+    "updated_time": "2023-09-15T11:42:14.000Z",
+    "state": 1
+  },
+  {
+    "id": 2,
+    "title": "遮罩容器-爱心",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='36' fill='%23fff8fb'/%3E%3Cpath d='M120 186c-46-27-74-56-74-88 0-24 16-42 38-42 16 0 29 9 36 22 7-13 20-22 36-22 22 0 38 18 38 42 0 32-28 61-74 88z' fill='%232b2b2b'/%3E%3C/svg%3E",
+    "url": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Cpath d='M120 186c-46-27-74-56-74-88 0-24 16-42 38-42 16 0 29 9 36 22 7-13 20-22 36-22 22 0 38 18 38 42 0 32-28 61-74 88z' fill='white'/%3E%3C/svg%3E",
+    "created_time": "2023-08-20T21:46:52.000Z",
+    "updated_time": "2023-09-15T11:42:14.000Z",
+    "state": 1
+  },
+  {
+    "id": 3,
+    "title": "遮罩容器-圆形",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='36' fill='%23f8fbff'/%3E%3Ccircle cx='120' cy='120' r='74' fill='%232b2b2b'/%3E%3C/svg%3E",
+    "url": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Ccircle cx='120' cy='120' r='74' fill='white'/%3E%3C/svg%3E",
+    "created_time": "2023-08-20T21:47:03.000Z",
+    "updated_time": "2023-09-15T11:42:14.000Z",
+    "state": 1
+  },
+  {
+    "id": 4,
+    "title": "遮罩容器-竖版圆角",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Crect%20width%3D%22240%22%20height%3D%22240%22%20rx%3D%2236%22%20fill%3D%22%23f8fbff%22%2F%3E%3Crect%20x%3D%2254%22%20y%3D%2226%22%20width%3D%22132%22%20height%3D%22188%22%20rx%3D%2228%22%20fill%3D%22%232b2b2b%22%2F%3E%3C%2Fsvg%3E",
+    "url": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Crect%20x%3D%2254%22%20y%3D%2226%22%20width%3D%22132%22%20height%3D%22188%22%20rx%3D%2228%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E",
+    "created_time": "2024-01-01T00:00:00.000Z",
+    "updated_time": "2024-01-01T00:00:00.000Z",
+    "state": 1
+  },
+  {
+    "id": 5,
+    "title": "遮罩容器-对话框",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Crect%20width%3D%22240%22%20height%3D%22240%22%20rx%3D%2236%22%20fill%3D%22%23f8fbff%22%2F%3E%3Cpath%20d%3D%22M40%2054h160a24%2024%200%200%201%2024%2024v58a24%2024%200%200%201-24%2024h-72l-38%2028v-28H40a24%2024%200%200%201-24-24V78a24%2024%200%200%201%2024-24z%22%20fill%3D%22%232b2b2b%22%2F%3E%3C%2Fsvg%3E",
+    "url": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Cpath%20d%3D%22M40%2054h160a24%2024%200%200%201%2024%2024v58a24%2024%200%200%201-24%2024h-72l-38%2028v-28H40a24%2024%200%200%201-24-24V78a24%2024%200%200%201%2024-24z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E",
+    "created_time": "2024-01-01T00:00:00.000Z",
+    "updated_time": "2024-01-01T00:00:00.000Z",
+    "state": 1
+  },
+  {
+    "id": 6,
+    "title": "遮罩容器-星形",
+    "width": 1000,
+    "height": 1000,
+    "type": "mask",
+    "model": "{}",
+    "thumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Crect%20width%3D%22240%22%20height%3D%22240%22%20rx%3D%2236%22%20fill%3D%22%23f8fbff%22%2F%3E%3Cpath%20d%3D%22M120%2028l24%2048%2054%208-39%2038%2010%2054-49-24-49%2024%2010-54-39-38%2054-8z%22%20fill%3D%22%232b2b2b%22%2F%3E%3C%2Fsvg%3E",
+    "url": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20240%22%3E%3Cpath%20d%3D%22M120%2028l24%2048%2054%208-39%2038%2010%2054-49-24-49%2024%2010-54-39-38%2054-8z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E",
+    "created_time": "2024-01-01T00:00:00.000Z",
+    "updated_time": "2024-01-01T00:00:00.000Z",
+    "state": 1
+  }
+]

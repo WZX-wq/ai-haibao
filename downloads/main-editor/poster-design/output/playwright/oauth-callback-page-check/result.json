@@ -1,0 +1,13 @@
+{
+  "body": "登录失败\n\n回调参数无效或 state 校验失败，请重新登录",
+  "consoleMessages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    }
+  ]
+}

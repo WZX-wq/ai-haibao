@@ -1,0 +1,36 @@
+{
+  "clicks": [
+    "panel:template",
+    "panel:materials",
+    "materials:click-first-thumb",
+    "panel:text",
+    "text:add-basic",
+    "text:drag-first-thumb",
+    "text:click-first-thumb",
+    "panel:photos",
+    "panel:toolbox",
+    "toolbox:open-ai-assistant",
+    "ai:fill-form",
+    "ai:recommend",
+    "ai:generate",
+    "ai:replace-text",
+    "ai:replace-palette",
+    "ai:replace-background",
+    "ai:adapt-size",
+    "ai:export-png",
+    "ai:export-jpg",
+    "ai:export-pdf",
+    "ai:close-dialog",
+    "panel:mine"
+  ],
+  "downloads": [
+    "_______ ____主视觉.png",
+    "_______ ____主视觉.jpg",
+    "_______ ____主视觉.pdf"
+  ],
+  "failed": [],
+  "errors": [],
+  "warnings": [],
+  "pageErrors": [],
+  "currentUrl": "http://127.0.0.1:5173/home?tempid=1"
+}

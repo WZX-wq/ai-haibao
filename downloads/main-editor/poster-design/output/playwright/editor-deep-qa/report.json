@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "generatedAt": "2026-04-08T12:44:10.729Z",
+  "logs": {
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "pageErrors": [],
+    "requestFailed": [],
+    "badResponses": []
+  },
+  "results": [
+    {
+      "feature": "templates",
+      "passed": true,
+      "url": "http://127.0.0.1:5173/home?tempid=101",
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\templates.png"
+    },
+    {
+      "feature": "materials",
+      "before": 6,
+      "after": 7,
+      "passed": true,
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\materials.png"
+    },
+    {
+      "feature": "text-and-groups",
+      "before": 7,
+      "afterBasic": 8,
+      "afterGroup": 9,
+      "passed": true,
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\text-groups.png"
+    },
+    {
+      "feature": "photos",
+      "before": 9,
+      "after": 10,
+      "passed": true,
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\photos.png"
+    },
+    {
+      "feature": "background-upload",
+      "before": "none",
+      "after": "url(\"http://localhost:7001/static/user/a9jcj2cq1wzv.png\")",
+      "passed": true,
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\background-upload.png"
+    },
+    {
+      "feature": "user-assets",
+      "beforeCount": 1,
+      "afterCount": 2,
+      "widgetBefore": 10,
+      "widgetAfter": 11,
+      "designTabVisible": 1,
+      "passed": true,
+      "screenshot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\editor-deep-qa\\user-assets.png"
+    }
+  ]
+}

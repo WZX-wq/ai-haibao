@@ -1,0 +1,7 @@
+{
+  "url": "http://127.0.0.1:5173/account",
+  "errors": [
+    "console:{provider_name: kunqiong-login, oauth_ready: true, mysql_ready: true, app_base_url: http://localhost:5173, callback_route: /oauth/callback}",
+    "console:{provider_name: kunqiong-login, oauth_ready: true, mysql_ready: true, app_base_url: http://localhost:5173, callback_route: /oauth/callback}"
+  ]
+}

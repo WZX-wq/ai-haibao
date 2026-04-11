@@ -1,0 +1,8 @@
+{
+  "welcomeTitle": "欢迎页 - 鲲穹设计",
+  "welcomeHasAccountButton": false,
+  "editorUrl": "http://127.0.0.1:5173/home?tempid=303",
+  "editorHasAccountButton": false,
+  "accountUrl": "http://127.0.0.1:5173/account",
+  "accountText": "ACCOUNT CENTER\n\n个人中心\n\n查看当前账号状态、可用功能和常用入口。\n\n回到编辑器\n去登录\n当前未登录\n\n登录后可查看账号信息、可用权益和常用入口。\n\n去登录"
+}

@@ -1,0 +1,115 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - button "返回编辑器" [ref=e7] [cursor=pointer]
+      - heading "AI 海报助手" [level=1] [ref=e8]
+      - paragraph [ref=e9]: 先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。
+    - generic [ref=e10]:
+      - button "导出" [disabled] [ref=e12]:
+        - generic [ref=e13]: 导出
+      - button "生成预览" [disabled]:
+        - generic:
+          - img
+        - generic: 生成预览
+  - main [ref=e16]:
+    - complementary [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - paragraph [ref=e21]: WORKFLOW
+            - heading "先定方向，再细调结果" [level=2] [ref=e22]
+          - generic [ref=e23]:
+            - button "基础设置" [ref=e24] [cursor=pointer]
+            - button "微调结果" [disabled] [ref=e25]
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e29]:
+                - paragraph [ref=e30]: 第一步
+                - heading "选一个起点" [level=3] [ref=e31]
+              - generic [ref=e32]: 推荐模板
+            - generic [ref=e33]:
+              - button "活动主视觉 活动 / 高级简约" [ref=e34] [cursor=pointer]:
+                - strong [ref=e35]: 活动主视觉
+                - generic [ref=e36]: 活动 / 高级简约
+              - button "招聘招募 招聘 / 专业商务" [ref=e37] [cursor=pointer]:
+                - strong [ref=e38]: 招聘招募
+                - generic [ref=e39]: 招聘 / 专业商务
+              - button "电商促销 电商 / 活力促销" [ref=e40] [cursor=pointer]:
+                - strong [ref=e41]: 电商促销
+                - generic [ref=e42]: 电商 / 活力促销
+              - button "课程招生 课程 / 清新温暖" [ref=e43] [cursor=pointer]:
+                - strong [ref=e44]: 课程招生
+                - generic [ref=e45]: 课程 / 清新温暖
+              - button "健身打卡 健身 / 年轻潮流" [ref=e46] [cursor=pointer]:
+                - strong [ref=e47]: 健身打卡
+                - generic [ref=e48]: 健身 / 年轻潮流
+              - button "餐饮上新 餐饮 / 活力促销" [ref=e49] [cursor=pointer]:
+                - strong [ref=e50]: 餐饮上新
+                - generic [ref=e51]: 餐饮 / 活力促销
+          - generic [ref=e52]:
+            - generic [ref=e53]:
+              - generic [ref=e54]:
+                - paragraph [ref=e55]: 第二步
+                - heading "关键参数" [level=3] [ref=e56]
+              - generic [ref=e57]: 引流 · 小红书封面
+            - generic [ref=e59]:
+              - generic [ref=e60]: 主题
+              - generic [ref=e63]:
+                - textbox "主题" [ref=e64]:
+                  - /placeholder: 例如：春季上新、健身训练营、门店招聘、会员活动
+                  - text: 活动主视觉
+                - generic [ref=e67]: 5 / 36
+            - generic [ref=e68]:
+              - generic [ref=e69]: 用途
+              - generic [ref=e70]:
+                - button "引流" [ref=e71] [cursor=pointer]
+                - button "报名" [ref=e72] [cursor=pointer]
+                - button "促销" [ref=e73] [cursor=pointer]
+                - button "上新" [ref=e74] [cursor=pointer]
+                - button "招募" [ref=e75] [cursor=pointer]
+            - generic [ref=e76]:
+              - generic [ref=e78]:
+                - generic [ref=e79]: 行业
+                - generic [ref=e82] [cursor=pointer]:
+                  - generic:
+                    - combobox "行业" [ref=e84]
+                    - generic [ref=e85]: 活动
+                  - img [ref=e88]
+              - generic [ref=e91]:
+                - generic [ref=e92]: 风格
+                - generic [ref=e95] [cursor=pointer]:
+                  - generic:
+                    - combobox "风格" [ref=e97]
+                    - generic [ref=e98]: 高级简约
+                  - img [ref=e101]
+              - generic [ref=e103]:
+                - generic [ref=e104]: 尺寸
+                - generic [ref=e107] [cursor=pointer]:
+                  - generic:
+                    - generic:
+                      - combobox "尺寸"
+                    - generic: 小红书封面 (1242 x 1660)
+                  - img [ref=e110]
+            - button "展开高级设置" [ref=e112] [cursor=pointer]
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - strong [ref=e115]: 活动主视觉
+            - text: 小红书封面 · 活动 · 高级简约
+          - button "生成预览" [disabled]:
+            - generic:
+              - img
+            - generic: 生成预览
+    - generic [ref=e118]:
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]: 等待生成
+          - generic [ref=e122]: 小红书封面
+          - generic [ref=e123]: 1242 x 1660
+        - generic [ref=e124]:
+          - button "适应屏幕" [ref=e125] [cursor=pointer]
+          - button "100%" [ref=e126] [cursor=pointer]
+          - button "150%" [ref=e127] [cursor=pointer]
+      - generic [ref=e139]:
+        - strong [ref=e141]: 正在生成预览
+        - paragraph [ref=e142]: AI 正在组合文案、配色、背景和主图，请稍等。

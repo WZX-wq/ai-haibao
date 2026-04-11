@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5173/home?tempid=1",
+  "headers": [
+    "特效文字全部",
+    "组合模板全部"
+  ],
+  "thumbTexts": [
+    "输入文字",
+    "输入文字",
+    "输入文字"
+  ],
+  "listTexts": [
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字",
+    "输入文字"
+  ],
+  "hasInputText": false,
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": []
+}

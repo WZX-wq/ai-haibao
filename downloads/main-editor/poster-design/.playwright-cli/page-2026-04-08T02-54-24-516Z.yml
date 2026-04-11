@@ -1,0 +1,287 @@
+- generic [active]:
+  - generic [ref=e1]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5] [cursor=pointer]: 迅排设计
+        - generic [ref=e6]:
+          - generic [ref=e8] [cursor=pointer]: 
+          - generic [ref=e10]: 
+        - separator [ref=e11]
+        - button " 文件" [ref=e13]:
+          - generic [ref=e14] [cursor=pointer]:
+            - generic [ref=e15]: 
+            - generic [ref=e16]: 文件
+        - button " 帮助" [ref=e18]:
+          - generic [ref=e19] [cursor=pointer]:
+            - generic [ref=e20]: 
+            - generic [ref=e21]: 帮助
+        - separator [ref=e22]
+      - textbox "未命名的设计" [ref=e26]: 示例模板 - 好物推荐
+      - generic [ref=e27]:
+        - button "修改模板" [ref=e28] [cursor=pointer]:
+          - generic [ref=e29]: 修改模板
+        - generic [ref=e30]:
+          - switch
+          - generic [ref=e33] [cursor=pointer]: 官方水印
+        - button "下载模版" [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: 下载模版
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - list [ref=e40]:
+            - listitem [ref=e41] [cursor=pointer]:
+              - generic [ref=e43]: 
+              - paragraph [ref=e44]: 模板
+            - listitem [ref=e45] [cursor=pointer]:
+              - generic [ref=e47]: 
+              - paragraph [ref=e48]: 素材
+            - listitem [ref=e49] [cursor=pointer]:
+              - generic [ref=e51]: 
+              - paragraph [ref=e52]: 文字
+            - listitem [ref=e53] [cursor=pointer]:
+              - generic [ref=e55]: 
+              - paragraph [ref=e56]: 照片
+            - listitem [ref=e57] [cursor=pointer]:
+              - generic [ref=e59]: 
+              - paragraph [ref=e60]: 工具箱
+            - listitem [ref=e61] [cursor=pointer]:
+              - generic [ref=e63]: 
+              - paragraph [ref=e64]: 我的
+          - link "Github 源码" [ref=e65] [cursor=pointer]:
+            - /url: https://github.com/palxiao/poster-design
+            - img "Github" [ref=e66]
+            - text: 源码
+        - generic [ref=e175]:
+          - generic [ref=e176]: AI
+          - generic [ref=e177] [cursor=pointer]:
+            - generic [ref=e178]: 
+            - generic [ref=e179]:
+              - generic [ref=e180]: AI 海报助手
+              - generic [ref=e181]: 输入主题、行业、尺寸和文案，自动生成可继续编辑的海报草稿。
+          - generic [ref=e182]: 组件
+          - generic [ref=e183] [cursor=pointer]:
+            - generic [ref=e184]: 
+            - generic [ref=e185]:
+              - generic [ref=e186]: 二维码
+              - generic [ref=e187]: 在海报中插入可自定义样式的二维码。
+          - generic [ref=e188]: 其它
+          - generic [ref=e189] [cursor=pointer]:
+            - generic [ref=e190]: 
+            - generic [ref=e191]:
+              - generic [ref=e192]: 智能抠图
+              - generic [ref=e193]: 上传图片后一键去背景，再继续编辑或加入资源库。
+          - dialog "AI 海报助手" [ref=e195]:
+            - generic [ref=e196]:
+              - banner [ref=e197]:
+                - heading "AI 海报助手" [level=2] [ref=e198]
+                - button "el.dialog.close" [ref=e199] [cursor=pointer]:
+                  - img [ref=e201]
+              - generic [ref=e204]:
+                - generic [ref=e205]:
+                  - generic [ref=e206]: 行业模板
+                  - generic [ref=e207]:
+                    - button "活动主视觉 活动 / 高级简约" [ref=e208] [cursor=pointer]:
+                      - generic [ref=e209]: 活动主视觉
+                      - generic [ref=e210]: 活动 / 高级简约
+                    - button "招聘招募 招聘 / 专业商务" [ref=e211] [cursor=pointer]:
+                      - generic [ref=e212]: 招聘招募
+                      - generic [ref=e213]: 招聘 / 专业商务
+                    - button "电商促销 电商 / 活力促销" [ref=e214] [cursor=pointer]:
+                      - generic [ref=e215]: 电商促销
+                      - generic [ref=e216]: 电商 / 活力促销
+                    - button "课程招生 课程 / 清新温暖" [ref=e217] [cursor=pointer]:
+                      - generic [ref=e218]: 课程招生
+                      - generic [ref=e219]: 课程 / 清新温暖
+                    - button "健身打卡 健身 / 年轻潮流" [ref=e220] [cursor=pointer]:
+                      - generic [ref=e221]: 健身打卡
+                      - generic [ref=e222]: 健身 / 年轻潮流
+                    - button "餐饮上新 餐饮 / 活力促销" [ref=e223] [cursor=pointer]:
+                      - generic [ref=e224]: 餐饮上新
+                      - generic [ref=e225]: 餐饮 / 活力促销
+                - generic [ref=e226]:
+                  - generic [ref=e227]:
+                    - generic [ref=e229]:
+                      - generic [ref=e230]: 主题
+                      - textbox "主题" [ref=e234]:
+                        - /placeholder: 例如：春季健身课、五一活动、新品上新
+                        - text: 活动主视觉
+                    - generic [ref=e236]:
+                      - generic [ref=e237]: 用途
+                      - textbox "用途" [ref=e241]:
+                        - /placeholder: 例如：引流、报名、促销、招聘
+                        - text: 引流
+                  - generic [ref=e242]:
+                    - generic [ref=e244]:
+                      - generic [ref=e245]: 行业
+                      - generic [ref=e248] [cursor=pointer]:
+                        - generic:
+                          - combobox "行业" [ref=e250]
+                          - generic [ref=e251]: 活动
+                        - img [ref=e254]
+                    - generic [ref=e257]:
+                      - generic [ref=e258]: 风格
+                      - generic [ref=e261] [cursor=pointer]:
+                        - generic:
+                          - combobox "风格" [ref=e263]
+                          - generic [ref=e264]: 高级简约
+                        - img [ref=e267]
+                  - generic [ref=e269]:
+                    - generic [ref=e271]:
+                      - generic [ref=e272]: 尺寸
+                      - generic [ref=e275] [cursor=pointer]:
+                        - generic:
+                          - combobox "尺寸" [ref=e277]
+                          - generic [ref=e278]: 小红书封面 (1242 x 1660)
+                        - img [ref=e281]
+                    - generic [ref=e284]:
+                      - generic [ref=e285]: 二维码链接
+                      - textbox "二维码链接" [ref=e289]:
+                        - /placeholder: https://example.com/signup
+                  - generic [ref=e290]:
+                    - generic [ref=e291]: 补充文案
+                    - textbox "补充文案" [ref=e294]:
+                      - /placeholder: 可填写时间、地点、卖点、联系方式等，AI 会一起生成版面文案
+                - generic [ref=e295]:
+                  - button "推荐标题/配色" [ref=e296] [cursor=pointer]:
+                    - generic [ref=e297]: 推荐标题/配色
+                  - button "生成海报" [ref=e298] [cursor=pointer]:
+                    - generic [ref=e299]: 生成海报
+                - generic [ref=e300]:
+                  - generic [ref=e301]: 当前推荐
+                  - generic [ref=e302]:
+                    - generic [ref=e303]: 标题
+                    - textbox [ref=e306]: 活动主视觉 引流主视觉
+                  - generic [ref=e307]:
+                    - generic [ref=e308]: Slogan
+                    - textbox [ref=e311]: 活动主视觉 / 高级简约 / 提升关注度，让氛围和报名同时在线
+                  - generic [ref=e312]:
+                    - generic [ref=e313]: 正文
+                    - textbox [ref=e315]: 活动主视觉，适合引流场景，可继续替换文字、背景与主图。
+                  - generic [ref=e316]:
+                    - generic [ref=e317]: CTA
+                    - textbox [ref=e320]: 扫码咨询
+                  - generic [ref=e322]: 配色
+                  - generic [ref=e328]: 当前未配置文案 API，已使用本地规则生成。
+                - generic [ref=e329]:
+                  - generic [ref=e330]: 快捷编辑
+                  - generic [ref=e331]:
+                    - button "一键换字" [ref=e332] [cursor=pointer]:
+                      - generic [ref=e333]: 一键换字
+                    - button "一键换背景" [ref=e334] [cursor=pointer]:
+                      - generic [ref=e335]: 一键换背景
+                    - button "一键换图" [ref=e336] [cursor=pointer]:
+                      - generic [ref=e337]: 一键换图
+                    - button "尺寸自动适配" [ref=e338] [cursor=pointer]:
+                      - generic [ref=e339]: 尺寸自动适配
+                - generic [ref=e340]:
+                  - generic [ref=e341]: 导出
+                  - generic [ref=e342]:
+                    - button "导出 PNG" [ref=e343] [cursor=pointer]:
+                      - generic [ref=e344]: 导出 PNG
+                    - button "导出 JPG" [ref=e345] [cursor=pointer]:
+                      - generic [ref=e346]: 导出 JPG
+                    - button "导出 PDF" [ref=e347] [cursor=pointer]:
+                      - generic [ref=e348]: 导出 PDF
+                - generic [ref=e349]: 当前版本已经支持：需求输入、行业模板、AI 文案、推荐配色、背景/主图生成、自动排版、换字换图、二维码嵌入与 PNG/JPG/PDF 导出。
+      - generic [ref=e91]:
+        - generic [ref=e99]:
+          - img [ref=e352]
+          - generic [ref=e354]: 活动主视觉 引流主视觉
+          - generic [ref=e356]: 活动主视觉 / 高级简约 / 提升关注度，让氛围和报名同时在线
+          - generic [ref=e358]: 活动主视觉，适合引流场景，可继续替换文字、背景与主图。
+          - generic [ref=e360]: 扫码咨询
+        - generic [ref=e116] [cursor=pointer]:
+          - text: 画板 1/1
+          - generic [ref=e117]: 
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - generic [ref=e127] [cursor=pointer]: 设置
+          - generic [ref=e128] [cursor=pointer]: 图层
+        - generic [ref=e129]:
+          - text:      
+          - generic [ref=e367]:
+            - button "位置尺寸" [ref=e369] [cursor=pointer]:
+              - text: 位置尺寸
+              - img [ref=e371]
+            - generic [ref=e373]:
+              - generic [ref=e374]:
+                - paragraph [ref=e375]: 文字
+                - generic [ref=e376]:
+                  - textbox [ref=e377]: 站酷快乐体
+                  - generic [ref=e379]: 
+              - generic [ref=e380]:
+                - paragraph [ref=e381]: 大小
+                - generic [ref=e382]:
+                  - textbox [ref=e383]: "88"
+                  - generic [ref=e385]: 
+            - list [ref=e387]:
+              - listitem [ref=e388] [cursor=pointer]:
+                - generic [ref=e389]: 
+              - listitem [ref=e390] [cursor=pointer]:
+                - generic [ref=e391]: 
+              - listitem [ref=e392] [cursor=pointer]:
+                - generic [ref=e393]: 
+              - listitem [ref=e394] [cursor=pointer]:
+                - generic [ref=e395]: 
+              - listitem [ref=e396] [cursor=pointer]:
+                - generic [ref=e397]: 
+            - list [ref=e399]:
+              - listitem [ref=e400] [cursor=pointer]:
+                - generic [ref=e401]: 
+              - listitem [ref=e402] [cursor=pointer]:
+                - generic [ref=e403]: 
+              - listitem [ref=e404] [cursor=pointer]:
+                - generic [ref=e405]: 
+              - listitem [ref=e406] [cursor=pointer]:
+                - generic [ref=e407]: 
+              - listitem [ref=e408] [cursor=pointer]:
+                - generic [ref=e409]: 
+            - generic [ref=e410]:
+              - generic [ref=e411]:
+                - generic [ref=e412]: 字距
+                - generic [ref=e413]:
+                  - slider "el.slider.defaultLabel" [ref=e416] [cursor=pointer]
+                  - spinbutton [ref=e421]: "0"
+              - generic [ref=e422]:
+                - generic [ref=e423]: 行距
+                - generic [ref=e424]:
+                  - slider "el.slider.defaultLabel" [ref=e427] [cursor=pointer]
+                  - spinbutton [ref=e432]: "1.12"
+            - paragraph [ref=e435]: 颜色
+            - generic [ref=e439]:
+              - generic [ref=e441]:
+                - generic [ref=e442]: A
+                - generic [ref=e443]: 文字特效
+                - button "选择" [ref=e444] [cursor=pointer]:
+                  - generic [ref=e445]: 选择
+              - button "高级编辑" [ref=e448] [cursor=pointer]:
+                - generic [ref=e449]: 高级编辑
+                - img [ref=e451]
+            - list [ref=e454]:
+              - listitem [ref=e455] [cursor=pointer]:
+                - generic [ref=e456]: 
+              - listitem [ref=e457] [cursor=pointer]:
+                - generic [ref=e458]: 
+            - list [ref=e460]:
+              - listitem [ref=e461] [cursor=pointer]:
+                - generic [ref=e462]: 
+              - listitem [ref=e463] [cursor=pointer]:
+                - generic [ref=e464]: 
+              - listitem [ref=e465] [cursor=pointer]:
+                - generic [ref=e466]: 
+              - listitem [ref=e467] [cursor=pointer]:
+                - generic [ref=e468]: 
+              - listitem [ref=e469] [cursor=pointer]:
+                - generic [ref=e470]: 
+              - listitem [ref=e471] [cursor=pointer]:
+                - generic [ref=e472]: 
+            - textbox [ref=e476]: 活动主视觉 引流主视觉
+        - text:         
+    - generic [ref=e169]:
+      - generic [ref=e171] [cursor=pointer]: 
+      - generic [ref=e172] [cursor=pointer]: 适应屏幕
+      - generic [ref=e174] [cursor=pointer]: 
+  - generic:  
+  - alert [ref=e477]:
+    - img [ref=e479]
+    - paragraph [ref=e481]: 海报草稿已生成，可以继续换字换图与导出。

@@ -1,0 +1,5 @@
+{
+  "id": 7,
+  "title": "暖杏标题",
+  "data": "{\"name\": \"文本\", \"type\": \"w-text\", \"uuid\": -1, \"editable\": false, \"left\": 40, \"top\": 292, \"transform\": \"\", \"lineHeight\": 1.2, \"letterSpacing\": 0, \"fontSize\": 152, \"fontClass\": {\"alias\": \"站酷快乐体\", \"id\": 543, \"value\": \"zcool-kuaile-regular\", \"url\": \"https://lib.baomitu.com/fonts/zcool-kuaile/zcool-kuaile-regular.woff2\"}, \"fontWeight\": 700, \"fontStyle\": \"normal\", \"writingMode\": \"horizontal-tb\", \"textDecoration\": \"none\", \"color\": \"#f59e0bff\", \"textAlign\": \"center\", \"text\": \"暖调推荐\", \"opacity\": 1, \"backgroundColor\": \"\", \"parent\": \"-1\", \"record\": {\"width\": 640, \"height\": 273, \"minWidth\": 10, \"minHeight\": 10, \"dir\": \"all\"}, \"width\": 640, \"height\": 273}"
+}

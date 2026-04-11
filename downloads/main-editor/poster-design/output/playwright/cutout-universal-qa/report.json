@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "url": "http://127.0.0.1:5173/home?tempid=2",
+  "dialogTitle": "AI 智能抠图",
+  "providerTip": "真实 AI 抠图 / rembg / u2net: Universal cutout completed with local rembg model.",
+  "resultSrc": "http://localhost:7001/static/cutout/E19UcrjwS9a6_rembg.png",
+  "buttons": [
+    "清除重选",
+    "进入编辑模式",
+    "下载 PNG",
+    "完成抠图"
+  ],
+  "visibleChecks": {
+    "hasToolbox": true,
+    "hasCutoutCard": true,
+    "hasDialogTitle": true,
+    "hasAllObjectDesc": true,
+    "providerUsesRembg": true,
+    "providerSaysRealAi": true,
+    "resultLooksRembg": true
+  },
+  "logs": {
+    "consoleErrors": [],
+    "pageErrors": [],
+    "requestFailed": [],
+    "warnings": []
+  },
+  "screenshots": [
+    "01-home.png",
+    "02-toolbox.png",
+    "03-cutout-dialog.png",
+    "04-cutout-result.png"
+  ]
+}

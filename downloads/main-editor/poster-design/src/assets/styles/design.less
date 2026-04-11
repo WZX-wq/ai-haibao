@@ -1,0 +1,128 @@
+@import './color.less';
+// design index page
+@color4: #50555b;
+@color5: #808080;
+@width0: 1180px;
+@width1: 120px;
+@width2: 100%;
+@height2: 54px;
+
+@canvasBG: #eef3f8;
+@pageBG: #f7f9fc;
+@canvasDeepBG: #dfe7f1;
+
+.page-design-bg-color {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 24%),
+    linear-gradient(180deg, #f8fbff 0%, #edf3f9 48%, #e5edf6 100%);
+}
+.page-bg-color {
+  background-color: @pageBG;
+}
+
+#page-design-index {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+  min-width: @width0;
+  position: absolute;
+  width: @width2;
+  background-color: @canvasBG;
+  .top-nav {
+    height: @height2;
+    min-width: @width0;
+    position: relative;
+    width: @width2;
+    .top-nav-wrap {
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+      align-items: center;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.05);
+      display: flex;
+      height: @height2;
+      min-width: @width0;
+      position: fixed;
+      width: @width2;
+      .top-left {
+        display: flex;
+        align-items: center;
+        color: @color-black;
+        .name {
+          margin: 0 1rem 0 1.15rem;
+          cursor: default;
+          letter-spacing: 0.02em;
+          color: #0b0f19;
+          font-size: 1.125rem;
+          font-weight: 700;
+          line-height: 1;
+          font-style: normal;
+          font-family: 'Noto Serif SC', 'Songti SC', serif;
+          user-select: none;
+        }
+        .operation {
+          display: flex;
+          &-item {
+            min-height: 36px;
+            padding: 0.55rem 0.8rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            border-radius: 10px;
+            transition: background-color .18s ease, color .18s ease, transform .18s ease;
+            .icon {
+              color: #334155;
+            }
+            .iconfont {
+              font-size: 14px;
+            }
+            .text {
+              font-weight: 600;
+              margin-left: .4rem;
+            }
+          }
+          &-item:hover {
+            background: rgba(59, 130, 246, 0.08);
+            .icon,
+            .text {
+              color: #2563eb;
+            }
+          }
+          .disable {
+            cursor: not-allowed;
+            color: #c2c2c2;
+          }
+        }
+      }
+      .primary-btn {
+        font-weight: 600;
+        transform: scale(1);
+        margin-left: 10px;
+      }
+    }
+  }
+  .page-design-index-wrap {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    height: 100%;
+    overflow: hidden;
+    width: @width2;
+    .page-design-wrap {
+      flex: 1;
+    }
+  }
+  // .page-design-index-wrap ::-webkit-scrollbar {
+  //   display: none; /* Chrome Safari */
+  // }
+  .shelter,
+  .shelter-bg {
+    position: absolute;
+    pointer-events: none;
+  }
+  .shelter {
+    box-shadow: 0 0 0 5000px rgba(238, 243, 248, 0.94);
+    z-index: 8;
+  }
+}

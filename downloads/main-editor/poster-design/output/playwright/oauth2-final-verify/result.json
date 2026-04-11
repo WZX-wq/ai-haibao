@@ -1,0 +1,16 @@
+{
+  "finalUrl": "https://login.kunqiongai.com/login.html?redirect=https%3A%2F%2Flogin.kunqiongai.com%2Fauthorize.html%3Fresponse_type%3Dcode%26client_id%3Dapp_ac403a7d0b4e4eb1%26redirect_uri%3Dhttp%253A%252F%252F127.0.0.1%253A5173%252Foauth%252Fcallback%26state%3D4a94c3c62a941379c9e0f8175e0fe66a98246a00f8bda196",
+  "title": "登录 - 鲲穹AI登录中心",
+  "localState": null,
+  "sessionState": null,
+  "consoleMessages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    }
+  ]
+}

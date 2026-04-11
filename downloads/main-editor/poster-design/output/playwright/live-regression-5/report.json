@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "logs": {
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "pageErrors": [],
+    "requestFailed": [],
+    "badResponses": []
+  },
+  "results": [
+    {
+      "step": "home-load",
+      "title": "编辑器 - 鲲穹设计",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\home.png"
+    },
+    {
+      "step": "qrcode-add",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\qrcode.png"
+    },
+    {
+      "step": "cutout",
+      "providerTip": "真实 AI 抠图 / rembg / u2net: Universal cutout completed with local rembg model.",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\cutout.png"
+    },
+    {
+      "step": "ai-open",
+      "title": "AI海报助手 - 鲲穹设计",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\ai-open.png"
+    },
+    {
+      "step": "ai-generated",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\ai-generated.png"
+    },
+    {
+      "step": "ai-refined",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\ai-refined.png"
+    },
+    {
+      "step": "ai-export",
+      "png": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\png-4月20日 · 限定启幕.png",
+      "jpg": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\jpg-4月20日 · 限定启幕.jpg",
+      "pdf": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\pdf-4月20日 · 限定启幕.pdf"
+    },
+    {
+      "step": "ai-apply-return",
+      "title": "编辑器 - 鲲穹设计",
+      "url": "http://127.0.0.1:5173/home?tempid=101",
+      "shot": "D:\\code1\\Ai-haibao\\downloads\\main-editor\\poster-design\\output\\playwright\\live-regression-5\\ai-return-home.png"
+    }
+  ]
+}

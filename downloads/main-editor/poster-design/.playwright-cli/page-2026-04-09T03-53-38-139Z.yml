@@ -1,0 +1,144 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - button "返回编辑器" [ref=e7] [cursor=pointer]
+      - heading "AI 海报助手" [level=1] [ref=e8]
+      - paragraph [ref=e9]: 先生成预览，再决定是否应用到编辑器。这里的调整只会更新预览，不会直接改动你的画布。
+    - generic [ref=e10]:
+      - button "导出" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]: 导出
+      - button "生成预览" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 生成预览
+      - button "应用到编辑器" [ref=e143] [cursor=pointer]:
+        - generic [ref=e144]: 应用到编辑器
+  - main [ref=e16]:
+    - complementary [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - paragraph [ref=e21]: WORKFLOW
+            - heading "先定方向，再细调结果" [level=2] [ref=e22]
+          - generic [ref=e23]:
+            - button "基础设置" [active] [ref=e24] [cursor=pointer]
+            - button "微调结果" [ref=e25] [cursor=pointer]
+        - generic [ref=e364]:
+          - generic [ref=e365]:
+            - generic [ref=e366]:
+              - generic [ref=e367]:
+                - paragraph [ref=e368]: 第一步
+                - heading "选一个场景起点" [level=3] [ref=e369]
+              - generic [ref=e370]: 场景推荐
+            - generic [ref=e371]:
+              - button "活动主视觉 活动 / 高级简约" [ref=e372] [cursor=pointer]:
+                - strong [ref=e373]: 活动主视觉
+                - generic [ref=e374]: 活动 / 高级简约
+              - button "招聘招募 招聘 / 专业商务" [ref=e375] [cursor=pointer]:
+                - strong [ref=e376]: 招聘招募
+                - generic [ref=e377]: 招聘 / 专业商务
+              - button "电商促销 电商 / 活力促销" [ref=e378] [cursor=pointer]:
+                - strong [ref=e379]: 电商促销
+                - generic [ref=e380]: 电商 / 活力促销
+              - button "课程招生 课程 / 清新温暖" [ref=e381] [cursor=pointer]:
+                - strong [ref=e382]: 课程招生
+                - generic [ref=e383]: 课程 / 清新温暖
+              - button "健身打卡 健身 / 年轻潮流" [ref=e384] [cursor=pointer]:
+                - strong [ref=e385]: 健身打卡
+                - generic [ref=e386]: 健身 / 年轻潮流
+              - button "餐饮上新 餐饮 / 活力促销" [ref=e387] [cursor=pointer]:
+                - strong [ref=e388]: 餐饮上新
+                - generic [ref=e389]: 餐饮 / 活力促销
+          - generic [ref=e390]:
+            - generic [ref=e391]:
+              - generic [ref=e392]:
+                - paragraph [ref=e393]: 第二步
+                - heading "关键参数" [level=3] [ref=e394]
+              - generic [ref=e395]: 报名 · 公众号封面
+            - generic [ref=e397]:
+              - generic [ref=e398]: 主题
+              - generic [ref=e401]:
+                - textbox "主题" [ref=e402]:
+                  - /placeholder: 例如：春季上新、健身训练营、门店招聘、会员活动
+                  - text: 活动主视觉
+                - generic [ref=e405]: 5 / 36
+            - generic [ref=e406]:
+              - generic [ref=e407]: 用途
+              - generic [ref=e408]:
+                - button "引流" [ref=e409] [cursor=pointer]
+                - button "报名" [ref=e410] [cursor=pointer]
+                - button "促销" [ref=e411] [cursor=pointer]
+                - button "上新" [ref=e412] [cursor=pointer]
+                - button "招募" [ref=e413] [cursor=pointer]
+            - generic [ref=e414]:
+              - generic [ref=e416]:
+                - generic [ref=e417]: 行业
+                - generic [ref=e420] [cursor=pointer]:
+                  - generic:
+                    - combobox "行业" [ref=e422]
+                    - generic [ref=e423]: 课程
+                  - img [ref=e426]
+              - generic [ref=e429]:
+                - generic [ref=e430]: 风格
+                - generic [ref=e433] [cursor=pointer]:
+                  - generic:
+                    - combobox "风格" [ref=e435]
+                    - generic [ref=e436]: 清新温暖
+                  - img [ref=e439]
+              - generic [ref=e441]:
+                - generic [ref=e442]: 尺寸
+                - generic [ref=e445] [cursor=pointer]:
+                  - generic:
+                    - generic:
+                      - combobox "尺寸"
+                    - generic: 公众号封面 (900 x 383)
+                  - img [ref=e448]
+            - button "展开高级设置" [ref=e450] [cursor=pointer]
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - strong [ref=e115]: 活动主视觉
+            - text: 公众号封面 · 课程 · 清新温暖
+          - button "重新生成预览" [ref=e198] [cursor=pointer]:
+            - generic [ref=e117]: 重新生成预览
+    - generic [ref=e118]:
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]: 预览已就绪
+          - generic [ref=e122]: 公众号封面
+          - generic [ref=e123]: 900 x 383
+        - generic [ref=e124]:
+          - button "适应屏幕" [ref=e125] [cursor=pointer]
+          - button "100%" [ref=e126] [cursor=pointer]
+          - button "150%" [ref=e127] [cursor=pointer]
+      - generic [ref=e137]:
+        - generic [ref=e199]:
+          - img [ref=e201]
+          - img [ref=e203]
+        - generic [ref=e205]: 开启你的成长之旅
+        - generic [ref=e207]: 活动主视觉 · 清新温暖 · 课程
+        - generic [ref=e209]: 精选好课 · 小班教学 · 贴心陪伴 报名即享早鸟福利，名额有限，温柔出发不等待～
+        - generic [ref=e211]: 立即报名
+      - generic [ref=e212]:
+        - generic [ref=e213]:
+          - text: 最近更新时间
+          - strong [ref=e214]: 11:51:51
+        - generic [ref=e215]:
+          - text: 当前状态
+          - strong [ref=e216]: 预览尚未应用到编辑器
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                - generic:
+                  - img
+              - generic:
+                - generic: 开启你的成长之旅
+              - generic:
+                - generic: 活动主视觉 · 清新温暖 · 课程
+              - generic:
+                - generic: 精选好课 · 小班教学 · 贴心陪伴 报名即享早鸟福利，名额有限，温柔出发不等待～
+              - generic:
+                - generic: 立即报名

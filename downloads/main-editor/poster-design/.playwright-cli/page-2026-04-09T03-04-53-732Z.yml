@@ -1,0 +1,105 @@
+- generic [active]:
+  - generic [ref=e217]:
+    - generic [ref=e219]:
+      - generic [ref=e220]:
+        - generic [ref=e221] [cursor=pointer]: 鲲穹设计
+        - generic [ref=e222]:
+          - generic [ref=e224]: 
+          - generic [ref=e226]: 
+        - separator [ref=e227]
+        - button " 文件" [ref=e229]:
+          - generic [ref=e230] [cursor=pointer]:
+            - generic [ref=e231]: 
+            - generic [ref=e232]: 文件
+        - button " 帮助" [ref=e234]:
+          - generic [ref=e235] [cursor=pointer]:
+            - generic [ref=e236]: 
+            - generic [ref=e237]: 帮助
+        - separator [ref=e238]
+      - textbox "未命名的设计" [ref=e242]: 示例模板 - 日签插画手机海报
+      - generic [ref=e243]:
+        - button "修改模板" [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]: 修改模板
+        - generic [ref=e246]:
+          - switch
+          - generic [ref=e249] [cursor=pointer]: 鲲穹设计水印
+        - button "下载模板" [ref=e251] [cursor=pointer]:
+          - generic [ref=e252]: 下载模板
+    - generic [ref=e253]:
+      - generic [ref=e254]:
+        - list [ref=e256]:
+          - listitem [ref=e257] [cursor=pointer]:
+            - generic [ref=e259]: 
+            - paragraph [ref=e260]: 模板
+          - listitem [ref=e261] [cursor=pointer]:
+            - generic [ref=e263]: 
+            - paragraph [ref=e264]: 素材
+          - listitem [ref=e265] [cursor=pointer]:
+            - generic [ref=e267]: 
+            - paragraph [ref=e268]: 文字
+          - listitem [ref=e269] [cursor=pointer]:
+            - generic [ref=e271]: 
+            - paragraph [ref=e272]: 照片
+          - listitem [ref=e273] [cursor=pointer]:
+            - generic [ref=e275]: 
+            - paragraph [ref=e276]: 工具箱
+          - listitem [ref=e277] [cursor=pointer]:
+            - generic [ref=e279]: 
+            - paragraph [ref=e280]: 我的
+        - generic [ref=e282]:
+          - generic [ref=e283] [cursor=pointer]:
+            - button "" [ref=e285]:
+              - generic [ref=e286]: 
+            - generic [ref=e287]:
+              - textbox "输入关键词搜索" [ref=e289]
+              - button "" [ref=e291]:
+                - generic [ref=e293]: 
+          - separator [ref=e294]:
+            - generic [ref=e295]: 示例模板
+          - button "导入 PSD 创建模板" [ref=e296] [cursor=pointer]:
+            - generic [ref=e297]: 导入 PSD 创建模板
+          - list [ref=e298]:
+            - img [ref=e302] [cursor=pointer]
+            - generic [ref=e303]: 已经到底了
+      - generic [ref=e305]:
+        - generic [ref=e313]:
+          - img [ref=e316]
+          - generic [ref=e318]: 此刻，即焦点
+          - generic [ref=e320]: 活动主视觉 · 高级简约 · 活动
+          - generic [ref=e322]: 活动主视觉，适合引流场景，可继续替换文字、背景和主图。
+          - generic [ref=e324]: 扫码咨询
+        - generic [ref=e327] [cursor=pointer]:
+          - text: 画板 1/1
+          - generic [ref=e328]: 
+      - generic [ref=e340]:
+        - generic [ref=e341]:
+          - generic [ref=e342] [cursor=pointer]: 设置
+          - generic [ref=e343] [cursor=pointer]: 图层
+        - text:        
+        - list [ref=e414]:
+          - generic [ref=e415]:
+            - listitem [ref=e416]:
+              - generic [ref=e417]: 
+              - generic [ref=e418]: 扫码咨询
+              - generic [ref=e420]: 
+            - listitem [ref=e421]:
+              - generic [ref=e422]: 
+              - generic [ref=e423]: 活动主视觉，适合引流场景，可继续替换文字、背景和主图。
+              - generic [ref=e425]: 
+            - listitem [ref=e426]:
+              - generic [ref=e427]: 
+              - generic [ref=e428]: 活动主视觉 · 高级简约 · 活动
+              - generic [ref=e430]: 
+            - listitem [ref=e431]:
+              - generic [ref=e432]: 
+              - generic [ref=e433]: 此刻，即焦点
+              - generic [ref=e435]: 
+            - listitem [ref=e436]:
+              - img [ref=e437]
+              - generic [ref=e438]: ai_hero
+              - generic [ref=e440]: 
+    - generic [ref=e402]:
+      - generic [ref=e404] [cursor=pointer]: 
+      - generic [ref=e405] [cursor=pointer]: 适应屏幕
+      - generic [ref=e407] [cursor=pointer]: 
+  - generic:  ° 

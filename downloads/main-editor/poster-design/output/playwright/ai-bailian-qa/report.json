@@ -1,0 +1,89 @@
+{
+  "generatedAt": "2026-04-08T04:43:10.890Z",
+  "logs": {
+    "errors": [
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)",
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)",
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)"
+    ],
+    "pageErrors": [],
+    "failed": [
+      "POST http://localhost:7001/ai/poster/copy :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/palette :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/copy :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/palette :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/generate :: net::ERR_ABORTED"
+    ]
+  },
+  "results": [
+    {
+      "key": "home-temp1",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\home-temp1.png",
+      "url": "http://127.0.0.1:5173/home?tempid=1"
+    },
+    {
+      "key": "draw",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\draw.png",
+      "url": "http://127.0.0.1:5173/draw?tempid=2"
+    },
+    {
+      "key": "html",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\html.png",
+      "url": "http://127.0.0.1:5173/html?tempid=2"
+    },
+    {
+      "key": "psd",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\psd.png",
+      "url": "http://127.0.0.1:5173/psd"
+    },
+    {
+      "key": "panel-0",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-0.png"
+    },
+    {
+      "key": "panel-1",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-1.png"
+    },
+    {
+      "key": "panel-2",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-2.png"
+    },
+    {
+      "key": "panel-3",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-3.png"
+    },
+    {
+      "key": "panel-4",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-4.png"
+    },
+    {
+      "key": "panel-5",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\panel-5.png"
+    },
+    {
+      "key": "ai-dialog",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\ai-dialog.png"
+    },
+    {
+      "key": "ai-recommend",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\ai-recommend.png"
+    },
+    {
+      "key": "ai-generate",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\ai-generate.png"
+    },
+    {
+      "key": "ai-edit-actions",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\ai-edit-actions.png"
+    },
+    {
+      "key": "ai-exports",
+      "downloads": [
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\活动主视觉.png",
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\活动主视觉.jpg",
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\活动主视觉.pdf"
+      ],
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa\\ai-exports.png"
+    }
+  ]
+}

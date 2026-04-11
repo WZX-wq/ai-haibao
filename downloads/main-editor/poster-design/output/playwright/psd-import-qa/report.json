@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "uploaderVisible": 0,
+  "widgetCount": 1,
+  "shelterCount": 1,
+  "logs": {
+    "consoleErrors": [],
+    "consoleWarnings": [],
+    "pageErrors": [],
+    "requestFailed": [],
+    "badResponses": []
+  }
+}

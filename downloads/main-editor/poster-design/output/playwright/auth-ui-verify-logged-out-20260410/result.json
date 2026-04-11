@@ -1,0 +1,5 @@
+{
+  "hasLoginButton": false,
+  "afterClickUrl": "http://127.0.0.1:5173/home?tempid=303",
+  "title": "编辑器 - 鲲穹设计"
+}

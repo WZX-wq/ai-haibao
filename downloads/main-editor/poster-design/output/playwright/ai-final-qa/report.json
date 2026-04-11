@@ -1,0 +1,89 @@
+{
+  "generatedAt": "2026-04-08T05:17:46.069Z",
+  "logs": {
+    "errors": [],
+    "pageErrors": [],
+    "failed": [],
+    "warnings": [
+      "[Vue warn]: Failed to resolve component: el-form-item\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-col\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-row\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-option\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-select\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-form\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-form-item\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-col\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-row\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-option\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-select\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>",
+      "[Vue warn]: Failed to resolve component: el-form\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n  at <AiPosterAssistant ref=\"aiPosterAssistantRef\" > \n  at <ToolsListWrap> \n  at <KeepAlive> \n  at <WidgetPanel ref=\"ref2\" > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > > \n  at <RouterView> \n  at <ElConfigProvider locale= {name: zh-cn, el: Object} > \n  at <App>"
+    ]
+  },
+  "results": [
+    {
+      "key": "home-temp1",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\home-temp1.png"
+    },
+    {
+      "key": "draw",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\draw.png"
+    },
+    {
+      "key": "html",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\html.png"
+    },
+    {
+      "key": "psd",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\psd.png"
+    },
+    {
+      "key": "panel-0",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-0.png"
+    },
+    {
+      "key": "panel-1",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-1.png"
+    },
+    {
+      "key": "panel-2",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-2.png"
+    },
+    {
+      "key": "panel-3",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-3.png"
+    },
+    {
+      "key": "panel-4",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-4.png"
+    },
+    {
+      "key": "panel-5",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\panel-5.png"
+    },
+    {
+      "key": "ai-dialog",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\ai-dialog.png"
+    },
+    {
+      "key": "ai-recommend",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\ai-recommend.png"
+    },
+    {
+      "key": "ai-generate",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\ai-generate.png"
+    },
+    {
+      "key": "ai-edit-actions",
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\ai-edit-actions.png"
+    },
+    {
+      "key": "ai-exports",
+      "downloads": [
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\盛 邀 入 席.png",
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\盛 邀 入 席.jpg",
+        "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\盛 邀 入 席.pdf"
+      ],
+      "screenshot": "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-final-qa\\ai-exports.png"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "id": 20,
+  "title": "小红书封面字",
+  "data": "{\"name\": \"文本\", \"type\": \"w-text\", \"uuid\": -1, \"editable\": false, \"left\": 40, \"top\": 292, \"transform\": \"\", \"lineHeight\": 1.2, \"letterSpacing\": 2, \"fontSize\": 126, \"fontClass\": {\"alias\": \"站酷快乐体\", \"id\": 543, \"value\": \"zcool-kuaile-regular\", \"url\": \"https://lib.baomitu.com/fonts/zcool-kuaile/zcool-kuaile-regular.woff2\"}, \"fontWeight\": 700, \"fontStyle\": \"normal\", \"writingMode\": \"horizontal-tb\", \"textDecoration\": \"none\", \"color\": \"#7c3aedff\", \"textAlign\": \"center\", \"text\": \"氛围感封面\", \"opacity\": 1, \"backgroundColor\": \"#faf5ff\", \"parent\": \"-1\", \"record\": {\"width\": 640, \"height\": 226, \"minWidth\": 10, \"minHeight\": 10, \"dir\": \"all\"}, \"width\": 640, \"height\": 226}"
+}

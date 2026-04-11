@@ -1,0 +1,57 @@
+[
+  {
+    "route": "/home?tempid=2",
+    "ok": true,
+    "logs": {
+      "consoleErrors": [],
+      "pageErrors": [],
+      "badResponses": [],
+      "requestFailed": []
+    },
+    "text": "迅排设计\n文件\n帮助\n修改模板\n官方水印\n下载模版\n\n模板\n\n素材\n\n文字\n\n照片\n\n工具箱\n\n我的\n\n源码\n示例模板\n导入 PSD 创建模板\n已经到底了\n电话：888-88888888\n地址：广州市高新林路 88 号\n生活就像海洋，只有意志坚强的人，\n才能到达彼岸。—— 马克思\n#每日一签\n你好，十二月\nHELLONOVEMBER\nYOURLOGO\n画板 1/1\n设置\n图层\n画布尺寸\n宽\n高\n背景设置\n在背景库中选择\n颜色\n图片\n适应屏幕"
+  },
+  {
+    "route": "/draw?tempid=2",
+    "ok": true,
+    "logs": {
+      "consoleErrors": [],
+      "pageErrors": [],
+      "badResponses": [],
+      "requestFailed": []
+    },
+    "text": "电话：888-88888888\n地址：广州市高新林路 88 号\n生活就像海洋，只有意志坚强的人，\n才能到达彼岸。—— 马克思\n#每日一签\n你好，十二月\nHELLONOVEMBER\nYOURLOGO"
+  },
+  {
+    "route": "/html?tempid=2",
+    "ok": true,
+    "logs": {
+      "consoleErrors": [],
+      "pageErrors": [],
+      "badResponses": [],
+      "requestFailed": []
+    },
+    "text": "电话：888-88888888\n地址：广州市高新林路 88 号\n生活就像海洋，只有意志坚强的人，\n才能到达彼岸。—— 马克思\n#每日一签\n你好，十二月\nHELLONOVEMBER\nYOURLOGO"
+  },
+  {
+    "route": "/psd",
+    "ok": true,
+    "logs": {
+      "consoleErrors": [],
+      "pageErrors": [],
+      "badResponses": [],
+      "requestFailed": []
+    },
+    "text": "在线 PSD 解析\n设计 PSD 规范\n在此拖入或选择 PSD 文件"
+  },
+  {
+    "route": "/ai-poster?returnTo=/home?tempid=2",
+    "ok": true,
+    "logs": {
+      "consoleErrors": [],
+      "pageErrors": [],
+      "badResponses": [],
+      "requestFailed": []
+    },
+    "text": "返回编辑器\n\nAI POSTER ASSISTANT\n\nAI 海报助手\n\n先生成预览，再决定是否应用到编辑器。这个页面只更新预览，不会直接改动你当前的画布。\n\n导出\n生成预览\n\n第一步\n\n选择方向\n快速开始\n活动主视觉\n活动 / 高级简约\n招聘招募\n招聘 / 专业商务\n电商促销\n电商 / 活力促销\n课程招生\n课程 / 清新温暖\n健身打卡\n健身 / 年轻潮流\n餐饮上新\n餐饮 / 活力促销\n\n第二步\n\n填写关键信息\n主题\n5 / 36\n行业\n活动\n风格\n高级简约\n尺寸\n小红书封面 (1242 x 1660)\n展开高级设置\n\n第三步\n\n生成与微调\n推荐标题/配色\n更新预览文案\n更新预览背景\n更新预览"
+  }
+]

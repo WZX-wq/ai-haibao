@@ -1,0 +1,5 @@
+{
+  "id": 19,
+  "title": "节日祝福体",
+  "data": "{\"name\": \"文本\", \"type\": \"w-text\", \"uuid\": -1, \"editable\": false, \"left\": 40, \"top\": 292, \"transform\": \"\", \"lineHeight\": 1.2, \"letterSpacing\": 2, \"fontSize\": 136, \"fontClass\": {\"alias\": \"站酷快乐体\", \"id\": 543, \"value\": \"zcool-kuaile-regular\", \"url\": \"https://lib.baomitu.com/fonts/zcool-kuaile/zcool-kuaile-regular.woff2\"}, \"fontWeight\": 700, \"fontStyle\": \"normal\", \"writingMode\": \"horizontal-tb\", \"textDecoration\": \"none\", \"color\": \"#db2777ff\", \"textAlign\": \"center\", \"text\": \"节日快乐\", \"opacity\": 1, \"backgroundColor\": \"#fff1f2\", \"parent\": \"-1\", \"record\": {\"width\": 640, \"height\": 244, \"minWidth\": 10, \"minHeight\": 10, \"dir\": \"all\"}, \"width\": 640, \"height\": 244}"
+}

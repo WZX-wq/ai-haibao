@@ -1,0 +1,14 @@
+
+# Playwright
+node_modules/
+**/node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+*.log
+*.err.log
+dist/
+build/
+.DS_Store

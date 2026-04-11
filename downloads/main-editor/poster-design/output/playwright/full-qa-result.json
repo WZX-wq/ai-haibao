@@ -1,0 +1,37 @@
+{
+  "clicks": [
+    "panel:template",
+    "panel:materials",
+    "materials:add-first",
+    "panel:text",
+    "text:add-basic",
+    "panel:photos",
+    "photos:loaded",
+    "panel:toolbox",
+    "toolbox:open-ai-assistant",
+    "ai:fill-form",
+    "ai:recommend",
+    "ai:generate",
+    "ai:一键换字",
+    "ai:一键换配色",
+    "ai:一键换背景",
+    "ai:尺寸自动适配",
+    "ai:导出 PNG",
+    "ai:导出 JPG",
+    "ai:导出 PDF",
+    "ai:close-dialog",
+    "panel:mine",
+    "mine:switch-designs",
+    "mine:switch-images"
+  ],
+  "downloads": [
+    "_______ ____主视觉.png",
+    "_______ ____主视觉.jpg",
+    "_______ ____主视觉.pdf"
+  ],
+  "failed": [],
+  "errors": [],
+  "warnings": [],
+  "pageErrors": [],
+  "currentUrl": "http://127.0.0.1:5173/home?tempid=1"
+}

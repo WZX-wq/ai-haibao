@@ -1,0 +1,12 @@
+{
+  "welcomeButtons": [
+    "登录",
+    "模板库",
+    "开始创作",
+    "立即生成",
+    "从模板开始"
+  ],
+  "loginUrl": "https://login.kunqiongai.com/login.html?redirect=https%3A%2F%2Flogin.kunqiongai.com%2Fauthorize.html%3Fresponse_type%3Dcode%26client_id%3Dapp_ac403a7d0b4e4eb1%26redirect_uri%3Dhttp%253A%252F%252F127.0.0.1%253A5173%252Foauth%252Fcallback%26state%3D03fea553cbd0b6a1a93a4a1ab24c89440f3dcebd5f502f9a",
+  "loginTitle": "登录 - 鲲穹AI登录中心",
+  "accountText": "ACCOUNT CENTER\n\n个人中心\n回到编辑器\n去登录\n当前未登录\n\n请先登录，登录成功后可在这里查看个人信息、VIP 状态和功能权限。\n\n去登录"
+}

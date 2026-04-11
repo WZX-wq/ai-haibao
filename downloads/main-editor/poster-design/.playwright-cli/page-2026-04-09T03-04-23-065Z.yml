@@ -1,0 +1,126 @@
+- generic [active]:
+  - generic [ref=e217]:
+    - generic [ref=e219]:
+      - generic [ref=e220]:
+        - generic [ref=e221] [cursor=pointer]: 鲲穹设计
+        - generic [ref=e222]:
+          - generic [ref=e224]: 
+          - generic [ref=e226]: 
+        - separator [ref=e227]
+        - button " 文件" [ref=e229]:
+          - generic [ref=e230] [cursor=pointer]:
+            - generic [ref=e231]: 
+            - generic [ref=e232]: 文件
+        - button " 帮助" [ref=e234]:
+          - generic [ref=e235] [cursor=pointer]:
+            - generic [ref=e236]: 
+            - generic [ref=e237]: 帮助
+        - separator [ref=e238]
+      - textbox "未命名的设计" [ref=e242]: 示例模板 - 日签插画手机海报
+      - generic [ref=e243]:
+        - button "修改模板" [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]: 修改模板
+        - generic [ref=e246]:
+          - switch
+          - generic [ref=e249] [cursor=pointer]: 鲲穹设计水印
+        - button "下载模板" [ref=e251] [cursor=pointer]:
+          - generic [ref=e252]: 下载模板
+    - generic [ref=e253]:
+      - generic [ref=e254]:
+        - list [ref=e256]:
+          - listitem [ref=e257] [cursor=pointer]:
+            - generic [ref=e259]: 
+            - paragraph [ref=e260]: 模板
+          - listitem [ref=e261] [cursor=pointer]:
+            - generic [ref=e263]: 
+            - paragraph [ref=e264]: 素材
+          - listitem [ref=e265] [cursor=pointer]:
+            - generic [ref=e267]: 
+            - paragraph [ref=e268]: 文字
+          - listitem [ref=e269] [cursor=pointer]:
+            - generic [ref=e271]: 
+            - paragraph [ref=e272]: 照片
+          - listitem [ref=e273] [cursor=pointer]:
+            - generic [ref=e275]: 
+            - paragraph [ref=e276]: 工具箱
+          - listitem [ref=e277] [cursor=pointer]:
+            - generic [ref=e279]: 
+            - paragraph [ref=e280]: 我的
+        - generic [ref=e282]:
+          - generic [ref=e283] [cursor=pointer]:
+            - button "" [ref=e285]:
+              - generic [ref=e286]: 
+            - generic [ref=e287]:
+              - textbox "输入关键词搜索" [ref=e289]
+              - button "" [ref=e291]:
+                - generic [ref=e293]: 
+          - separator [ref=e294]:
+            - generic [ref=e295]: 示例模板
+          - button "导入 PSD 创建模板" [ref=e296] [cursor=pointer]:
+            - generic [ref=e297]: 导入 PSD 创建模板
+          - list [ref=e298]:
+            - img [ref=e302] [cursor=pointer]
+            - generic [ref=e303]: 已经到底了
+      - generic [ref=e305]:
+        - generic [ref=e313]:
+          - img [ref=e316]
+          - generic [ref=e318]: 此刻，即焦点
+          - generic [ref=e320]: 活动主视觉 · 高级简约 · 活动
+          - generic [ref=e322]: 活动主视觉，适合引流场景，可继续替换文字、背景和主图。
+          - generic [ref=e324]: 扫码咨询
+        - generic [ref=e327] [cursor=pointer]:
+          - text: 画板 1/1
+          - generic [ref=e328]: 
+      - generic [ref=e340]:
+        - generic [ref=e341]:
+          - generic [ref=e342] [cursor=pointer]: 设置
+          - generic [ref=e343] [cursor=pointer]: 图层
+        - generic [ref=e344]:
+          - text:      
+          - generic [ref=e346]:
+            - generic [ref=e347]:
+              - button "画布尺寸" [expanded] [ref=e348] [cursor=pointer]:
+                - text: 画布尺寸
+                - img [ref=e350]
+              - region "画布尺寸" [ref=e352]:
+                - generic [ref=e354]:
+                  - generic [ref=e355] [cursor=pointer]:
+                    - textbox [ref=e357]: "1242"
+                    - generic [ref=e358]: 宽
+                  - generic [ref=e359] [cursor=pointer]: 
+                  - generic [ref=e360] [cursor=pointer]:
+                    - textbox [ref=e362]: "1660"
+                    - generic [ref=e363]: 高
+                  - generic [ref=e364] [cursor=pointer]: 
+            - generic [ref=e365]:
+              - button "背景设置" [expanded] [ref=e366] [cursor=pointer]:
+                - text: 背景设置
+                - img [ref=e368]
+              - region "背景设置" [ref=e370]:
+                - generic [ref=e371]:
+                  - button "在背景库中选择" [ref=e372] [cursor=pointer]:
+                    - generic [ref=e373]: 在背景库中选择
+                  - generic [ref=e376]:
+                    - generic [ref=e377]: 颜色
+                    - generic [ref=e378]: 图片
+                  - generic [ref=e381]:
+                    - img [ref=e383]
+                    - generic [ref=e385]:
+                      - button "上传图片" [ref=e388] [cursor=pointer]:
+                        - generic [ref=e389]: 上传图片
+                      - button "背景库" [ref=e390] [cursor=pointer]:
+                        - generic [ref=e391]: 背景库
+                    - generic [ref=e392]:
+                      - img [ref=e394] [cursor=pointer]
+                      - img [ref=e397] [cursor=pointer]
+                  - button "将背景分离为图层" [ref=e399] [cursor=pointer]:
+                    - generic [ref=e400]: 将背景分离为图层
+        - text:         
+    - generic [ref=e402]:
+      - generic [ref=e404] [cursor=pointer]: 
+      - generic [ref=e405] [cursor=pointer]: 适应屏幕
+      - generic [ref=e407] [cursor=pointer]: 
+  - generic:  ° 
+  - alert [ref=e408]:
+    - img [ref=e410]
+    - paragraph [ref=e412]: 已应用到编辑器，可继续精修文字、图片和布局。

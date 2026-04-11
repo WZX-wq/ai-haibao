@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-04-08T04:46:31.773Z",
+  "logs": {
+    "errors": [
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)",
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)",
+      "Error: timeout of 30000ms exceeded\n    at createError (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:315:19)\n    at XMLHttpRequest.handleTimeout (http://127.0.0.1:5173/node_modules/.vite/deps/axios.js?v=46df87ca:604:18)"
+    ],
+    "pageErrors": [],
+    "failed": [
+      "POST http://localhost:7001/ai/poster/copy :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/palette :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/copy :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/palette :: net::ERR_ABORTED",
+      "POST http://localhost:7001/ai/poster/generate :: net::ERR_ABORTED"
+    ]
+  },
+  "downloads": [
+    "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa-rerun\\活动主视觉.png",
+    "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa-rerun\\活动主视觉.jpg",
+    "D:\\code1\\Ai智能海报\\downloads\\main-editor\\poster-design\\output\\playwright\\ai-bailian-qa-rerun\\活动主视觉.pdf"
+  ]
+}
