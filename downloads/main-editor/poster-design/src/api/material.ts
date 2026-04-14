@@ -162,7 +162,10 @@ type TUploadBase64Result = {
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string) {
-  const [header, content] = dataUrl.split(',')
+  const [header = '', content = ''] = String(dataUrl || '').split(',')
+  if (!header || !content) {
+    throw new Error('invalid data url')
+  }
   const mimeMatch = header.match(/data:(.*?);base64/)
   const mime = mimeMatch?.[1] || 'image/png'
   const binary = atob(content)

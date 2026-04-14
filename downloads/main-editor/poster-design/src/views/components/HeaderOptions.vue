@@ -120,6 +120,14 @@ function isRequestCanceledError(e: unknown) {
   return err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || err.message === 'canceled'
 }
 
+function toFriendlyQuotaMessage(raw: unknown) {
+  const text = String(raw || '').toLowerCase()
+  if (!text) return '今日下载次数已用完或下载权限未开通'
+  if (text.includes('429') || text.includes('已用完') || text.includes('limit')) return '今日下载次数已用完，请明天再试'
+  if (text.includes('401') || text.includes('403') || text.includes('权限')) return '当前账号暂无下载权限，请联系管理员开通'
+  return '暂时无法下载，请稍后重试'
+}
+
 /** 中止导出：释放 loading、打断保存与下载 XHR、清空进度条（取消按钮与 v-model 同步都会走到） */
 function abortActiveDownload() {
   exportGeneration++
@@ -293,8 +301,10 @@ async function saveTemp(opts?: TSaveTempOpts) {
       if (dWidgets.value[0]?.type === 'w-group') {
         const group = dWidgets.value.shift()
         if (!group) return
-        group.record.width = 0
-        group.record.height = 0
+        if (group.record) {
+          group.record.width = 0
+          group.record.height = 0
+        }
         dWidgets.value.push(group)
       }
 
@@ -406,7 +416,7 @@ async function download(format: string = 'png') {
   try {
     const quotaRes: any = await api.account.consumeDownloadQuota()
     if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.code === 'number' && quotaRes.code !== 200) {
-      useNotification('无法导出', String(quotaRes.msg || '今日下载次数已用完或权限不足'), { type: 'warning' })
+      useNotification('无法导出', toFriendlyQuotaMessage(quotaRes.msg), { type: 'warning' })
       return
     }
     if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.used === 'number') {
@@ -730,7 +740,7 @@ async function load(cb: () => void) {
   }
 
   try {
-    const detail = (await api.home[apiName]({ id: id || tempId, type })) as Record<string, unknown>
+    const detail = (await api.home[apiName]({ id: Number(id || tempId), type: Number(type) })) as Record<string, unknown>
     const { data: content, title, state: templateState, width, height } = detail
     if (!content) {
       initBoard()
@@ -739,7 +749,11 @@ async function load(cb: () => void) {
     }
     state.stateBollean = !!templateState
     state.title = String(title ?? '')
-    applyLoadedData(content, type, width, height)
+    const normalizedType = Array.isArray(type) ? type[0] : type
+    const safeType = normalizedType == null ? undefined : normalizedType
+    const safeWidth = width == null ? undefined : Number(width)
+    const safeHeight = height == null ? undefined : Number(height)
+    applyLoadedData(String(content), safeType, safeWidth, safeHeight)
     const resolvedCate = detail.cate ?? detail.category
     const rawCate = route.query.cate
     const cateFromQuery =

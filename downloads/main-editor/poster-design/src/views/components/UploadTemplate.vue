@@ -151,8 +151,10 @@ const uploadTemplate = async () => {
   emit('change', { downloadPercent: 95, downloadText: '正在处理封面', downloadMsg: '即将结束...' })
   // const cover = await draw()
   const data = Number(type) == 1 ? JSON.stringify(widgets) : JSON.stringify({ page, widgets })
-  const { id, stat, msg } = await api.home.saveTemp({ title: '自设计模板', type, data, width: page.width, height: page.height })
-  stat !== 0 ? useNotification('保存成功', '') : useNotification('保存失败', msg, { type: 'error' })
+  const { id, stat } = await api.home.saveTemp({ title: '自设计模板', type, data, width: page.width, height: page.height })
+  stat !== 0
+    ? useNotification('保存成功', '')
+    : useNotification('保存失败', '保存没有完成，请稍后重试。', { type: 'error' })
   router.push({ path: '/psd', query: { id }, replace: true })
   emit('change', { downloadPercent: 99.99, downloadText: '上传完成', cancelText: '' }) // 关闭弹窗
 }

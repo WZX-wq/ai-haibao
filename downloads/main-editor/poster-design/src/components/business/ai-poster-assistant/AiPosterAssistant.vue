@@ -369,6 +369,20 @@ function formatProviderMeta(meta?: AiProviderMeta) {
   return `${mode} · ${meta.provider} · ${meta.model}${meta.message ? `：${meta.message}` : ''}`
 }
 
+function notifyFriendlyError(prefix: string, error: unknown) {
+  const message = String((error as any)?.message || '')
+  const low = message.toLowerCase()
+  if (low.includes('network') || low.includes('timeout') || low.includes('err_connection_refused')) {
+    ElMessage.error(`${prefix}：网络异常，请稍后重试`)
+    return
+  }
+  if (low.includes('401') || low.includes('403') || low.includes('429')) {
+    ElMessage.error(`${prefix}：权限或额度不足，请检查账号状态`)
+    return
+  }
+  ElMessage.error(`${prefix}：服务繁忙，请稍后重试`)
+}
+
 function updateProviderTip(meta?: Record<string, AiProviderMeta>) {
   const messages = Object.values(meta || {})
     .map((item) => formatProviderMeta(item))
@@ -481,7 +495,7 @@ async function recommendCopyAndPalette() {
     }
   } catch (error) {
     console.error(error)
-    ElMessage.error(`推荐失败：${(error as Error).message}`)
+    notifyFriendlyError('推荐失败', error)
   } finally {
     loading.recommend = false
   }
@@ -584,7 +598,7 @@ async function applyPoster() {
     ElMessage.success('海报草稿已生成，可以继续换字、换图和导出。')
   } catch (error) {
     console.error(error)
-    ElMessage.error(`生成失败：${(error as Error).message}`)
+    notifyFriendlyError('生成失败', error)
   } finally {
     loading.generate = false
   }
@@ -900,7 +914,7 @@ async function replaceTextOnly() {
     ElMessage.success(changed ? '文案已替换。' : '已重新应用文案（本次推荐与上次相同）。')
   } catch (error) {
     console.error(error)
-    ElMessage.error(`换字失败：${(error as Error).message}`)
+    notifyFriendlyError('换字失败', error)
   } finally {
     loading.replaceText = false
   }
@@ -927,7 +941,7 @@ async function applyBackgroundOnly() {
     ElMessage.success('背景已更新。')
   } catch (error) {
     console.error(error)
-    ElMessage.error(`换背景失败：${(error as Error).message}`)
+    notifyFriendlyError('换背景失败', error)
   } finally {
     loading.background = false
   }
@@ -958,7 +972,7 @@ async function replaceHeroOnly() {
     ElMessage.success('主图已更新。')
   } catch (error) {
     console.error(error)
-    ElMessage.error(`换图失败：${(error as Error).message}`)
+    notifyFriendlyError('换图失败', error)
   } finally {
     loading.image = false
   }
@@ -1006,7 +1020,7 @@ async function relayoutLayout() {
     ElMessage.success('已完成智能排版。')
   } catch (error) {
     console.error(error)
-    ElMessage.error(`智能排版失败：${(error as Error).message}`)
+    notifyFriendlyError('智能排版失败', error)
   } finally {
     loading.relayout = false
   }

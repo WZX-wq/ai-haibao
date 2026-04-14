@@ -78,7 +78,8 @@ export default defineComponent({
     const ok = () => {
       state.loading = true
       setTimeout(async () => {
-        const newImg = cropper.getCroppedCanvas({ maxWidth: 4096, minWidth: 4096 }).toDataURL('image/jpeg', 0.8)
+        // 使用 PNG 保留透明通道，避免抠图素材经美化裁剪后背景变黑。
+        const newImg = cropper.getCroppedCanvas({ maxWidth: 4096, minWidth: 4096 }).toDataURL('image/png')
         const { width, height } = cropper.getCropBoxData()
         const { preview_url } = await uploadBase64({ file: newImg })
         context.emit('done', { newImg: preview_url, data: cropper.getData(), width, height })

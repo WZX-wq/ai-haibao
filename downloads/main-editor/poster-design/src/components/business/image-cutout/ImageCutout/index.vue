@@ -75,7 +75,8 @@ let isRunning = false
 const buildDownloadFileName = (name: string, resultUrl: string) => {
   const cleanName = name || 'cutout'
   const baseName = cleanName.replace(/\.[^.]+$/, '')
-  const match = resultUrl.match(/\.([a-zA-Z0-9]+)(?:$|\?)/)
+  const safeUrl = typeof resultUrl === 'string' ? resultUrl : ''
+  const match = safeUrl.match(/\.([a-zA-Z0-9]+)(?:$|\?)/)
   const suffix = (match?.[1] || 'png').toLowerCase()
   return `${baseName}.${suffix}`
 }
@@ -107,6 +108,9 @@ defineExpose({ open })
 const handleUploaderLoad = async (file: File) => {
   try {
     await selectImageFile(state, raw, file, (resultUrl, name, providerTip) => {
+      if (!resultUrl || typeof resultUrl !== 'string') {
+        throw new Error('AI 返回结果异常，请重试')
+      }
       fileName = buildDownloadFileName(name, resultUrl)
       state.cutImage = resultUrl
       state.providerTip = providerTip
@@ -116,7 +120,7 @@ const handleUploaderLoad = async (file: File) => {
     })
   } catch (error) {
     console.error(error)
-    ElMessage.error(`抠图失败：${(error as Error).message}`)
+    ElMessage.error('抠图失败，请稍后重试或更换图片')
     clear()
   }
 }

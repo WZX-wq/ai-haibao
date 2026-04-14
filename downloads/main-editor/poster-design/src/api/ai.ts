@@ -171,13 +171,13 @@ export async function requestAi<T>(url: string, params: PosterGenerateInput, tim
       useUserStore().changeOnline(false)
     }
     if (!response.ok) {
-      throw new Error(payload?.msg || payload?.message || `Request failed with status ${response.status}`)
+      throw new Error('AI 服务暂时不可用，请稍后重试')
     }
     if (payload?.code === 200 && payload?.result) {
       return payload.result as T
     }
     if (payload?.code && payload.code !== 200) {
-      throw new Error(payload.msg || payload.message || 'AI request failed')
+      throw new Error('AI 服务暂时不可用，请稍后重试')
     }
     return payload as T
   } finally {
