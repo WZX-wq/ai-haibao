@@ -28,6 +28,8 @@ type TControlState = {
   dSpaceDown: boolean
   /** 正在编辑or裁剪的组件id */
   dCropUuid: string
+  /** 左侧统一面板当前模式 */
+  leftPanelMode: 'material' | 'setting'
 }
 
 type TControlAction = {
@@ -45,6 +47,7 @@ type TControlAction = {
   /** 设置正在裁剪or编辑的组件 */
   setCropUuid: (uuid: string) => void
   setSpaceDown: (uuid: boolean) => void // 设置是否按下空格键
+  setLeftPanelMode: (mode: 'material' | 'setting') => void
 }
 
 /** 全局控制配置 */
@@ -59,6 +62,7 @@ const ControlStore =  defineStore<"controlStore", TControlState, {}, TControlAct
     dAltDown: false, // 记录是否按下alt键 / 或ctrl
     dCropUuid: '-1', // 正在编辑or裁剪的组件id
     dSpaceDown: false, // 记录是否按下空格键
+    leftPanelMode: 'material',
   }),
   getters: {},
   actions: {
@@ -110,6 +114,9 @@ const ControlStore =  defineStore<"controlStore", TControlState, {}, TControlAct
     },
     setSpaceDown(val: boolean) {
       this.dSpaceDown = val
+    },
+    setLeftPanelMode(mode: 'material' | 'setting') {
+      this.leftPanelMode = mode
     }
   }
 })

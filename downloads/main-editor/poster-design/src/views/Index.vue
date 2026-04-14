@@ -1,6 +1,6 @@
 <template>
   <div id="page-design-index" ref="pageDesignIndex" class="page-design-bg-color">
-    <div :style="state.style" class="top-nav">
+    <div class="top-nav">
       <div class="top-nav-wrap">
         <div class="top-left">
           <div class="name">{{ state.APP_NAME }}</div>
@@ -39,10 +39,10 @@
         <div class="shelter-bg transparent-bg" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
         <template #bottom> <multipleBoards /> </template>
       </design-board>
-      <style-panel ref="ref3"></style-panel>
     </div>
     <line-guides :show="state.showLineGuides" />
     <zoom-control ref="zoomControlRef" />
+    <TopEditToolbar />
     <right-click-menu />
     <Moveable />
     <ProgressLoading
@@ -54,7 +54,7 @@
       @cancel="downloadCancel"
       @done="state.downloadPercent = 0"
     />
-    <Tour ref="tourRef" :steps="[ref1, ref2, ref3, ref4]" />
+    <Tour ref="tourRef" :steps="[ref1, ref2, ref4]" />
     <createDesign ref="createDesignRef" />
   </div>
 </template>
@@ -62,10 +62,11 @@
 <script lang="ts" setup>
 import _config from '../config'
 import {
-  CSSProperties, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, Ref, watch,
+  computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, Ref, watch,
 } from 'vue'
 import RightClickMenu from '@/components/business/right-click-menu/RcMenu.vue'
 import Moveable from '@/components/business/moveable/Moveable.vue'
+import TopEditToolbar from '@/components/business/top-edit-toolbar/TopEditToolbar.vue'
 import designBoard from '@/components/modules/layout/designBoard/index.vue'
 import zoomControl from '@/components/modules/layout/zoomControl/index.vue'
 import lineGuides from '@/components/modules/layout/lineGuides.vue'
@@ -91,7 +92,6 @@ const route = useRoute()
 
 const ref1 = ref<ButtonInstance>()
 const ref2 = ref<any>()
-const ref3 = ref<any>()
 const ref4 = ref<ButtonInstance>()
 const appliedDesignSessionKey = 'aiPosterAppliedDesign'
 const ui = {
@@ -102,7 +102,6 @@ const ui = {
 const pageStore = useCanvasStore()
 
 type TState = {
-  style: CSSProperties
   downloadPercent: number
   downloadText: string
   downloadMsg: string | undefined
@@ -121,9 +120,6 @@ const { dZoom } = storeToRefs(pageStore)
 const { dHistoryParams, dHistoryStack } = storeToRefs(useHistoryStore())
 
 const state = reactive<TState>({
-  style: {
-    left: '0px',
-  },
   downloadPercent: 0,
   downloadText: '',
   downloadMsg: '',
@@ -173,7 +169,6 @@ const instanceFn = { save, zoomAdd, zoomSub }
 
 onMounted(() => {
   groupStore.initGroupJson(JSON.stringify(wGroupSetting))
-  window.addEventListener('scroll', fixTopBarScroll)
   document.addEventListener('keydown', handleKeydowm(controlStore, checkCtrl, instanceFn, dealCtrl), false)
   document.addEventListener('keyup', handleKeyup(controlStore, checkCtrl), false)
   loadData()
@@ -189,7 +184,6 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  window.removeEventListener('scroll', fixTopBarScroll)
   document.removeEventListener('keydown', handleKeydowm(controlStore, checkCtrl, instanceFn, dealCtrl), false)
   document.removeEventListener('keyup', handleKeyup(controlStore, checkCtrl), false)
   document.oncontextmenu = null
@@ -247,11 +241,6 @@ function applyAiPosterDesignIfNeeded() {
   } finally {
     sessionStorage.removeItem(appliedDesignSessionKey)
   }
-}
-
-function fixTopBarScroll() {
-  const scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft
-  state.style.left = `-${scrollLeft}px`
 }
 
 function optionsChange({ downloadPercent, downloadText, downloadMsg, downloadImage }: { downloadPercent: number; downloadText: string; downloadMsg?: string; downloadImage?: string }) {

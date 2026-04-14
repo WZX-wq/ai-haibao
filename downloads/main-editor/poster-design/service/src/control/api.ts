@@ -31,6 +31,7 @@ export default {
   AUTH_ACCOUNT_CENTER: '/auth/account-center',
   AUTH_LOGOUT: '/auth/logout',
   USAGE_DOWNLOAD_CONSUME: '/usage/download/consume',
+  USAGE_AI_CONSUME: '/usage/ai/consume',
   ADMIN_USERS: '/admin/users',
   ADMIN_USER_PERMISSIONS: '/admin/user/permissions',
   ADMIN_SESSIONS: '/admin/sessions',

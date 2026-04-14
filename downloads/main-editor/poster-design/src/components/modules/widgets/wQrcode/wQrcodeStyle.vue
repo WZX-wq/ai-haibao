@@ -148,6 +148,9 @@ function changeValue() {
   if (dMoving.value) {
     return
   }
+  if (!dActiveElement.value) {
+    return
+  }
   for (const key in state.innerElement) {
     const itemKey = key as keyof TWQrcodeSetting
     if (state.ingoreKeys.indexOf(key) !== -1) {

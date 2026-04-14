@@ -5,6 +5,7 @@ import {
   ensureAccountSchema,
   getMergedRecentAccountRecords,
   getMysqlPool,
+  getTodayAiUsage,
   getTodayDownloadUsage,
   isMysqlConfigured,
 } from '../utils/mysql'
@@ -140,11 +141,13 @@ function getSessionExpireDays() {
 
 function buildPermissionSnapshot(record?: any) {
   const isVip = !!record?.is_vip
+  const dailyAiLimit = Number(record?.daily_ai_limit)
   return {
     is_vip: isVip,
     vip_level: Number(record?.vip_level || 0),
     vip_expire_time: record?.vip_expire_time || null,
     daily_limit_count: Number(record?.daily_limit_count || 10),
+    daily_ai_limit: Number.isFinite(dailyAiLimit) && dailyAiLimit > 0 ? dailyAiLimit : 5,
     max_file_size: Number(record?.max_file_size || 52428800),
     allow_batch: !!record?.allow_batch,
     /** 无水印仅会员可用：非 VIP 一律关闭，避免脏数据绕过 */
@@ -583,7 +586,9 @@ export async function handleOAuthCallback(req: any, res: any) {
       },
     } as any)
 
-    const downloadsTodayUsed = await getTodayDownloadUsage(Number(sessionData.user.id))
+    const uid = Number(sessionData.user.id)
+    const downloadsTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayDownloadUsage(uid) : 0
+    const aiTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayAiUsage(uid) : 0
     send.success(res, {
       local_token: sessionInfo.localToken,
       user_id: sessionData.user.id,
@@ -592,6 +597,7 @@ export async function handleOAuthCallback(req: any, res: any) {
       user: sessionData.user,
       permissions: sessionData.permissions,
       downloads_today_used: downloadsTodayUsed,
+      ai_today_used: aiTodayUsed,
     })
   } catch (error) {
     console.error(error)
@@ -604,6 +610,7 @@ export async function getCurrentUser(req: any, res: any) {
     const sessionData = await resolveSession(req)
     const uid = Number(sessionData.user.id)
     const downloadsTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayDownloadUsage(uid) : 0
+    const aiTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayAiUsage(uid) : 0
     send.success(res, {
       local_token: sessionData.token,
       user_id: sessionData.user.id,
@@ -612,6 +619,7 @@ export async function getCurrentUser(req: any, res: any) {
       user: sessionData.user,
       permissions: sessionData.permissions,
       downloads_today_used: downloadsTodayUsed,
+      ai_today_used: aiTodayUsed,
     })
   } catch (error) {
     send.error(res, (error as Error).message || '获取当前用户失败')
@@ -624,9 +632,13 @@ export async function getAccountCenter(req: any, res: any) {
     const baseUrl = process.env.FRONTEND_PUBLIC_BASE_URL || process.env.APP_BASE_URL || getBaseUrl(req)
     const uid = Number(sessionData.user.id)
     const downloadsTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayDownloadUsage(uid) : 0
+    const aiTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayAiUsage(uid) : 0
     const dailyLimit = Number(sessionData.permissions.daily_limit_count) || 0
+    const aiDailyLimit = Number(sessionData.permissions.daily_ai_limit) || 5
     const downloadsTodayRemaining =
       dailyLimit > 0 ? Math.max(0, dailyLimit - downloadsTodayUsed) : null
+    const aiTodayRemaining =
+      aiDailyLimit > 0 ? Math.max(0, aiDailyLimit - aiTodayUsed) : null
     const recentRecords =
       Number.isFinite(uid) && uid > 0 ? await getMergedRecentAccountRecords(uid, 5) : []
     send.success(res, {
@@ -642,9 +654,12 @@ export async function getAccountCenter(req: any, res: any) {
       },
       quota_card: {
         daily_limit_count: sessionData.permissions.daily_limit_count,
+        daily_ai_limit: aiDailyLimit,
         max_file_size: sessionData.permissions.max_file_size,
         downloads_today_used: downloadsTodayUsed,
         downloads_today_remaining: downloadsTodayRemaining,
+        ai_today_used: aiTodayUsed,
+        ai_today_remaining: aiTodayRemaining,
       },
       feature_permission_card: {
         allow_batch: sessionData.permissions.allow_batch,

@@ -93,6 +93,95 @@ export function stripInternalPromptEcho(text) {
 function getBackgroundGradient(palette) {
     return `linear-gradient(135deg, ${palette.background} 0%, ${palette.secondary} 55%, ${palette.primary} 100%)`;
 }
+function parseHexColor(input, fallback = '#111111') {
+    const raw = String(input || '').trim();
+    const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+    const safe = /^[0-9a-fA-F]{3,8}$/.test(hex) ? hex : String(fallback).replace('#', '');
+    let r = 17, g = 17, b = 17;
+    if (safe.length === 3 || safe.length === 4) {
+        r = parseInt(safe[0] + safe[0], 16);
+        g = parseInt(safe[1] + safe[1], 16);
+        b = parseInt(safe[2] + safe[2], 16);
+    }
+    else if (safe.length >= 6) {
+        r = parseInt(safe.slice(0, 2), 16);
+        g = parseInt(safe.slice(2, 4), 16);
+        b = parseInt(safe.slice(4, 6), 16);
+    }
+    return { r, g, b };
+}
+function toHex({ r, g, b }) {
+    const c = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+    return `#${c(r)}${c(g)}${c(b)}`;
+}
+function relativeLuminance(color) {
+    const { r, g, b } = parseHexColor(color);
+    const transform = (v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const R = transform(r);
+    const G = transform(g);
+    const B = transform(b);
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+function contrastRatio(a, b) {
+    const l1 = relativeLuminance(a);
+    const l2 = relativeLuminance(b);
+    const high = Math.max(l1, l2);
+    const low = Math.min(l1, l2);
+    return (high + 0.05) / (low + 0.05);
+}
+function blendColor(a, b, weight = 0.5) {
+    const c1 = parseHexColor(a);
+    const c2 = parseHexColor(b);
+    const w = Math.max(0, Math.min(1, weight));
+    return toHex({
+        r: c1.r * (1 - w) + c2.r * w,
+        g: c1.g * (1 - w) + c2.g * w,
+        b: c1.b * (1 - w) + c2.b * w,
+    });
+}
+function chooseReadableColor(candidates, backgrounds, minContrast = 4.5) {
+    const bgList = backgrounds.filter(Boolean);
+    const safeCandidates = candidates.filter(Boolean);
+    if (!bgList.length || !safeCandidates.length)
+        return safeCandidates[0] || '#111111';
+    let best = safeCandidates[0];
+    let bestScore = -1;
+    for (const c of safeCandidates) {
+        const score = Math.min(...bgList.map((bg) => contrastRatio(c, bg)));
+        if (score > bestScore) {
+            bestScore = score;
+            best = c;
+        }
+    }
+    if (bestScore >= minContrast)
+        return best;
+    const fallback = ['#0f172a', '#111111', '#ffffff'];
+    for (const c of fallback) {
+        const score = Math.min(...bgList.map((bg) => contrastRatio(c, bg)));
+        if (score >= minContrast)
+            return c;
+    }
+    return best;
+}
+function resolveReadablePalette(palette) {
+    const baseBg = palette.background || '#ffffff';
+    const secondary = palette.secondary || baseBg;
+    const primary = palette.primary || '#2563eb';
+    const surface = palette.surface || '#ffffff';
+    const textBase = chooseReadableColor([palette.text, '#0f172a', '#111111', '#ffffff'], [baseBg, secondary, surface], 4.5);
+    const mutedBase = chooseReadableColor([palette.muted, blendColor(textBase, baseBg, 0.45), blendColor(textBase, '#ffffff', 0.4)], [baseBg, secondary, surface], 3.2);
+    const ctaText = chooseReadableColor(['#ffffff', '#0f172a', '#111111', textBase], [primary], 4.5);
+    const qrDot = chooseReadableColor([textBase, palette.text, '#0f172a', '#111111', '#ffffff'], [baseBg, secondary], 5.2);
+    return {
+        text: textBase,
+        muted: mutedBase,
+        ctaText,
+        qrDot,
+    };
+}
 function makeTextWidget(name, overrides) {
     const setting = clone(wTextSetting);
     return Object.assign(setting, {
@@ -250,6 +339,7 @@ export function buildPosterLayout({ input, result }) {
     const width = result.size?.width || defaultSizes[2].width;
     const height = result.size?.height || defaultSizes[2].height;
     const palette = result.palette;
+    const readability = resolveReadablePalette(palette);
     const head = dedupePosterTitleSlogan(result.title, result.slogan);
     const layoutTitle = stripInternalPromptEcho(head.title) || getSafeText(result.title, '').trim();
     const layoutSlogan = stripInternalPromptEcho(head.slogan) || getSafeText(result.slogan, '').trim();
@@ -431,7 +521,7 @@ export function buildPosterLayout({ input, result }) {
             height: titleHeight,
             fontSize: selectedFamily === 'magazine-cover' ? Math.min(titleFont + 8, getTextFont(width, 96, 36)) : titleFont,
             lineHeight: getLineHeight(titleFont),
-            color: palette.text,
+            color: readability.text,
             fontWeight: 'bold',
             textAlign: selectedFamily === 'hero-center' ? 'center' : 'left',
             textAlignLast: selectedFamily === 'hero-center' ? 'center' : 'left',
@@ -451,7 +541,7 @@ export function buildPosterLayout({ input, result }) {
             height: sloganHeight,
             fontSize: sloganFont,
             lineHeight: getLineHeight(sloganFont),
-            color: palette.muted,
+            color: readability.muted,
             textAlign: selectedFamily === 'hero-center' ? 'center' : 'left',
             textAlignLast: selectedFamily === 'hero-center' ? 'center' : 'left',
             record: {
@@ -470,7 +560,7 @@ export function buildPosterLayout({ input, result }) {
             height: bodyHeight,
             fontSize: bodyFont,
             lineHeight: getLineHeight(bodyFont),
-            color: palette.text,
+            color: readability.text,
             record: {
                 width: textWidth,
                 height: bodyHeight,
@@ -487,7 +577,7 @@ export function buildPosterLayout({ input, result }) {
             height: ctaHeight,
             fontSize: ctaFont,
             lineHeight: 1.5,
-            color: '#ffffffff',
+            color: readability.ctaText,
             backgroundColor: palette.primary,
             textAlign: 'center',
             textAlignLast: 'center',
@@ -602,7 +692,7 @@ export function buildPosterLayout({ input, result }) {
                 height: lh + 8,
                 fontSize: lineFont,
                 lineHeight: 1.45,
-                color: palette.text,
+                color: readability.text,
                 record: {
                     width: Math.round(width * 0.82),
                     height: lh + 8,
@@ -713,8 +803,8 @@ export function buildPosterLayout({ input, result }) {
             left: width - marginX - qrSize,
             top: height - safeBottom - qrSize,
             value: input.qrUrl,
-            dotColor: palette.text,
-            dotColor2: palette.text,
+            dotColor: readability.qrDot,
+            dotColor2: readability.qrDot,
         }));
     }
     else if (wantQr && qrStrategy === 'cta') {
@@ -725,8 +815,8 @@ export function buildPosterLayout({ input, result }) {
             left: textLeft + ctaWidth + Math.round(width * 0.02),
             top: ctaTop + Math.round((ctaHeight - qrS) / 2),
             value: input.qrUrl,
-            dotColor: palette.text,
-            dotColor2: palette.text,
+            dotColor: readability.qrDot,
+            dotColor2: readability.qrDot,
         }));
     }
     if (selectedFamily !== 'magazine-cover') {
@@ -796,20 +886,21 @@ export function replacePosterTexts(widgets, input, result) {
     return widgets;
 }
 export function applyPosterPalette(widgets, palette) {
+    const readability = resolveReadablePalette(palette);
     widgets.forEach((widget) => {
         if (widget.name === 'ai_title' || widget.name === 'ai_body' || (widget.name && widget.name.startsWith('ai_list_'))) {
-            widget.color = palette.text;
+            widget.color = readability.text;
         }
         if (widget.name === 'ai_slogan') {
-            widget.color = palette.muted;
+            widget.color = readability.muted;
         }
         if (widget.name === 'ai_cta') {
-            widget.color = '#ffffffff';
+            widget.color = readability.ctaText;
             widget.backgroundColor = palette.primary;
         }
         if (widget.name === 'ai_qrcode') {
-            widget.dotColor = palette.text;
-            widget.dotColor2 = palette.text;
+            widget.dotColor = readability.qrDot;
+            widget.dotColor2 = readability.qrDot;
         }
         if (widget.name.startsWith('ai_card_')) {
             widget.color = palette.primary;

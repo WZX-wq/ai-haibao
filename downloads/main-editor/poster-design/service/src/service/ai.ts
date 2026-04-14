@@ -21,8 +21,6 @@ type PosterGenerateInput = {
   baseImageUrl?: string
   /** 为 false 时不调用文生图主图，仅背景+版式（默认 true） */
   generateHeroImage?: boolean
-  /** 为 false 时不调用 AI 背景图，版式使用配色渐变（默认 true） */
-  generateBackgroundImage?: boolean
 }
 
 type PosterPalette = {
@@ -92,14 +90,6 @@ const paletteByIndustry: Record<string, PosterPalette> = {
   节日: { background: '#FFF7ED', surface: '#FFFFFF', primary: '#EA580C', secondary: '#FED7AA', text: '#431407', muted: '#9A3412', swatches: ['#FFF7ED', '#FED7AA', '#FB923C', '#431407'] },
   健身: { background: '#F0FDF4', surface: '#FFFFFF', primary: '#16A34A', secondary: '#BBF7D0', text: '#052E16', muted: '#166534', swatches: ['#F0FDF4', '#BBF7D0', '#4ADE80', '#052E16'] },
   餐饮: { background: '#FFFBEB', surface: '#FFFFFF', primary: '#D97706', secondary: '#FDE68A', text: '#422006', muted: '#92400E', swatches: ['#FFFBEB', '#FDE68A', '#F59E0B', '#422006'] },
-  美妆: { background: '#FDF2F8', surface: '#FFFFFF', primary: '#DB2777', secondary: '#FBCFE8', text: '#4C0519', muted: '#9D174D', swatches: ['#FDF2F8', '#FBCFE8', '#DB2777', '#4C0519'] },
-  母婴: { background: '#FFF7ED', surface: '#FFFFFF', primary: '#F97316', secondary: '#FFEDD5', text: '#431407', muted: '#9A3412', swatches: ['#FFF7ED', '#FFEDD5', '#FB923C', '#431407'] },
-  地产: { background: '#F8FAFC', surface: '#FFFFFF', primary: '#1E3A8A', secondary: '#CBD5E1', text: '#0F172A', muted: '#475569', swatches: ['#F8FAFC', '#CBD5E1', '#1E3A8A', '#0F172A'] },
-  金融: { background: '#F0F9FF', surface: '#FFFFFF', primary: '#0369A1', secondary: '#BAE6FD', text: '#0C4A6E', muted: '#075985', swatches: ['#F0F9FF', '#BAE6FD', '#0369A1', '#0C4A6E'] },
-  科技互联网: { background: '#EEF2FF', surface: '#FFFFFF', primary: '#4F46E5', secondary: '#C7D2FE', text: '#1E1B4B', muted: '#4338CA', swatches: ['#EEF2FF', '#C7D2FE', '#4F46E5', '#1E1B4B'] },
-  旅游: { background: '#ECFEFF', surface: '#FFFFFF', primary: '#0891B2', secondary: '#A5F3FC', text: '#164E63', muted: '#0E7490', swatches: ['#ECFEFF', '#A5F3FC', '#0891B2', '#164E63'] },
-  汽车: { background: '#F4F4F5', surface: '#FFFFFF', primary: '#DC2626', secondary: '#FECACA', text: '#18181B', muted: '#52525B', swatches: ['#F4F4F5', '#FECACA', '#DC2626', '#18181B'] },
-  政务公益: { background: '#F8FAFC', surface: '#FFFFFF', primary: '#1E40AF', secondary: '#BFDBFE', text: '#0F172A', muted: '#1D4ED8', swatches: ['#F8FAFC', '#BFDBFE', '#1E40AF', '#0F172A'] },
 }
 
 function getEnv(name: string, fallback = '') { return String(process.env[name] || fallback || '').trim() }
@@ -127,10 +117,6 @@ function normalizeGenerateHeroImage(raw: unknown): boolean {
   }
   return true
 }
-/** 缺省 true；兼容字符串，避免网关/表单把布尔量转成字符串后背景开关失效 */
-function normalizeGenerateBackgroundImage(raw: unknown): boolean {
-  return normalizeGenerateHeroImage(raw)
-}
 function normalizeInput(body: any): PosterGenerateInput {
   return {
     theme: String(body.theme || '').trim(),
@@ -143,7 +129,6 @@ function normalizeInput(body: any): PosterGenerateInput {
     sourceImageUrl: String(body.sourceImageUrl || '').trim(),
     baseImageUrl: String(body.baseImageUrl || '').trim(),
     generateHeroImage: normalizeGenerateHeroImage(body.generateHeroImage),
-    generateBackgroundImage: normalizeGenerateBackgroundImage(body.generateBackgroundImage),
   }
 }
 function buildTitle(theme: string, purpose: string, industry: string) { const safeTheme = (theme || industry || 'AI 海报').trim(); if (safeTheme.includes('招聘')) return `${safeTheme} 火热招募`; if (safeTheme.includes('上新')) return `${safeTheme} 限时发布`; if (safeTheme.includes('课程')) return `${safeTheme} 开始报名`; return `${safeTheme} ${(purpose || '推广').trim()}` }
@@ -153,20 +138,7 @@ function buildSlogan(theme: string, industry: string, style: string) {
   return `${t}，${st}气质，一眼记住`
 }
 function buildBody(input: PosterGenerateInput) { return input.content || `${input.theme || input.industry}，适合${input.purpose || '推广'}场景，可继续替换文字、背景和主图。` }
-function buildCta(purpose: string) {
-  if (purpose.includes('报名')) return '立即报名'
-  if (purpose.includes('招聘') || purpose.includes('招募')) return '马上投递'
-  if (purpose.includes('促销')) return '立即抢购'
-  if (purpose.includes('门店导流')) return '到店体验'
-  if (purpose === '引流') return '扫码咨询'
-  if (purpose.includes('直播')) return '预约直播'
-  if (purpose.includes('产品发布')) return '预约席位'
-  if (purpose.includes('节日祝福')) return '送上祝福'
-  if (purpose.includes('公益')) return '立即支持'
-  if (purpose.includes('周年庆')) return '立即参与'
-  if (purpose.includes('课程推广')) return '立即咨询'
-  return '立即了解'
-}
+function buildCta(purpose: string) { if (purpose.includes('报名')) return '立即报名'; if (purpose.includes('招聘') || purpose.includes('招募')) return '马上投递'; if (purpose.includes('促销')) return '立即抢购'; if (purpose.includes('引流')) return '扫码咨询'; return '立即了解' }
 function buildCopyPrompt(input: PosterGenerateInput) {
   return [
     '以下为创作参数（仅供你理解需求，禁止把字段名或「主题：/用途：/行业：」这类标签格式写进任何输出字段）。',
@@ -215,14 +187,6 @@ function buildImageIndustryMood(input: PosterGenerateInput) {
   if (/课程|教育|培训/.test(ind)) return '强调专注与成长感：柔和侧光、书本/屏幕/教室元素虚化、清新空气感，像在线教育品牌主图。'
   if (/节日|庆典|年会/.test(ind)) return '强调节庆光色与层次：光斑、丝带或礼花氛围粒子、暖冷对比但不过曝，像节日限定海报底图。'
   if (/活动/.test(ind)) return '强调传播记忆点：人群能量或城市夜景纵深感、舞台灯或霓虹点缀、空气介质感，像品牌活动主视觉。'
-  if (/美妆|护肤|彩妆/.test(ind)) return '强调肤质光感与产品层次：柔光箱高光、镜面或丝绒材质微反差、干净妆面氛围，像美妆品牌 campaign 静帧。'
-  if (/母婴|亲子|孕婴/.test(ind)) return '强调温柔安全感：柔焦自然光、棉麻与木质暖调、留白亲和，像母婴生活方式品牌主图。'
-  if (/地产|楼盘|置业/.test(ind)) return '强调空间尺度与品质感：建筑线条透视、玻璃幕墙反射、天际线层次，像高端地产主视觉。'
-  if (/金融|理财|银行|保险/.test(ind)) return '强调稳健与信任：克制光比、金属或纸张微纹理、深蓝与中性灰层次，像金融机构品牌视觉。'
-  if (/科技|互联网|软件|SaaS/.test(ind)) return '强调未来感与精密感：冷色体积光、界面光晕虚化、几何与数据流隐喻（不出现可读界面），像科技公司发布会视觉。'
-  if (/旅游|酒店|民宿|景区/.test(ind)) return '强调目的地情绪：远景纵深、黄金时刻色温、风与云层空气感，像旅行杂志封面底图。'
-  if (/汽车|车企|4S|新能源/.test(ind)) return '强调机械美学与速度感：车漆高光曲线、路面反射、动感透视，像汽车广告主视觉。'
-  if (/政务|公益|机关|公共/.test(ind)) return '强调庄重与清晰：低饱和、构图端正、城市或人民意象的抽象化表达，像公共传播主视觉。'
   if (/门店|开业|店铺/.test(ind)) return '强调到店氛围：门面景深、橱窗反射与街景虚化、欢迎感暖光，像新店开业或门店引流主图。'
   return '强调品牌级氛围：有纵深的空间、环境反射与柔和体积光，像商业广告摄影底图。'
 }
@@ -233,48 +197,17 @@ function buildImagePurposeMood(input: PosterGenerateInput) {
   if (/报名|招募/.test(p)) return '情绪偏信任与行动：画面稳定、主体眼神或手势有「邀请感」。'
   if (/引流/.test(p)) return '情绪偏好奇与探索：留白略多、视线引导线朝向画面内侧，便于后期放二维码。'
   if (/上新/.test(p)) return '情绪偏新鲜与期待：清爽高光、新品「首发」气质，避免陈旧库存感。'
-  if (/招聘/.test(p)) return '情绪偏专业与机遇感：可信环境光、略正式的纵深，像雇主品牌主视觉。'
-  if (/品牌宣传/.test(p)) return '情绪偏长期信任与气质沉淀：品牌主色巧妙融入场景，避免一次性叫卖感。'
-  if (/活动预告/.test(p)) return '情绪偏期待与到场感：空间层次略强，像线下活动倒计时主视觉。'
-  if (/课程推广/.test(p)) return '情绪偏成长与收获：专注氛围但不刻板教室，偏研修班或知识付费气质。'
-  if (/门店导流/.test(p)) return '情绪偏就近与亲切：到店动线暗示、街区与门面氛围虚化，便于叠放地址或地图。'
-  if (/直播预告/.test(p)) return '情绪偏节奏与临场：略舞台化光线，预留头像与时间信息叠放区。'
-  if (/周年庆/.test(p)) return '情绪偏庆典与回馈：光斑与层次可略丰富，主色系统一不杂乱。'
-  if (/公益倡导/.test(p)) return '情绪偏真诚克制：人文关怀氛围，避免过度悲情或廉价煽情。'
-  if (/产品发布/.test(p)) return '情绪偏首发亮点：产品轮廓光略强调，像发布会 keynote 底图。'
-  if (/节日祝福/.test(p)) return '情绪偏温暖礼赠感：节庆元素点到为止，避免大红大紫脏乱。'
   return '情绪积极正向、商业可信，避免廉价素材感。'
 }
 /** 用户所选「风格」映射到光影与调色倾向（与预设风格文案对齐） */
 function buildImageStyleMood(styleRaw: string) {
   const s = String(styleRaw || '')
-  // 含「极简」「复古」「中式」等易重叠词的风格，先匹配更具体的全称
-  if (/蒸汽波/.test(s)) return '霓虹渐变与网格透视、柔光晕影与复古显示器质感，像 80s–90s vaporwave 静帧但保持商业干净度。'
-  if (/极简科技|科技极简/.test(s)) return '冷灰与单一高饱和点缀、硬朗直线与微光边，偏智能硬件或开发者品牌视觉。'
-  if (/北欧极简/.test(s)) return '白橡木与亚麻灰白基调、自然窗光、少即是多的留白，偏北欧家居与生活方式品牌摄影。'
-  if (/新中式/.test(s)) return '留白与园林窗景意象、黛青胭脂点缀、克制东方线条，偏雅致文化品牌而非大红大紫。'
-  if (/杂志大片/.test(s)) return '编辑式布光与强主光比、时尚刊物质感与裁切张力，像封面或内页拉页广告。'
-  if (/日系侘寂|侘寂/.test(s)) return '低饱和土陶与苔绿、柔雾漫射光、残缺美与材质肌理，偏日式侘寂空间与器物摄影。'
-  if (/赛博朋克/.test(s)) return '雨夜霓虹反射、高对比青洋红、薄雾体积光与金属潮湿感，偏科幻城市场景但仍可读主体。'
-  if (/潮酷街头/.test(s)) return '广角透视与涂鸦墙/沥青质感、硬边阳光或闪光灯直打，偏街头潮流与运动品牌片。'
-  if (/手绘涂鸦/.test(s)) return '马克笔与喷漆笔触混搭、高饱和块面与线稿趣味，偏年轻活动与音乐现场视觉。'
-  if (/法式优雅/.test(s)) return '奶油米与柔粉金、柔焦窗纱光、曲线家具与花艺点缀，偏法式轻奢生活方式。'
-  if (/玻璃拟态/.test(s)) return '半透明磨砂层叠、柔和高光与浅景深虚化，偏系统 UI 气质但保持摄影级材质可信。'
-  if (/酸性设计|酸性/.test(s)) return '金属铬渐变与扭曲网格、高反差补色与液态金属高光，偏潮流音乐与青年活动主视觉。'
-  if (/水墨写意/.test(s)) return '墨色晕染与飞白、大面积留白与远山意象，偏文化类海报底图且避免字绘入画。'
-  if (/孟菲斯/.test(s)) return '高饱和几何块、粗黑描边与错位圆点，偏 80s Memphis 图形语言但控制数量不杂乱。'
-  if (/暗黑神秘/.test(s)) return '低键布光与窄光束、深蓝紫黑层次与细微体积雾，偏悬疑发布与高端夜场气质。'
   if (/活力促销|活力|促销/.test(s)) return '调色偏饱和有 punch，可用边缘光或轻微镜头眩光增强能量，整体仍要干净不脏。'
   if (/年轻潮流|潮流|年轻/.test(s)) return '略广角透视、对比清晰、点缀霓虹或金属高光，偏青年文化品牌片。'
   if (/高级简约|极简|简约/.test(s)) return '低饱和克制配色、大面积留白呼吸感、细腻灰阶过渡与柔光箱式主光，偏奢侈品或科技极简广告。'
   if (/专业商务|商务|专业/.test(s)) return '中性光比、横平竖直构图、稳重景深，偏企业年报或发布会视觉。'
   if (/清新温暖|温暖|清新/.test(s)) return '柔和晨光或黄金时刻色温、轻雾感空气透视、材质柔软，偏生活方式品牌情绪片。'
   if (/严肃|政务/.test(s)) return '低反差、构图端正、色彩克制，偏政务与公共传播视觉。'
-  if (/国潮|中式/.test(s)) return '东方设色与留白平衡：朱砂、石青、墨色层次或当代国潮插画气质，避免廉价贴纸感。'
-  if (/复古|胶片/.test(s)) return '轻微褪色与颗粒、镜头眩光克制、年代感色调但主体清晰，像胶片广告复刻。'
-  if (/轻奢|质感/.test(s)) return '细腻材质（丝绒、金属拉丝、大理石微纹理）、柔和伦勃朗光，偏轻奢美妆或精品零售。'
-  if (/卡通|插画/.test(s)) return '统一手绘或矢量插画语言、色块干净边缘清晰，偏年轻化活动与亲子传播。'
-  if (/黑金/.test(s)) return '深色底与高亮金或香槟金点缀、强对比但控制眩光，偏发布会与高端活动主视觉。'
   return '光影统一、材质可信、整体像精修商业摄影而非随手快照。'
 }
 /** 强氛围优先时的通用质感后缀（仍禁止画面内可读字） */
@@ -364,73 +297,18 @@ function makeHeroSvg(_input: PosterGenerateInput, palette: PosterPalette) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 async function mockImageProvider(input: PosterGenerateInput, palette: PosterPalette, mode: 'background' | 'hero', stage: 'image' | 'background' | 'imageEdit'): Promise<ProviderResult<PosterImageResult>> { const imageUrl = mode === 'background' ? makeBackgroundSvg(input, palette) : makeHeroSvg(input, palette); return { result: normalizeImageResult(imageUrl, buildImagePrompt(input, mode)), meta: getProviderMeta(stage, { provider: 'mock', model: stage === 'background' ? 'mock-background' : stage === 'imageEdit' ? 'mock-image-edit' : 'mock-image', isMockFallback: true, message: '当前未使用真实图像模型，已回退到本地演示图。' }) } }
-/** 文生图：按 mode 使用不同 prompt，避免「无底图换背景」与主图走同一套描述导致两张图雷同 */
-async function bailianTextToImageForPoster(
-  input: PosterGenerateInput,
-  size: SizePreset,
-  mode: 'background' | 'hero',
-): Promise<ProviderResult<PosterImageResult>> {
+async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> {
   const ready = ensureBailianReady('image')
-  const prompt = buildImagePrompt(input, mode)
+  const prompt = buildImagePrompt(input, 'hero')
   const extend = imagePromptExtendEnabled()
   const taskResult = await requestBailianTextToImage(prompt, ready.model, size, extend)
-  const msg =
-    mode === 'background'
-      ? extend
-        ? '已使用文生图生成背景层（已开启 prompt 延展）。'
-        : '已使用文生图生成背景层。'
-      : extend
-        ? '已使用阿里百炼主视觉模型生成图片（已开启 prompt 延展以增强氛围）。'
-        : '已使用阿里百炼真实主视觉模型生成图片。'
-  return {
-    result: normalizeImageResult(await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai'), prompt),
-    meta: getProviderMeta(mode === 'background' ? 'background' : 'image', { provider: 'aliyun-bailian', model: ready.model, message: msg }),
-  }
+  const msg = extend ? '已使用阿里百炼主视觉模型生成图片（已开启 prompt 延展以增强氛围）。' : '已使用阿里百炼真实主视觉模型生成图片。'
+  return { result: normalizeImageResult(await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai'), prompt), meta: getProviderMeta('image', { provider: 'aliyun-bailian', model: ready.model, message: msg }) }
 }
-async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> {
-  return bailianTextToImageForPoster(input, size, 'hero')
-}
-async function bailianBackgroundProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> {
-  const prompt = buildImagePrompt(input, 'background')
-  if (!String(input.baseImageUrl || '').trim()) {
-    const rerouted = await bailianTextToImageForPoster(input, size, 'background')
-    return {
-      result: rerouted.result,
-      meta: getProviderMeta('background', {
-        provider: rerouted.meta.provider,
-        model: rerouted.meta.model,
-        message: `未提供可换背景的前景图，已按「背景层」文生图生成（与主图 prompt 区分）。实际模型：${rerouted.meta.model}`,
-      }),
-    }
-  }
-  const taskResult = await requestBailianBackground(prompt, getProviderModel('background'), String(input.baseImageUrl))
-  return {
-    result: normalizeImageResult(await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai'), prompt),
-    meta: getProviderMeta('background', { provider: 'aliyun-bailian', model: getProviderModel('background'), message: '已使用阿里百炼真实背景模型完成换背景。' }),
-  }
-}
+async function bailianBackgroundProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> { const prompt = buildImagePrompt(input, 'background'); if (!String(input.baseImageUrl || '').trim()) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('background', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `未提供可换背景的前景图，已自动切换到真实文生图路径。实际模型：${rerouted.meta.model}` }) } } const taskResult = await requestBailianBackground(prompt, getProviderModel('background'), String(input.baseImageUrl)); return { result: normalizeImageResult(await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai'), prompt), meta: getProviderMeta('background', { provider: 'aliyun-bailian', model: getProviderModel('background'), message: '已使用阿里百炼真实背景模型完成换背景。' }) } }
 async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> { const prompt = buildImagePrompt(input, 'hero'); if (!String(input.sourceImageUrl || '').trim()) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('imageEdit', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `未提供待编辑图片，已自动切换到真实文生图换图。实际模型：${rerouted.meta.model}` }) } } const ready = ensureBailianReady('imageEdit'); const taskResult = await requestBailianImageEdit(prompt, ready.model, String(input.sourceImageUrl), size); return { result: normalizeImageResult(await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai'), prompt), meta: getProviderMeta('imageEdit', { provider: 'aliyun-bailian', model: ready.model, message: '已使用阿里百炼真实换图模型生成新主图。' }) } }
 async function generateHeroImageInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) { try { return await bailianHeroProvider(input, size) } catch (error) { if (!allowPosterFallback()) throw new Error(buildStrictProviderError('主图生成', error)); return mockImageProvider(input, palette, 'hero', 'image') } }
-async function generateBackgroundInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) {
-  try {
-    return await bailianBackgroundProvider(input, size)
-  } catch (error) {
-    const status = Number((error as any)?.response?.status || 0)
-    if (status === 400) {
-      const rerouted = await bailianTextToImageForPoster(input, size, 'background')
-      return {
-        result: rerouted.result,
-        meta: getProviderMeta('background', {
-          provider: rerouted.meta.provider,
-          model: rerouted.meta.model,
-          message: `背景模型无法直接处理当前素材，已按「背景层」文生图重试：${(error as Error).message}`,
-        }),
-      }
-    }
-    if (!allowPosterFallback()) throw new Error(buildStrictProviderError('背景生成', error))
-    return mockImageProvider(input, palette, 'background', 'background')
-  }
-}
+async function generateBackgroundInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) { try { return await bailianBackgroundProvider(input, size) } catch (error) { const status = Number((error as any)?.response?.status || 0); if (status === 400) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('background', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `背景模型无法直接处理当前素材，已自动切换到真实文生图路径：${(error as Error).message}` }) } } if (!allowPosterFallback()) throw new Error(buildStrictProviderError('背景生成', error)); return mockImageProvider(input, palette, 'background', 'background') } }
 async function replaceImageInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) { try { return await bailianImageEditProvider(input, size) } catch (error) { const status = Number((error as any)?.response?.status || 0); if (status === 400) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('imageEdit', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `换图模型无法直接处理当前素材，已自动切换到真实文生图路径：${(error as Error).message}` }) } } if (!allowPosterFallback()) throw new Error(buildStrictProviderError('换图', error)); return mockImageProvider(input, palette, 'hero', 'imageEdit') } }
 function getPythonExecutable() { return getEnv('AI_CUTOUT_PYTHON', 'python') }
 function getRembgModelName() { return getEnv('AI_CUTOUT_REMBG_MODEL', 'u2net') }
@@ -462,18 +340,14 @@ function deriveDesignPlan(input: PosterGenerateInput, candidates: any[]) {
   const contentLen = String(input.content || '').length
   const hasQr = Boolean(String(input.qrUrl || '').trim())
   const density: 'light' | 'balanced' | 'dense' = contentLen > 48 ? 'dense' : contentLen > 16 ? 'balanced' : 'light'
-  const ctaStrength: 'soft' | 'balanced' | 'strong' = /促销|报名|招募|抢购|周年庆/.test(purpose)
-    ? 'strong'
-    : /引流|上新|直播|产品发布|活动预告|门店导流/.test(purpose)
-      ? 'balanced'
-      : 'soft'
+  const ctaStrength: 'soft' | 'balanced' | 'strong' = /促销|报名|招募|抢购/.test(purpose) ? 'strong' : /引流|上新/.test(purpose) ? 'balanced' : 'soft'
   const qrStrategy: 'none' | 'corner' | 'cta' = hasQr ? (ctaStrength === 'strong' ? 'cta' : 'corner') : 'none'
   const layoutFamily = String(candidates?.[0]?.layoutFamily || 'hero-left')
-  const heroStrategy: 'product' | 'person' | 'scene' | 'editorial' = /招聘|政务|公益/.test(input.industry)
+  const heroStrategy: 'product' | 'person' | 'scene' | 'editorial' = /招聘/.test(input.industry)
     ? 'person'
     : /健身|运动|瑜伽|训练/.test(input.industry)
       ? 'person'
-      : /活动|节日|旅游|母婴/.test(input.industry)
+      : /活动|节日/.test(input.industry)
         ? 'scene'
         : /餐饮|美食|咖啡|茶饮/.test(input.industry)
           ? 'scene'
@@ -557,47 +431,31 @@ async function relayoutDesignPlanInternal(input: PosterGenerateInput, candidates
 async function generatePosterDraftInternal(input: PosterGenerateInput): Promise<PosterGenerateResult> {
   const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu
   const [paletteResult, copyResult] = await Promise.all([generatePaletteInternal(input), generateCopyInternal(input)])
-  const wantBackground = input.generateBackgroundImage !== false
-  const backgroundResult = wantBackground
-    ? await generateBackgroundInternal(input, paletteResult.result, size)
-    : ({
-        result: { imageUrl: '', prompt: '' },
-        meta: getProviderMeta('background', {
-          provider: 'none',
-          model: 'skipped',
-          isMockFallback: false,
-          message: '已跳过 AI 背景图，请使用配色渐变或手动点击「背景」生成。',
+  const backgroundResult = await generateBackgroundInternal(input, paletteResult.result, size)
+  const wantHero = input.generateHeroImage !== false
+  const canReuseBackgroundAsHero =
+    wantHero &&
+    !String(input.baseImageUrl || '').trim() &&
+    String(backgroundResult?.result?.imageUrl || '').trim().length > 0
+  const heroResult = canReuseBackgroundAsHero
+    ? ({
+        result: {
+          imageUrl: String(backgroundResult.result.imageUrl || ''),
+          prompt: String(backgroundResult.result.prompt || ''),
+        },
+        meta: getProviderMeta('image', {
+          provider: backgroundResult.meta.provider,
+          model: backgroundResult.meta.model,
+          isMockFallback: backgroundResult.meta.isMockFallback,
+          message: '已复用背景生成结果作为主图，以降低总耗时并避免网关超时。',
         }),
       } as ProviderResult<PosterImageResult>)
-  const wantHero = input.generateHeroImage !== false
-  let heroResult: ProviderResult<PosterImageResult> = wantHero
-    ? await generateHeroImageInternal(input, paletteResult.result, size)
-    : ({
-        result: { imageUrl: '', prompt: '' },
-        meta: getProviderMeta('image', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 主图，仅生成背景与文案版式。' }),
-      } as ProviderResult<PosterImageResult>)
-  function sameSavedImageUrl(a: string, b: string) {
-    const x = String(a || '').trim().split('?')[0]
-    const y = String(b || '').trim().split('?')[0]
-    return x.length > 0 && x === y
-  }
-  if (
-    wantHero &&
-    wantBackground &&
-    String(heroResult.result.imageUrl || '').trim() &&
-    String(backgroundResult.result.imageUrl || '').trim() &&
-    sameSavedImageUrl(heroResult.result.imageUrl, backgroundResult.result.imageUrl)
-  ) {
-    try {
-      const distinctInput: PosterGenerateInput = {
-        ...input,
-        content: `${input.content || ''}\n【主图】必须与整页背景底图明显不同：独立前景主体（人物/商品/特写），禁止与背景同一张全场景图。`.trim(),
-      }
-      heroResult = await generateHeroImageInternal(distinctInput, paletteResult.result, size)
-    } catch {
-      /* keep first hero */
-    }
-  }
+    : wantHero
+      ? await generateHeroImageInternal(input, paletteResult.result, size)
+      : ({
+          result: { imageUrl: '', prompt: '' },
+          meta: getProviderMeta('image', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 主图，仅生成背景与文案版式。' }),
+        } as ProviderResult<PosterImageResult>)
   const recommendation = getTemplateSuggestionByIndustry(input.industry)
   const templateCandidates = getTemplateCandidatesByIndustry(input.industry, 3)
   const designPlan = deriveDesignPlan(input, templateCandidates)

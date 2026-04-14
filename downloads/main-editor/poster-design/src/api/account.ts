@@ -26,10 +26,13 @@ export type AccountPermissions = {
   vip_level: number
   vip_expire_time: string | null
   daily_limit_count: number
+  daily_download_limit?: number
+  daily_ai_limit?: number
   max_file_size: number
   allow_batch: boolean
   allow_no_watermark: boolean
   allow_ai_tools: boolean
+  allow_download?: boolean
   allow_template_manage: boolean
 }
 
@@ -51,6 +54,7 @@ export type CurrentSession = {
   permissions: AccountPermissions
   /** 今日已成功计次的下载次数（MySQL 未配置时为 0） */
   downloads_today_used?: number
+  ai_today_used?: number
 }
 
 export type AccountCenterResult = {
@@ -66,15 +70,20 @@ export type AccountCenterResult = {
   }
   quota_card: {
     daily_limit_count: number
+    daily_download_limit?: number
+    daily_ai_limit?: number
     max_file_size: number
     downloads_today_used?: number
     /** 有上限时为剩余次数；不限次（daily_limit_count<=0）时为 null */
     downloads_today_remaining?: number | null
+    ai_today_used?: number
+    ai_today_remaining?: number | null
   }
   feature_permission_card: {
     allow_batch: boolean
     allow_no_watermark: boolean
     allow_ai_tools: boolean
+    allow_download?: boolean
     allow_template_manage: boolean
   }
   quick_actions: Array<{ label: string; path: string }>
@@ -92,3 +101,6 @@ export const logout = () => fetch<boolean>('auth/logout', {}, 'post')
 export type ConsumeDownloadQuotaResult = { skipped?: boolean; used?: number; limit?: number; code?: number; msg?: string }
 export const consumeDownloadQuota = () =>
   fetch<ConsumeDownloadQuotaResult>('usage/download/consume', {}, 'post')
+export type ConsumeAiQuotaResult = { skipped?: boolean; used?: number; limit?: number; code?: number; msg?: string }
+export const consumeAiQuota = () =>
+  fetch<ConsumeAiQuotaResult>('usage/ai/consume', {}, 'post')

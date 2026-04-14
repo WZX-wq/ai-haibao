@@ -13,6 +13,7 @@ import designService from '../service/design'
 import aiService from '../service/ai'
 import accountService, { tryResolveSession } from '../service/account'
 import usageService from '../service/usage'
+import { consumeAiQuotaByUserId } from '../service/usage'
 import { isMysqlConfigured } from '../utils/mysql'
 import api from './api'
 const rRouter = rExpress.Router()
@@ -26,6 +27,16 @@ async function requireAuthForMysqlAiPoster(req: any, res: any, next: any) {
   if (!session) {
     res.status(401).json({ code: 401, msg: '请先登录后再使用 AI 海报功能' })
     return
+  }
+  try {
+    await consumeAiQuotaByUserId(session.userId)
+  } catch (error) {
+    const err: any = error
+    if (err?.status && err?.code) {
+      res.status(Number(err.status)).json({ code: Number(err.code), msg: String(err.message || 'AI 权限或配额校验失败') })
+      return
+    }
+    throw error
   }
   next()
 }
@@ -66,6 +77,7 @@ rRouter.get(api.AUTH_ME, accountService.getCurrentUser)
 rRouter.get(api.AUTH_ACCOUNT_CENTER, accountService.getAccountCenter)
 rRouter.post(api.AUTH_LOGOUT, accountService.logout)
 rRouter.post(api.USAGE_DOWNLOAD_CONSUME, usageService.consumeDownloadQuota)
+rRouter.post(api.USAGE_AI_CONSUME, usageService.consumeAiQuota)
 rRouter.get(api.ADMIN_USERS, accountService.adminListUsers)
 rRouter.post(api.ADMIN_USER_PERMISSIONS, accountService.adminUpdatePermissions)
 rRouter.get(api.ADMIN_SESSIONS, accountService.adminListSessions)

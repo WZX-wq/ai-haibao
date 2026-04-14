@@ -9,12 +9,11 @@
   <div id="page-design-index" ref="pageDesignIndex">
     <div class="top-nav">
       <div class="top-nav-wrap">
-        <div class="top-left">
-          <div class="name" style="font-size: 15px">在线 PSD 解析</div>
+        <div class="top-actions">
+          <el-button size="small" plain @click="goEditor">返回</el-button>
+          <el-button size="small" plain type="primary" @click="jump2word">设计 PSD 规范</el-button>
         </div>
-        <div style="flex: 1">
-          <el-button plain type="primary" @click="jump2word">设计 PSD 规范</el-button>
-        </div>
+        <div style="flex: 1"></div>
         <el-button v-show="state.isDone" @click="clear">清空画布</el-button>
         <div class="v-tips">
           <HeaderOptions :isDone="state.isDone" @change="optionsChange" />
@@ -36,7 +35,6 @@
           </div>
         </uploader>
       </design-board>
-      <style-panel v-show="state.isDone"></style-panel>
     </div>
     <zoom-control v-if="state.isDone" ref="zoomControlRef" />
     <right-click-menu />
@@ -54,7 +52,7 @@
 
 <script lang="ts" setup>
 import { getCurrentInstance, nextTick, onBeforeMount, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import RightClickMenu from '@/components/business/right-click-menu/RcMenu.vue'
 import Moveable from '@/components/business/moveable/Moveable.vue'
@@ -91,6 +89,7 @@ const state = reactive<TState>({
 const widgetStore = useWidgetStore()
 const controlStore = useControlStore()
 const route = useRoute()
+const router = useRouter()
 const groupStore = useGroupStore()
 const pageStore = useCanvasStore()
 const { dPage } = storeToRefs(pageStore)
@@ -193,6 +192,10 @@ function jump2word() {
   window.open('https://kdocs.cn/l/clmBsIkhve8d')
 }
 
+function goEditor() {
+  router.push('/home')
+}
+
 defineExpose({
   selectFile,
   clear,
@@ -225,6 +228,13 @@ defineExpose({
   padding: 0 1rem;
   font-size: 15px;
   color: #666666;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
 }
 
 @media (max-width: 900px) {

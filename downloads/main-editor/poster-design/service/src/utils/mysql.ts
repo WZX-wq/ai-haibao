@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise'
 let pool: any = null
 let schemaReady = false
 let userDesignsSchemaReady = false
+let permissionColumnsReady = false
 
 function getEnvNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -103,7 +104,10 @@ export async function ensureAccountSchema() {
       allow_batch TINYINT(1) NOT NULL DEFAULT 0,
       allow_no_watermark TINYINT(1) NOT NULL DEFAULT 0,
       allow_ai_tools TINYINT(1) NOT NULL DEFAULT 1,
+      allow_download TINYINT(1) NOT NULL DEFAULT 1,
       allow_template_manage TINYINT(1) NOT NULL DEFAULT 1,
+      daily_download_limit INT NOT NULL DEFAULT 10,
+      daily_ai_limit INT NOT NULL DEFAULT 5,
       extra_json JSON DEFAULT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -131,7 +135,28 @@ export async function ensureAccountSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `)
 
+  await ensurePermissionSnapshotColumns(db)
   schemaReady = true
+}
+
+async function ensurePermissionSnapshotColumns(db: any) {
+  if (permissionColumnsReady) return
+  const needColumns = [
+    { name: 'allow_download', ddl: "ALTER TABLE account_permission_snapshots ADD COLUMN allow_download TINYINT(1) NOT NULL DEFAULT 1 AFTER allow_ai_tools" },
+    { name: 'daily_download_limit', ddl: "ALTER TABLE account_permission_snapshots ADD COLUMN daily_download_limit INT NOT NULL DEFAULT 10 AFTER allow_template_manage" },
+    { name: 'daily_ai_limit', ddl: "ALTER TABLE account_permission_snapshots ADD COLUMN daily_ai_limit INT NOT NULL DEFAULT 5 AFTER daily_download_limit" },
+  ]
+  for (const col of needColumns) {
+    const [[row]]: any = await db.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'account_permission_snapshots' AND COLUMN_NAME = ?`,
+      [col.name],
+    )
+    if (Number(row?.cnt) === 0) {
+      await db.query(col.ddl)
+    }
+  }
+  permissionColumnsReady = true
 }
 
 async function ensureUserDesignsComponentListKeyColumn(db: any) {
@@ -194,11 +219,20 @@ export async function ensureUserUsageDailySchema() {
       user_id BIGINT UNSIGNED NOT NULL,
       usage_date DATE NOT NULL,
       download_count INT UNSIGNED NOT NULL DEFAULT 0,
+      ai_count INT UNSIGNED NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, usage_date),
       KEY idx_usage_date (usage_date),
       CONSTRAINT fk_user_usage_daily_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `)
+  const [[aiCol]]: any = await db.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_usage_daily' AND COLUMN_NAME = 'ai_count'`,
+  )
+  if (Number(aiCol?.cnt) === 0) {
+    await db.query(`ALTER TABLE user_usage_daily ADD COLUMN ai_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER download_count`)
+  }
+  await ensurePermissionSnapshotColumns(db)
   userUsageDailySchemaReady = true
 }
 
@@ -212,6 +246,21 @@ export async function getTodayDownloadUsage(userId: number): Promise<number> {
       [userId],
     )
     return rows?.[0] ? Number(rows[0].download_count) : 0
+  } catch {
+    return 0
+  }
+}
+
+export async function getTodayAiUsage(userId: number): Promise<number> {
+  if (!isMysqlConfigured()) return 0
+  try {
+    await ensureUserUsageDailySchema()
+    const db = await getMysqlPool()
+    const [rows]: any = await db.query(
+      'SELECT ai_count FROM user_usage_daily WHERE user_id = ? AND usage_date = CURDATE() LIMIT 1',
+      [userId],
+    )
+    return rows?.[0] ? Number(rows[0].ai_count) : 0
   } catch {
     return 0
   }

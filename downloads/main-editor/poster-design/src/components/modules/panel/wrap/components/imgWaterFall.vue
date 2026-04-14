@@ -79,6 +79,7 @@ const state = reactive<TState>({
 const columnHeights: number[] = []
 const columnNums = 2
 const gap = 7
+const rebuildingCoverIds = new Set<string>()
 
 watch(
   () => props.listData,
@@ -136,6 +137,27 @@ const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cove
 const load = () => emit('load')
 const selectItem = (value: IGetTempListData) => emit('select', value)
 
+const tryRebuildCover = async (item: IGetTempListData) => {
+  const id = String(item?.id || '').trim()
+  if (!id || rebuildingCoverIds.has(id)) return false
+  rebuildingCoverIds.add(id)
+  try {
+    const width = Math.max(1, Number(item.width) || 1242)
+    const height = Math.max(1, Number(item.height) || 1660)
+    const forceUrl = `/api/screenshots?tempid=${encodeURIComponent(id)}&tempType=0&width=${width}&height=${height}&type=file&index=0&force=1&r=${Date.now()}`
+    await fetch(forceUrl, { method: 'GET', credentials: 'include' })
+    const rebuilt = `${forceUrl}&retry=1`
+    item.cover = rebuilt
+    item.thumb = rebuilt
+    item.fail = false
+    return true
+  } catch {
+    return false
+  } finally {
+    rebuildingCoverIds.delete(id)
+  }
+}
+
 const loadError = (item: IGetTempListData, index: number, event?: Event) => {
   const target = event?.target as HTMLImageElement | null
   if (item.thumb && item.cover && item.thumb !== item.cover) {
@@ -151,8 +173,14 @@ const loadError = (item: IGetTempListData, index: number, event?: Event) => {
     return
   }
   if (target) {
-    target.src = getFallbackByIndex(index)
-    item.fail = false
+    tryRebuildCover(item).then((ok) => {
+      if (ok) {
+        target.src = getCardImage(item)
+        return
+      }
+      target.src = getFallbackByIndex(index)
+      item.fail = false
+    })
     return
   }
   item.fail = true
@@ -162,8 +190,14 @@ const loadSuccess = (item: IGetTempListData, index: number, event?: Event) => {
   const target = event?.target as HTMLImageElement | null
   // 后端截图异常时会返回同一张占位图（典型尺寸 292x1130），这里做兜底替换
   if (target && target.naturalWidth > 0 && target.naturalHeight > target.naturalWidth * 3) {
-    target.src = getFallbackByIndex(index)
-    item.fail = false
+    tryRebuildCover(item).then((ok) => {
+      if (ok) {
+        target.src = getCardImage(item)
+        return
+      }
+      target.src = getFallbackByIndex(index)
+      item.fail = false
+    })
     return
   }
   item.fail = false

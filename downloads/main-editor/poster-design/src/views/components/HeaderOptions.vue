@@ -227,9 +227,50 @@ type TSaveTempOpts = {
 async function saveTemp(opts?: TSaveTempOpts) {
   const rawId = route.query.tempid ?? route.query.id
   const designId = rawId != null && String(rawId).trim() !== '' ? String(rawId) : ''
-  if (!designId) return
 
   const { tempType: type } = route.query
+  const numericType = Number(type || 0)
+
+  // AI 生成后可能是全新画布（无 tempid/id）：这里自动创建“我的作品”，避免点击保存无响应
+  if (!designId) {
+    if (numericType === 1) {
+      useNotification('暂时无法保存', '当前组件缺少模板编号，请先从模板/组件入口创建后再保存。', { type: 'warning' })
+      return
+    }
+    try {
+      const payload = buildDraftPayload(numericType)
+      const createRes: any = await api.home.saveTemp({
+        title: payload.title,
+        width: payload.width,
+        height: payload.height,
+        data: payload.data,
+      })
+      clearLocalDraft()
+      if (createRes?.stat != 0) {
+        useNotification('保存成功', '作品已保存到我的设计。', { type: 'success' })
+      }
+      if (createRes?.id != null) {
+        const next = { ...route.query, id: String(createRes.id) } as Record<string, string | string[] | undefined>
+        delete next.tempid
+        await router.replace({ path: route.path, query: next, replace: true })
+      }
+      return
+    } catch (error: any) {
+      const message = String(error?.message || '')
+      const isNetworkError = message.includes('Network Error') || message.includes('ERR_CONNECTION_REFUSED')
+      if (isNetworkError) {
+        saveLocalDraft(buildDraftPayload(numericType))
+      }
+      useNotification(
+        '保存失败',
+        isNetworkError
+          ? '当前网络连接异常，内容已经自动保存在本机草稿里，请稍后再试。'
+          : '当前暂时无法保存，请稍后再试。',
+        { type: 'error' },
+      )
+      return
+    }
+  }
 
   const signal = opts?.signal
   const axiosExtra = signal
@@ -237,7 +278,6 @@ async function saveTemp(opts?: TSaveTempOpts) {
     : {}
 
   let res = null as any
-  const numericType = Number(type || 0)
   const compCateForSave =
     numericType === 1
       ? String(

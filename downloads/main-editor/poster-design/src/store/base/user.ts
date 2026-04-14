@@ -14,10 +14,13 @@ export type TPermissionSnapshot = {
   vip_level: number
   vip_expire_time: string | null
   daily_limit_count: number
+  daily_download_limit?: number
+  daily_ai_limit?: number
   max_file_size: number
   allow_batch: boolean
   allow_no_watermark: boolean
   allow_ai_tools: boolean
+  allow_download?: boolean
   allow_template_manage: boolean
 }
 
@@ -54,10 +57,13 @@ const defaultPermissions: TPermissionSnapshot = {
   vip_level: 0,
   vip_expire_time: null,
   daily_limit_count: 10,
+  daily_download_limit: 10,
+  daily_ai_limit: 5,
   max_file_size: 52428800,
   allow_batch: false,
   allow_no_watermark: false,
   allow_ai_tools: true,
+  allow_download: true,
   allow_template_manage: true,
 }
 
@@ -107,7 +113,7 @@ const useUserStore = defineStore<'userStore', TUserStoreState, {}, TUserAction>(
     setAuthSession(payload) {
       this.localToken = payload.token
       this.user = payload.user
-      this.permissions = payload.permissions
+      this.permissions = { ...defaultPermissions, ...payload.permissions }
       this.downloadsTodayUsed = null
       this.online = true
       localStorage.setItem(LocalStorageKey.tokenKey, payload.token)

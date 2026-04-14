@@ -9,12 +9,15 @@ type TForceState = {
   updateRect: number | null
   /** 强制设置选择元素 */
   updateSelect: number | null
+  /** 顶部浮动栏出现时，让 db-scroll 重新计算 paddingTop，避免遮挡画布 */
+  paddingLayoutTick: number | null
 }
 
 type TForceAction = {
   setZoomScreenChange: () => void
   setUpdateRect: () => void
   setUpdateSelect: () => void
+  setPaddingLayoutTick: () => void
 }
 
 const ForceStore = defineStore<"forceStore", TForceState, {}, TForceAction>("forceStore", {
@@ -22,6 +25,7 @@ const ForceStore = defineStore<"forceStore", TForceState, {}, TForceAction>("for
     zoomScreenChange: null, // 画布强制刷新适应度
     updateRect: null, // 强制刷新操作框
     updateSelect: null, // 强制设置选择元素
+    paddingLayoutTick: null,
   }),
 
   actions: {
@@ -36,6 +40,9 @@ const ForceStore = defineStore<"forceStore", TForceState, {}, TForceAction>("for
     setUpdateSelect() {
       // 强制触发元素选择
       this.updateSelect = Math.random()
+    },
+    setPaddingLayoutTick() {
+      this.paddingLayoutTick = Math.random()
     },
   }
 })

@@ -33,7 +33,7 @@ import { OtherList, TZoomData, ZoomList } from './data';
 // import { useSetupMapGetters } from '@/common/hooks/mapGetters';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { useCanvasStore, useForceStore } from '@/store';
+import { useCanvasStore, useForceStore } from '@/store'
 import { findClosestNumber } from '@/utils/utils';
 
 const route = useRoute()
@@ -57,7 +57,8 @@ const curAction = ref('')
 // const { zoomScreenChange } = useSetupMapGetters(['zoomScreenChange'])
 const canvasStore = useCanvasStore()
 const { dPage } = storeToRefs(useCanvasStore())
-const { zoomScreenChange } = storeToRefs(useForceStore())
+const forceStore = useForceStore()
+const { zoomScreenChange, paddingLayoutTick } = storeToRefs(forceStore)
 const { dZoom, dScreen } = storeToRefs(canvasStore)
 const presetPadding = canvasStore.dPresetPadding
 
@@ -108,6 +109,10 @@ watch(
     screenChange()
   }
 )
+
+watch(paddingLayoutTick, () => {
+  autoFixTop()
+})
 
 watch(
   dPage,
@@ -259,15 +264,19 @@ async function autoFixTop() {
   await nextTick()
   const el = document.getElementById('out-page')
   if (!el) return
+  // 为顶部浮动编辑栏预留安全区：增加 db-scroll 的 paddingTop，只影响画布区域下移
+  // 高海报/小视口时原先的 maxPadding 会吃掉预留，导致画布贴顶仍被遮挡
+  const topToolbarReserve = 60
   const headerBarHeight = 54
   const clientHeight = window.innerHeight - headerBarHeight - canvasStore.dBottomHeight
-  // const parentHeight = (el.offsetParent as HTMLElement).offsetHeight - 54
   let padding = (clientHeight - el.offsetHeight) / 2
   if (typeof curAction.value === 'undefined') {
     padding += presetPadding / 2
   }
   curAction.value === 'add' && (padding -= presetPadding)
-  canvasStore.updatePaddingTop(padding > 0 ? padding : 0)
+  padding += topToolbarReserve
+  padding = Math.max(topToolbarReserve, padding)
+  canvasStore.updatePaddingTop(Math.max(0, padding))
 }
 
 defineExpose({

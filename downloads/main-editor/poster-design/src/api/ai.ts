@@ -41,6 +41,21 @@ export type PosterTemplateCandidate = {
   cover?: string
 }
 
+export type PosterAbsoluteLayoutLayer = {
+  role: 'title' | 'slogan' | 'body' | 'cta' | 'hero' | 'qrcode'
+  left: number
+  top: number
+  width: number
+  height: number
+  fontSize?: number
+  textAlign?: 'left' | 'center' | 'right'
+}
+
+export type PosterAbsoluteLayout = {
+  version: 'v1'
+  layers: PosterAbsoluteLayoutLayer[]
+}
+
 export type PosterDesignPlan = {
   industry: string
   tone: string
@@ -50,6 +65,8 @@ export type PosterDesignPlan = {
   ctaStrength: 'soft' | 'balanced' | 'strong'
   qrStrategy: 'none' | 'corner' | 'cta'
   templateCandidates: PosterTemplateCandidate[]
+  /** 增强模式：AI 返回绝对坐标排版块；前端优先按此布局，缺失时回退骨架算法 */
+  absoluteLayout?: PosterAbsoluteLayout
 }
 
 export type AiProviderMeta = {

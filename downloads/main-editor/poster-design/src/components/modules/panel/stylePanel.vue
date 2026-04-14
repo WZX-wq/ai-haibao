@@ -1,5 +1,5 @@
 <template>
-  <div id="style-panel">
+  <div id="style-panel" :class="{ 'is-combined': combined }">
     <div class="style-tab">
       <span :class="['tab', { 'active-tab': activeTab === 0 }]" @click="activeTab = 0">设置</span>
       <span :class="['tab', { 'active-tab': activeTab === 1 }]" @click="activeTab = 1">图层</span>
@@ -27,6 +27,10 @@ import { storeToRefs } from 'pinia'
 import { TdWidgetData } from '@/store/design/widget'
 import type { TUpdateAlignData } from '@/store/design/widget/actions/align'
 
+const { combined } = withDefaults(defineProps<{ combined?: boolean }>(), {
+  combined: false,
+})
+
 const widgetStore = useWidgetStore()
 const controlStore = useControlStore()
 const groupStore = useGroupStore()
@@ -47,6 +51,14 @@ watch(
   },
   {
     deep: true,
+  },
+)
+
+watch(
+  () => dActiveElement.value?.uuid,
+  () => {
+    // 选中画布元素（文字/图片/二维码等）时，优先展示对应“设置”面板
+    activeTab.value = 0
   },
 )
 
@@ -133,6 +145,11 @@ function layerChange(newLayer: TdWidgetData[]) {
     overflow: auto;
     width: 100%;
   }
+}
+
+#style-panel.is-combined {
+  width: 100%;
+  border-left: none;
 }
 
 .gounp {

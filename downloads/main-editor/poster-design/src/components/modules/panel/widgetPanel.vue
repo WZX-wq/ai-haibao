@@ -9,9 +9,18 @@
       </ul>
     </div>
     <div v-show="state.active" class="widget-wrap">
-      <keep-alive>
-        <component :is="state.widgetClassifyList[state.activeWidgetClassify].component" />
-      </keep-alive>
+      <div class="panel-mode-tabs">
+        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'material' }]" @click="setPanelMode('material')">{{ materialTabLabel }}</span>
+        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'setting' }]" @click="setPanelMode('setting')">设置</span>
+      </div>
+      <div v-show="state.panelMode === 'material'" class="panel-mode-content">
+        <keep-alive>
+          <component :is="state.widgetClassifyList[state.activeWidgetClassify].component" />
+        </keep-alive>
+      </div>
+      <div v-show="state.panelMode === 'setting'" class="panel-mode-content">
+        <style-panel combined />
+      </div>
     </div>
     <div v-show="state.active" class="side-wrap">
       <el-tooltip :show-after="300" :hide-after="0" effect="dark" content="关闭侧边栏" placement="right">
@@ -24,19 +33,37 @@
 <script lang="ts" setup>
 // 缁勪欢闈㈡澘
 import widgetClassifyListData from '@/assets/data/WidgetClassifyList'
-import { reactive, onMounted, watch, nextTick } from 'vue'
+import { reactive, onMounted, watch, nextTick, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useControlStore, useWidgetStore } from '@/store'
 
 const route = useRoute()
+const widgetStore = useWidgetStore()
+const controlStore = useControlStore()
+const { dActiveElement } = storeToRefs(widgetStore)
+const { leftPanelMode } = storeToRefs(controlStore)
 const state = reactive({
   widgetClassifyList: widgetClassifyListData,
   activeWidgetClassify: 0,
   active: true,
+  panelMode: 'material' as 'material' | 'setting',
 })
+
+const materialTabLabel = computed(() => {
+  return state.widgetClassifyList[state.activeWidgetClassify]?.name || '素材'
+})
+
+function setPanelMode(mode: 'material' | 'setting') {
+  state.panelMode = mode
+  controlStore.setLeftPanelMode(mode)
+}
 
 const clickClassify = (index: number) => {
   state.activeWidgetClassify = index
   state.active = true
+  state.panelMode = 'material'
+  controlStore.setLeftPanelMode('material')
 }
 
 onMounted(async () => {
@@ -50,6 +77,26 @@ watch(
   (index) => {
     if (index >= 0 && index < state.widgetClassifyList.length) {
       state.widgetClassifyList[index].show = true
+    }
+  },
+)
+
+watch(
+  () => dActiveElement.value?.uuid,
+  (uuid) => {
+    if (!uuid || uuid === '-1') return
+    // 点击画布元素（文字/图片/二维码等）时，在同一左侧框内切到设置编辑
+    state.panelMode = 'setting'
+    state.active = true
+    controlStore.setLeftPanelMode('setting')
+  },
+)
+
+watch(
+  () => leftPanelMode.value,
+  (mode) => {
+    if (mode !== state.panelMode) {
+      state.panelMode = mode
     }
   },
 )
@@ -176,6 +223,42 @@ defineExpose({
     overflow: hidden;
     display: flex;
     flex-direction: column;
+
+    .panel-mode-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+      background: rgba(255, 255, 255, 0.92);
+
+      .mode-tab {
+        user-select: none;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+        border-radius: 10px;
+        padding: 8px 14px;
+        transition: all .18s ease;
+      }
+
+      .mode-tab:hover {
+        background: rgba(59, 130, 246, 0.08);
+      }
+
+      .active-mode-tab {
+        color: #1e3a8a;
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.08));
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+    }
+
+    .panel-mode-content {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
   }
 
   .side-wrap {

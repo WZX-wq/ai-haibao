@@ -49,7 +49,7 @@ export default [
     component: 'photo-list-wrap',
   },
   {
-    name: 'AI工具箱',
+    name: '工具箱',
     icon: 'icon-zujian01',
     show: false,
     component: 'tools-list-wrap',

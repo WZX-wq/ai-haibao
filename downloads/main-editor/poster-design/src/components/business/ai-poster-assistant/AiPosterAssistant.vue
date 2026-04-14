@@ -1,6 +1,6 @@
 <template>
   <div class="assistant">
-    <div class="assistant-head">AI 海报助手</div>
+    <div class="assistant-head">ai海报</div>
       <div class="section">
         <div class="section-title"><el-icon><Grid /></el-icon><span>模板</span></div>
         <div class="preset-grid">
@@ -124,7 +124,7 @@ import {
   type ReplaceImageResult,
   type RelayoutResult,
 } from '@/api/ai'
-import { buildPosterLayout, getPosterGradient, getSizePresets, replaceHeroImage, replacePosterTexts } from './posterEngine'
+import { applyPosterPalette, buildPosterLayout, getPosterGradient, getSizePresets, replaceHeroImage, replacePosterTexts } from './posterEngine'
 
 type PosterPreset = {
   key: string
@@ -221,6 +221,10 @@ function assertAiLogin(): boolean {
     ElMessage.warning('请先登录后再使用 AI 海报功能')
     return false
   }
+  if (userStore.permissions.allow_ai_tools === false) {
+    ElMessage.warning('当前账号无 AI 功能权限，请联系管理员开通。')
+    return false
+  }
   return true
 }
 
@@ -267,6 +271,54 @@ const currentPalette = ref<PosterPalette>({
 const lastPosterResult = ref<PosterGenerateResult | null>(null)
 
 const activePalette = computed(() => currentPalette.value)
+
+function parseHexColor(input: string) {
+  const raw = String(input || '').trim().replace('#', '')
+  const safe = /^[0-9a-fA-F]{3,8}$/.test(raw) ? raw : '111111'
+  if (safe.length === 3 || safe.length === 4) {
+    return {
+      r: parseInt(safe[0] + safe[0], 16),
+      g: parseInt(safe[1] + safe[1], 16),
+      b: parseInt(safe[2] + safe[2], 16),
+    }
+  }
+  return {
+    r: parseInt(safe.slice(0, 2), 16),
+    g: parseInt(safe.slice(2, 4), 16),
+    b: parseInt(safe.slice(4, 6), 16),
+  }
+}
+
+function relativeLuminance(input: string) {
+  const { r, g, b } = parseHexColor(input)
+  const tf = (v: number) => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+  }
+  return 0.2126 * tf(r) + 0.7152 * tf(g) + 0.0722 * tf(b)
+}
+
+function contrastRatio(a: string, b: string) {
+  const l1 = relativeLuminance(a)
+  const l2 = relativeLuminance(b)
+  const high = Math.max(l1, l2)
+  const low = Math.min(l1, l2)
+  return (high + 0.05) / (low + 0.05)
+}
+
+function pickReadableTextOn(bg: string, preferred: string) {
+  const candidates = [preferred, '#111111', '#ffffff']
+  let best = candidates[0]
+  let score = -1
+  candidates.forEach((c) => {
+    const s = contrastRatio(c, bg)
+    if (s > score) {
+      score = s
+      best = c
+    }
+  })
+  return best
+}
 
 function getPayload(): PosterGenerateInput {
   return {
@@ -365,21 +417,37 @@ async function recommendCopyAndPalette() {
   loading.recommend = true
   try {
     const payload = getPayload()
+    const hasContent = hasCanvasContent()
     const [copyRes, paletteRes] = await Promise.all([
       requestAi<CopyGenerateResult>('ai/poster/copy', payload, 120000),
       requestAi<PaletteGenerateResult>('ai/poster/palette', payload, 120000),
     ])
-    syncResult(copyRes as Pick<PosterGenerateResult, 'title' | 'slogan' | 'body' | 'cta'>)
     currentPalette.value = paletteRes.palette
     providerTip.value = [formatProviderMeta(copyRes.providerMeta), formatProviderMeta(paletteRes.providerMeta)].filter(Boolean).join('\n')
-    if (hasCanvasContent()) {
+    if (hasContent) {
+      const currentPage = pageStore.getDPage()
+      const hasBackgroundImage = Boolean(String((currentPage as any)?.backgroundImage || '').trim())
+      // 有背景图时：只改字体/前景颜色，不更改背景颜色/渐变，也不删除背景图
+      if (hasBackgroundImage) {
+        if (lastPosterResult.value) {
+          lastPosterResult.value = {
+            ...lastPosterResult.value,
+            palette: currentPalette.value,
+          } as PosterGenerateResult
+        }
+        applyPaletteToCurrentCanvas()
+        widgetStore.updateDWidgets()
+        ElMessage.success('已推荐并更新配色。')
+        return
+      }
       if (lastPosterResult.value) {
         const merged = {
           ...lastPosterResult.value,
-          title: result.title,
-          slogan: result.slogan,
-          body: result.body,
-          cta: result.cta,
+          // 「推荐配色」只改色，不改用户当前文案
+          title: lastPosterResult.value.title,
+          slogan: lastPosterResult.value.slogan,
+          body: lastPosterResult.value.body,
+          cta: lastPosterResult.value.cta,
           palette: currentPalette.value,
         } as PosterGenerateResult
         lastPosterResult.value = merged
@@ -397,22 +465,18 @@ async function recommendCopyAndPalette() {
         widgetStore.selectWidget({ uuid: '-1' })
         layout.widgets.forEach((widget) => widgetStore.addWidget(widget))
       } else {
-        applyCopyToCurrentCanvas({
-          title: result.title,
-          slogan: result.slogan,
-          body: result.body,
-          cta: result.cta,
-        })
         const page = pageStore.getDPage()
         pageStore.setDPage({
           ...page,
           backgroundColor: currentPalette.value.background,
           backgroundGradient: page.backgroundImage ? '' : getPosterGradient(currentPalette.value),
         } as any)
-        widgetStore.updateDWidgets()
       }
+      applyPaletteToCurrentCanvas()
+      widgetStore.updateDWidgets()
       ElMessage.success('已推荐并更新配色。')
     } else {
+      syncResult(copyRes as Pick<PosterGenerateResult, 'title' | 'slogan' | 'body' | 'cta'>)
       ElMessage.success('已生成推荐文案与配色。')
     }
   } catch (error) {
@@ -537,6 +601,29 @@ function hasCanvasContent() {
   return Array.isArray(widgetStore.dWidgets) && widgetStore.dWidgets.length > 0
 }
 
+function applyPaletteToCurrentCanvas() {
+  const palette = activePalette.value
+  const text = String(palette.text || '#111111')
+  const muted = String(palette.muted || text)
+
+  // 先更新 AI 命名图层配色
+  applyPosterPalette(widgetStore.dWidgets as any, palette as any)
+
+  // 再覆盖到当前画布全部文字层（用户诉求：推荐配色要应用到所有文字）
+  widgetStore.dWidgets.forEach((widget: any) => {
+    if (widget?.type === 'w-text') {
+      const bg = String(widget.backgroundColor || '').trim()
+      const isSloganLike = String(widget.name || '').includes('slogan')
+      const preferred = isSloganLike ? muted : text
+      widget.color = bg ? pickReadableTextOn(bg, preferred) : preferred
+    }
+    if (widget?.type === 'w-qrcode') {
+      widget.dotColor = text
+      widget.dotColor2 = text
+    }
+  })
+}
+
 function getCanvasTextWidgets() {
   return [...widgetStore.dWidgets]
     .filter((item: any) => item?.type === 'w-text')
@@ -550,7 +637,100 @@ function getCanvasImageWidget() {
   return images[0]
 }
 
+function estimateWidgetTextHeight(widget: any, width: number) {
+  const text = String(widget?.text || '').trim()
+  const fontSize = Math.max(12, Number(widget?.fontSize || 22))
+  const lineHeightRatio = Math.max(1.1, Number(widget?.lineHeight || 1.4))
+  if (!text) return Math.round(fontSize * lineHeightRatio + fontSize * 0.6)
+  const cjkCount = (text.match(/[\u3000-\u9FFF\uFF00-\uFFEF]/g) || []).length
+  const cjkHeavy = cjkCount >= Math.max(1, text.length * 0.35)
+  const avgCharPx = cjkHeavy ? Math.max(fontSize * 0.96, 12) : Math.max(fontSize * 0.58, 10)
+  const charsPerLine = Math.max(3, Math.floor(Math.max(1, width) / avgCharPx))
+  const lines = Math.max(1, Math.ceil(text.length / charsPerLine))
+  return Math.round(fontSize * lineHeightRatio * lines + fontSize * 0.7)
+}
+
+function clampRectToPage(rect: { left: number; top: number; width: number; height: number }, pageW: number, pageH: number) {
+  const width = Math.max(8, Math.min(pageW, Math.round(rect.width)))
+  const height = Math.max(8, Math.min(pageH, Math.round(rect.height)))
+  const left = Math.max(0, Math.min(Math.round(rect.left), pageW - width))
+  const top = Math.max(0, Math.min(Math.round(rect.top), pageH - height))
+  return { left, top, width, height }
+}
+
+function applyAbsoluteRelayout(designPlan?: RelayoutResult['designPlan']) {
+  const layers = (designPlan as any)?.absoluteLayout?.layers
+  if (!Array.isArray(layers) || !layers.length) return false
+  const page = pageStore.getDPage()
+  const pageW = Number(page.width || 1242)
+  const pageH = Number(page.height || 1660)
+  const textWidgets = getCanvasTextWidgets()
+  const hero = getCanvasImageWidget()
+  const qrcode = widgetStore.dWidgets.find((item: any) => item?.type === 'w-qrcode') as any
+
+  const byRole = new Map<string, any>(layers.map((item: any) => [String(item.role || ''), item]))
+  const titleWidget = textWidgets[0]
+  const sloganWidget = textWidgets[1]
+  const bodyWidget = textWidgets[2]
+  const ctaWidget = textWidgets.find((w: any) => /cta|button|btn|占位|报名|立即|咨询|抢|预定|预约/i.test(String(w.name || '') + String(w.text || '')))
+
+  const assignText = (widget: any, role: string) => {
+    if (!widget) return
+    const layer = byRole.get(role)
+    if (!layer) return
+    const rect = clampRectToPage(layer, pageW, pageH)
+    widget.left = rect.left
+    widget.top = rect.top
+    widget.width = rect.width
+    widget.height = rect.height
+    if (widget.record) {
+      widget.record.width = rect.width
+      widget.record.height = rect.height
+    }
+    if (layer.fontSize && Number.isFinite(Number(layer.fontSize))) {
+      widget.fontSize = Math.max(12, Math.round(Number(layer.fontSize)))
+    }
+    if (['left', 'center', 'right'].includes(String(layer.textAlign || ''))) {
+      widget.textAlign = layer.textAlign
+      widget.textAlignLast = layer.textAlign
+    }
+  }
+
+  assignText(titleWidget, 'title')
+  assignText(sloganWidget, 'slogan')
+  assignText(bodyWidget, 'body')
+  assignText(ctaWidget, 'cta')
+
+  if (hero && byRole.get('hero')) {
+    const rect = clampRectToPage(byRole.get('hero'), pageW, pageH)
+    hero.left = rect.left
+    hero.top = rect.top
+    hero.width = rect.width
+    hero.height = rect.height
+    if (hero.record) {
+      hero.record.width = rect.width
+      hero.record.height = rect.height
+    }
+  }
+  if (qrcode && byRole.get('qrcode')) {
+    const rect = clampRectToPage(byRole.get('qrcode'), pageW, pageH)
+    qrcode.left = rect.left
+    qrcode.top = rect.top
+    qrcode.width = rect.width
+    qrcode.height = rect.height
+    if (qrcode.record) {
+      qrcode.record.width = rect.width
+      qrcode.record.height = rect.height
+    }
+  }
+  widgetStore.updateDWidgets()
+  return true
+}
+
 function relayoutCurrentTemplate(designPlan?: RelayoutResult['designPlan']) {
+  if (applyAbsoluteRelayout(designPlan)) {
+    return true
+  }
   const widgets = widgetStore.dWidgets
   if (!widgets.length) return false
   const textWidgets = getCanvasTextWidgets()
@@ -562,46 +742,74 @@ function relayoutCurrentTemplate(designPlan?: RelayoutResult['designPlan']) {
   const pageH = Number(page.height || 1660)
   const marginX = Math.round(pageW * 0.08)
   const marginTop = Math.round(pageH * 0.08)
-  const gap = Math.round(pageH * 0.022)
+  const gap = Math.max(16, Math.round(pageH * 0.024))
+  const textGap = Math.max(18, Math.round(pageH * 0.028))
+  const safeBottom = Math.round(pageH * 0.08)
   const layout = String(designPlan?.layoutFamily || 'hero-left')
 
   let textLeft = marginX
-  let textWidth = Math.round(pageW * 0.46)
+  let textWidth = Math.round(pageW * 0.44)
   let cursorTop = marginTop
+  let contentBottomLimit = pageH - safeBottom
+  let ctaWidget: any = null
 
   if (hero) {
     if (layout === 'split-editorial') {
       hero.left = pageW - marginX - Math.round(pageW * 0.42)
       hero.top = Math.round(pageH * 0.12)
       hero.width = Math.round(pageW * 0.42)
-      hero.height = Math.round(pageH * 0.72)
+      hero.height = Math.round(pageH * 0.7)
       textWidth = Math.round(pageW * 0.4)
     } else if (layout === 'hero-center' || layout === 'magazine-cover') {
-      hero.width = Math.round(pageW * 0.78)
-      hero.height = Math.round(pageH * 0.36)
+      hero.width = Math.round(pageW * 0.76)
+      hero.height = Math.round(pageH * 0.32)
       hero.left = Math.round((pageW - hero.width) / 2)
-      hero.top = Math.round(pageH * 0.16)
-      textLeft = Math.round((pageW - Math.round(pageW * 0.78)) / 2)
-      textWidth = Math.round(pageW * 0.78)
+      hero.top = Math.round(pageH * 0.28)
+      textLeft = Math.round((pageW - Math.round(pageW * 0.76)) / 2)
+      textWidth = Math.round(pageW * 0.76)
       cursorTop = marginTop
+      contentBottomLimit = hero.top - Math.max(24, Math.round(pageH * 0.03))
     } else {
-      hero.width = Math.round(pageW * 0.42)
-      hero.height = Math.round(pageH * 0.5)
+      hero.width = Math.round(pageW * 0.4)
+      hero.height = Math.round(pageH * 0.46)
       hero.left = pageW - marginX - hero.width
-      hero.top = Math.round(pageH * 0.2)
-      textWidth = Math.round(pageW * 0.44)
+      hero.top = Math.round(pageH * 0.22)
+      textWidth = Math.round(pageW * 0.42)
+      contentBottomLimit = hero.top + hero.height - Math.max(60, Math.round(pageH * 0.08))
     }
   } else {
     textWidth = Math.round(pageW * 0.82)
     textLeft = Math.round((pageW - textWidth) / 2)
   }
 
-  textWidgets.forEach((w: any, idx: number) => {
+  const rankedTexts = textWidgets.map((w: any, idx: number) => ({ w, idx }))
+  const ctaIdx = rankedTexts.findIndex(({ w }) => /cta|button|btn|占位|报名|立即|咨询|抢|预定|预约/i.test(String(w.name || '') + String(w.text || '')))
+  if (ctaIdx >= 0) {
+    ctaWidget = rankedTexts.splice(ctaIdx, 1)[0].w
+  }
+
+  const availableTextHeight = Math.max(160, contentBottomLimit - cursorTop)
+  const rawHeights = rankedTexts.map(({ w, idx }) => {
     const maxW = idx === 0 ? textWidth : Math.round(textWidth * 0.96)
-    const baseH = Number(w.height || 36)
+    const estimated = estimateWidgetTextHeight(w, maxW)
+    const extra = idx === 0 ? Math.round(pageH * 0.02) : 0
+    return Math.max(Number(w.height || 36), estimated + extra)
+  })
+  const totalHeight = rawHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rankedTexts.length - 1) * textGap
+  const scale = totalHeight > availableTextHeight ? availableTextHeight / totalHeight : 1
+
+  rankedTexts.forEach(({ w, idx }, order) => {
+    const maxW = idx === 0 ? textWidth : Math.round(textWidth * 0.96)
+    const baseH = rawHeights[order]
+    const nextH = Math.max(idx === 0 ? 56 : 34, Math.round(baseH * scale))
     w.left = textLeft
     w.top = cursorTop
     w.width = maxW
+    w.height = nextH
+    if (w.record) {
+      w.record.width = maxW
+      w.record.height = nextH
+    }
     if (layout === 'hero-center' || layout === 'magazine-cover') {
       w.textAlign = 'center'
       w.textAlignLast = 'center'
@@ -609,8 +817,28 @@ function relayoutCurrentTemplate(designPlan?: RelayoutResult['designPlan']) {
       w.textAlign = 'left'
       w.textAlignLast = 'left'
     }
-    cursorTop += Math.max(baseH, 34) + gap
+    cursorTop += nextH + textGap
   })
+
+  if (ctaWidget) {
+    const ctaWidth = Math.min(Math.round(pageW * 0.38), Math.max(Math.round(pageW * 0.18), Number(ctaWidget.width || 180)))
+    const ctaHeight = Math.max(42, Math.round(Number(ctaWidget.fontSize || 22) * 2.1))
+    ctaWidget.width = ctaWidth
+    ctaWidget.height = ctaHeight
+    ctaWidget.top = Math.min(
+      pageH - safeBottom - ctaHeight,
+      Math.max(cursorTop + Math.round(pageH * 0.01), contentBottomLimit - ctaHeight),
+    )
+    ctaWidget.left = layout === 'hero-center' || layout === 'magazine-cover'
+      ? Math.round((pageW - ctaWidth) / 2)
+      : textLeft
+    ctaWidget.textAlign = 'center'
+    ctaWidget.textAlignLast = 'center'
+    if (ctaWidget.record) {
+      ctaWidget.record.width = ctaWidth
+      ctaWidget.record.height = ctaHeight
+    }
+  }
 
   widgetStore.updateDWidgets()
   return true
@@ -817,7 +1045,15 @@ watch(
 .assistant {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
 
   .assistant-head {
     margin-bottom: 12px;
@@ -846,12 +1082,13 @@ watch(
   .preset-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 8px;
   }
 
   .preset-card {
-    padding: 12px;
+    padding: 8px 10px;
+    min-height: 42px;
     text-align: left;
     cursor: pointer;
     border: 1px solid #e5e7eb;
@@ -868,8 +1105,13 @@ watch(
 
   .preset-name {
     display: block;
+    font-size: 15px;
+    line-height: 1.2;
     font-weight: 600;
     color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .preset-meta {
@@ -966,9 +1208,9 @@ watch(
   }
 
   .hero-toggle-row--stack {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px 16px;
   }
 
   .hero-toggle-row--stack :deep(.el-checkbox) {

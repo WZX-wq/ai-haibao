@@ -19,7 +19,7 @@
   <!-- 已登录：侧栏 + 主区（对齐 account-center-optimized.html） -->
   <div v-else class="ac-page">
     <aside class="ac-sidebar" aria-label="账户导航">
-      <router-link to="/welcome" class="ac-sidebar-logo">鲲穹设计</router-link>
+     
       <div class="ac-sidebar-avatar" :title="displayUser.name || '用户'">
         <img v-if="displayUser.avatar" :src="displayUser.avatar" alt="" />
         <span v-else>{{ userInitial }}</span>
@@ -104,23 +104,21 @@
             <button type="button" class="ac-stat-card__btn" @click="go('/home?tempid=303')">使用</button>
           </div>
 
-          <!-- 上传限制 -->
+          <!-- AI 工具额度 -->
           <div class="ac-stat-card ac-stat-card--upload">
             <div class="ac-stat-card__head">
-              <span class="ac-stat-card__title">上传限制</span>
+              <span class="ac-stat-card__title">AI 工具额度</span>
               <div class="ac-stat-card__ico">
-                <el-icon :size="18"><Upload /></el-icon>
+                <el-icon :size="18"><MagicStick /></el-icon>
               </div>
             </div>
             <div class="ac-stat-card__body ac-stat-card__body--push">
               <div class="ac-stat-info">
-                <div class="ac-stat-big">{{ maxFileSizeText }}</div>
-                <div class="ac-stat-desc">单次上传大小上限</div>
+                <div class="ac-stat-big">{{ aiQuotaUsedText }}</div>
+                <div class="ac-stat-desc">{{ aiQuotaDesc }}</div>
               </div>
             </div>
-            <button type="button" class="ac-stat-card__btn" @click="toastInfo('升级会员可提升单文件上限')">
-              了解详情
-            </button>
+            <button type="button" class="ac-stat-card__btn" @click="go('/ai-poster')">去使用</button>
           </div>
 
           <!-- 会员有效期 -->
@@ -285,7 +283,6 @@ import {
   Right,
   Star,
   SwitchButton,
-  Upload,
   User,
   UserFilled,
 } from '@element-plus/icons-vue'
@@ -326,10 +323,13 @@ const effectivePermissions = computed<AccountPermissions>(() => {
       vip_level: center.value.vip_status?.vip_level ?? userStore.permissions.vip_level,
       vip_expire_time: center.value.vip_status?.vip_expire_time ?? userStore.permissions.vip_expire_time,
       daily_limit_count: center.value.quota_card?.daily_limit_count ?? userStore.permissions.daily_limit_count,
+      daily_download_limit: center.value.quota_card?.daily_download_limit ?? userStore.permissions.daily_download_limit ?? userStore.permissions.daily_limit_count,
+      daily_ai_limit: center.value.quota_card?.daily_ai_limit ?? userStore.permissions.daily_ai_limit ?? 5,
       max_file_size: center.value.quota_card?.max_file_size ?? userStore.permissions.max_file_size,
       allow_batch: center.value.feature_permission_card.allow_batch,
       allow_no_watermark: center.value.feature_permission_card.allow_no_watermark,
       allow_ai_tools: center.value.feature_permission_card.allow_ai_tools,
+      allow_download: center.value.feature_permission_card.allow_download ?? userStore.permissions.allow_download ?? true,
       allow_template_manage: center.value.feature_permission_card.allow_template_manage,
     }
   }
@@ -338,10 +338,13 @@ const effectivePermissions = computed<AccountPermissions>(() => {
     vip_level: userStore.permissions.vip_level,
     vip_expire_time: userStore.permissions.vip_expire_time,
     daily_limit_count: userStore.permissions.daily_limit_count,
+    daily_download_limit: userStore.permissions.daily_download_limit ?? userStore.permissions.daily_limit_count,
+    daily_ai_limit: userStore.permissions.daily_ai_limit ?? 5,
     max_file_size: userStore.permissions.max_file_size,
     allow_batch: userStore.permissions.allow_batch,
     allow_no_watermark: userStore.permissions.allow_no_watermark,
     allow_ai_tools: userStore.permissions.allow_ai_tools,
+    allow_download: userStore.permissions.allow_download ?? true,
     allow_template_manage: userStore.permissions.allow_template_manage,
   }
 })
@@ -364,6 +367,33 @@ const downloadsUsed = computed(() => {
 })
 
 const dailyLimit = computed(() => Number(effectivePermissions.value.daily_limit_count ?? 0))
+const downloadDailyLimit = computed(() =>
+  Number(
+    center.value?.quota_card?.daily_download_limit ??
+      effectivePermissions.value.daily_download_limit ??
+      effectivePermissions.value.daily_limit_count ??
+      0,
+  ),
+)
+const aiDailyLimit = computed(() =>
+  Number(
+    center.value?.quota_card?.daily_ai_limit ??
+      effectivePermissions.value.daily_ai_limit ??
+      5,
+  ),
+)
+const aiTodayUsed = computed(() => Number(center.value?.quota_card?.ai_today_used ?? 0))
+const aiQuotaUsedText = computed(() => {
+  const limit = aiDailyLimit.value
+  const used = aiTodayUsed.value
+  if (limit <= 0) return `${used}（不限次）`
+  return `${used} / ${limit}`
+})
+const aiQuotaDesc = computed(() => {
+  const limit = aiDailyLimit.value
+  if (limit <= 0) return '今日 AI 额度不限次'
+  return `今日 AI 已用额度（每日 ${limit} 次）`
+})
 
 const downloadPercent = computed(() => {
   const limit = dailyLimit.value
@@ -391,8 +421,6 @@ const downloadsUsedText = computed(() => {
   if (limit <= 0) return `${used}（不限次）`
   return `${used} / ${limit}`
 })
-
-const maxFileSizeText = computed(() => prettyFileSize(effectivePermissions.value.max_file_size ?? 0))
 
 const vipExpireCardTitle = computed(() => (effectivePermissions.value.is_vip ? '会员有效期' : '会员状态'))
 
@@ -454,10 +482,16 @@ const recentRecords = computed(() => center.value?.recent_records?.slice(0, 5) |
 
 const permissionRows = computed(() => {
   const p = effectivePermissions.value
-  const limit = dailyLimit.value
+  const aiLimit = aiDailyLimit.value
+  const downloadLimit = downloadDailyLimit.value
   const aiDesc = p.allow_ai_tools
-    ? limit > 0
-      ? `已开启 · 每日 ${limit} 次`
+    ? aiLimit > 0
+      ? `已开启 · 每日 ${aiLimit} 次`
+      : '已开启'
+    : '未开启'
+  const downloadDesc = (p.allow_download ?? true)
+    ? downloadLimit > 0
+      ? `已开启 · 每日 ${downloadLimit} 次`
       : '已开启'
     : '未开启'
   return [
@@ -466,6 +500,12 @@ const permissionRows = computed(() => {
       label: 'AI 工具',
       desc: aiDesc,
       on: !!p.allow_ai_tools,
+    },
+    {
+      key: 'download',
+      label: '下载功能',
+      desc: downloadDesc,
+      on: p.allow_download !== false,
     },
     {
       key: 'wm',
@@ -501,14 +541,6 @@ function activityDotClass(record: unknown): string {
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function prettyFileSize(value: number) {
-  if (!value) return '0 B'
-  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`
-  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(0)} MB`
-  if (value >= 1024) return `${(value / 1024).toFixed(0)} KB`
-  return `${value} B`
 }
 
 function mapSessionStatusToZh(status: string | null | undefined): string {
