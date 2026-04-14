@@ -68,12 +68,12 @@
       </div>
 
       <main class="ac-content">
-        <div id="ac-section-stats" class="ac-stats-row">
+        <div id="ac-section-stats" :class="['ac-stats-row', { 'ac-stats-row--vip': isVipUser }]">
           <!-- 今日额度 -->
           <div class="ac-stat-card ac-stat-card--quota">
             <div class="ac-stat-card__tags">
               <span class="ac-stat-tag ac-stat-tag--orange">{{ vipBadgeText }}</span>
-              <span class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
+              <span v-if="quotaSubTag" class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
             </div>
             <div class="ac-stat-card__head">
               <span class="ac-stat-card__title">今日额度</span>
@@ -93,12 +93,12 @@
                 </svg>
                 <div class="ac-ring-text">
                   <span class="ac-ring-num">{{ quotaRingCenter }}</span>
-                  <span class="ac-ring-label">已使用</span>
+                  <span class="ac-ring-label">{{ quotaRingLabel }}</span>
                 </div>
               </div>
               <div class="ac-stat-info">
                 <div class="ac-stat-big">{{ downloadsUsedText }}</div>
-                <div class="ac-stat-desc">今日已用额度</div>
+                <div class="ac-stat-desc">{{ downloadQuotaDesc }}</div>
               </div>
             </div>
             <button type="button" class="ac-stat-card__btn" @click="go('/home?tempid=303')">使用</button>
@@ -113,6 +113,23 @@
               </div>
             </div>
             <div class="ac-stat-card__body ac-stat-card__body--push">
+              <div class="ac-ring-wrap">
+                <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                  <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
+                  <circle
+                    class="ac-ring-fill ac-ring-fill--blue"
+                    cx="40"
+                    cy="40"
+                    :r="ringR"
+                    :stroke-dasharray="String(ringC)"
+                    :stroke-dashoffset="String(ringC * 0.12)"
+                  />
+                </svg>
+                <div class="ac-ring-text">
+                  <span class="ac-ring-num">∞</span>
+                  <span class="ac-ring-label">会员</span>
+                </div>
+              </div>
               <div class="ac-stat-info">
                 <div class="ac-stat-big">{{ aiQuotaUsedText }}</div>
                 <div class="ac-stat-desc">{{ aiQuotaDesc }}</div>
@@ -350,12 +367,14 @@ const effectivePermissions = computed<AccountPermissions>(() => {
 })
 
 const userInitial = computed(() => (displayUser.value.name || '用').slice(0, 1))
+const isVipUser = computed(() => !!effectivePermissions.value.is_vip)
 const vipBadgeText = computed(() => (effectivePermissions.value.is_vip ? '会员' : '免费版'))
 const vipLevelText = computed(() => String(effectivePermissions.value.vip_level ?? 0))
 const sessionStatusText = computed(
   () => mapSessionStatusToZh(center.value?.account_overview?.session_status) || '在线',
 )
 const quotaSubTag = computed(() => {
+  if (isVipUser.value) return ''
   const limit = dailyLimit.value
   if (limit <= 0) return '不限次'
   return `每日 ${limit} 次`
@@ -384,12 +403,14 @@ const aiDailyLimit = computed(() =>
 )
 const aiTodayUsed = computed(() => Number(center.value?.quota_card?.ai_today_used ?? 0))
 const aiQuotaUsedText = computed(() => {
+  if (isVipUser.value) return '不限额'
   const limit = aiDailyLimit.value
   const used = aiTodayUsed.value
   if (limit <= 0) return `${used}（不限次）`
   return `${used} / ${limit}`
 })
 const aiQuotaDesc = computed(() => {
+  if (isVipUser.value) return '会员 AI 工具不限次数'
   const limit = aiDailyLimit.value
   if (limit <= 0) return '今日 AI 额度不限次'
   return `今日 AI 已用额度（每日 ${limit} 次）`
@@ -409,18 +430,22 @@ const downloadRingOffset = computed(() => {
 })
 
 const quotaRingCenter = computed(() => {
+  if (isVipUser.value) return '∞'
   const limit = dailyLimit.value
   const used = downloadsUsed.value
   if (limit <= 0) return String(used)
   return `${used}/${limit}`
 })
+const quotaRingLabel = computed(() => (isVipUser.value ? '会员' : '已使用'))
 
 const downloadsUsedText = computed(() => {
+  if (isVipUser.value) return '不限额'
   const limit = dailyLimit.value
   const used = downloadsUsed.value
   if (limit <= 0) return `${used}（不限次）`
   return `${used} / ${limit}`
 })
+const downloadQuotaDesc = computed(() => (isVipUser.value ? '会员专享下载与导出无限次' : '今日已用额度'))
 
 const vipExpireCardTitle = computed(() => (effectivePermissions.value.is_vip ? '会员有效期' : '会员状态'))
 
@@ -456,7 +481,7 @@ const vipDaysLeftTag = computed(() => {
   return `剩余${n}天`
 })
 
-const expiryRingLabel = computed(() => (effectivePermissions.value.is_vip ? '倒计时' : '未开通'))
+const expiryRingLabel = computed(() => (effectivePermissions.value.is_vip ? '会员' : '未开通'))
 
 const expiryRingOffset = computed(() => {
   if (!effectivePermissions.value.is_vip) return ringC * 0.75
@@ -485,14 +510,18 @@ const permissionRows = computed(() => {
   const aiLimit = aiDailyLimit.value
   const downloadLimit = downloadDailyLimit.value
   const aiDesc = p.allow_ai_tools
-    ? aiLimit > 0
-      ? `已开启 · 每日 ${aiLimit} 次`
-      : '已开启'
+    ? isVipUser.value
+      ? '已开启 · 会员不限额'
+      : aiLimit > 0
+        ? `已开启 · 每日 ${aiLimit} 次`
+        : '已开启'
     : '未开启'
   const downloadDesc = (p.allow_download ?? true)
-    ? downloadLimit > 0
-      ? `已开启 · 每日 ${downloadLimit} 次`
-      : '已开启'
+    ? isVipUser.value
+      ? '已开启 · 会员不限额'
+      : downloadLimit > 0
+        ? `已开启 · 每日 ${downloadLimit} 次`
+        : '已开启'
     : '未开启'
   return [
     {
@@ -889,6 +918,52 @@ onMounted(loadCenter)
   margin-bottom: 16px;
 }
 
+.ac-stats-row--vip .ac-stat-card__body {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: start;
+  column-gap: 16px;
+  min-height: 92px;
+}
+
+.ac-stats-row--vip .ac-stat-card__head {
+  min-height: 28px;
+}
+
+.ac-stats-row--vip .ac-stat-card {
+  display: grid;
+  grid-template-rows: 28px 96px 28px;
+  align-content: stretch;
+}
+
+.ac-stats-row--vip .ac-stat-card__btn {
+  align-self: end;
+}
+
+.ac-stats-row--vip .ac-ring-wrap {
+  margin-top: 0;
+  align-self: start;
+}
+
+.ac-stats-row--vip .ac-stat-big {
+  font-size: 42px;
+  letter-spacing: 0.5px;
+  min-height: 42px;
+}
+
+.ac-stats-row--vip .ac-stat-desc {
+  font-size: 13px;
+  opacity: 0.88;
+}
+
+.ac-stats-row--vip .ac-ring-num {
+  font-size: 26px;
+}
+
+.ac-stats-row--vip .ac-ring-label {
+  font-size: 11px;
+}
+
 .ac-stat-card {
   border-radius: var(--ac-radius);
   padding: 20px;
@@ -1006,6 +1081,10 @@ onMounted(loadCenter)
   stroke: #ff9500;
 }
 
+.ac-ring-fill--blue {
+  stroke: #7ed7ff;
+}
+
 .ac-ring-fill--light {
   stroke: rgba(255, 255, 255, 0.95);
 }
@@ -1026,7 +1105,7 @@ onMounted(loadCenter)
 }
 
 .ac-ring-num--sm {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1084,7 +1163,7 @@ onMounted(loadCenter)
 }
 
 .ac-expiry-days {
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
   line-height: 1;
 }
@@ -1526,6 +1605,136 @@ onMounted(loadCenter)
   .ac-quick-entry {
     flex-direction: row;
     justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .ac-page-header {
+    padding: 14px 14px 0;
+    gap: 10px;
+  }
+
+  .ac-page-header__left h1 {
+    font-size: 20px;
+  }
+
+  .ac-page-header__left p {
+    font-size: 12px;
+  }
+
+  .ac-page-header__right {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .ac-pills {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ac-header-btns {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .ac-btn {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .ac-content {
+    padding: 14px 14px 28px;
+  }
+
+  .ac-stat-card {
+    padding: 14px;
+  }
+
+  .ac-stat-card__body,
+  .ac-stat-card__body--push {
+    gap: 10px;
+  }
+
+  .ac-stat-info {
+    min-width: 0;
+  }
+
+  .ac-stat-big {
+    font-size: 20px;
+  }
+
+  .ac-stat-card__btn {
+    width: 100%;
+  }
+
+  .ac-info-card {
+    padding: 14px;
+  }
+
+  .ac-info-card__head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ac-info-link {
+    margin-left: 0;
+  }
+
+  .ac-perm-item {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ac-perm-item__left {
+    min-width: 0;
+  }
+
+  .ac-quick-entry {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .ac-sidebar {
+    padding: 14px 10px;
+  }
+
+  .ac-sidebar-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
+
+  .ac-sidebar-username {
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+
+  .ac-sidebar-nav a {
+    padding: 8px 10px;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .ac-header-btns {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-ring-wrap {
+    transform: scale(0.92);
+    transform-origin: left center;
+  }
+
+  .ac-expiry-days {
+    font-size: 22px;
+  }
+
+  .ac-login-card {
+    padding: 22px 16px;
   }
 }
 </style>

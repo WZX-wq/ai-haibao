@@ -36,10 +36,14 @@ watch(
 const render = debounce(300, false, async () => {
   options = generateOption(props)
   if (props.value) {
-    qrCode.update(options)
-    await nextTick()
-    if (!qrCodeDom.value?.firstChild) return
-    ;(qrCodeDom.value.firstChild as HTMLElement).setAttribute('style', 'width: 100%;')
+    try {
+      qrCode.update(options)
+      await nextTick()
+      if (!qrCodeDom.value?.firstChild) return
+      ;(qrCodeDom.value.firstChild as HTMLElement).setAttribute('style', 'width: 100%;')
+    } catch (error) {
+      console.error('qrcode render failed', error)
+    }
   }
 })
 

@@ -110,7 +110,7 @@ function checkColorLength() {
   if (!props.modelValue) {
     return
   }
-  state.innerColor = props.modelValue + (props.modelValue.length === 7 ? 'ff' : '')
+  state.innerColor = String(props.modelValue || '').trim()
 }
 
 const inputBlur = (color: string) => {

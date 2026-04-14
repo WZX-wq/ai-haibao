@@ -138,9 +138,10 @@ export function updateWidgetMultiple(store: TWidgetStore, { uuid, data }: TUpdat
 export function addWidget(store: TWidgetStore, setting: TdWidgetData) {
   const historyStore = useHistoryStore()
   const canvasStore = useCanvasStore()
-  normalizeWidget(setting)
-  setting.uuid = nanoid()
-  store.dWidgets.push(setting)
+  const nextWidget = JSON.parse(JSON.stringify(setting)) as TdWidgetData
+  normalizeWidget(nextWidget)
+  nextWidget.uuid = nanoid()
+  store.dWidgets.push(nextWidget)
   const len = store.dWidgets.length
   // store.state.dActiveElement = store.state.dWidgets[len - 1]
 
