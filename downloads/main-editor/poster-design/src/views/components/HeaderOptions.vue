@@ -8,30 +8,43 @@
       <el-button @click="userStore.managerEdit(false)">取消</el-button>
       <div class="divide__line">|</div>
     </template>
-    <el-button v-else style="margin-right: 0.4rem" @click="jump2Edit">修改模板</el-button>
-    <button class="account-entry" type="button" :title="accountEntryLabel" :aria-label="accountEntryLabel" @click="goAccount">
-      <span class="account-entry__avatar" :class="{ 'account-entry__avatar--guest': !userStore.online }">
-        <img v-if="userStore.online && userAvatar" :src="userAvatar" alt="avatar">
-        <span v-else>{{ userStore.online ? userInitial : '' }}</span>
-      </span>
-    </button>
-    <watermark-option style="margin-right: 0.5rem" />
+    <el-button v-else @click="jump2Edit">修改模板</el-button>
+    <watermark-option />
     <slot />
+    <button
+      class="account-entry"
+      :class="{ 'account-entry--guest': !userStore.online }"
+      type="button"
+      :title="accountEntryLabel"
+      :aria-label="accountEntryLabel"
+      @click="goAccount"
+    >
+      <template v-if="userStore.online">
+        <span class="account-entry__avatar">
+          <img v-if="userAvatar" :src="userAvatar" alt="头像">
+          <span v-else>{{ userInitial }}</span>
+        </span>
+      </template>
+      <span v-else class="account-entry__login-text">登录</span>
+    </button>
   </div>
   <SaveImage ref="canvasImage" />
 </template>
 
 <script lang="ts" setup>
 import api from '@/api'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import _dl from '@/common/methods/download'
+import { fetchImageBlobFromUrl, DOWNLOAD_XHR_READY } from '@/common/methods/download/download'
+import { pngBlobToJpegBlob, savePngBlobAsPdf } from '@/common/methods/download/exportPoster'
 import useNotification from '@/common/methods/notification'
 import SaveImage from '@/components/business/save-download/CreateCover.vue'
 import { useFontStore } from '@/common/methods/fonts'
 import _config from '@/config'
 import downloadBlob from '@/common/methods/download/downloadBlob'
 import { useControlStore, useCanvasStore, useUserStore, useWidgetStore } from '@/store/index'
+import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 import { storeToRefs } from 'pinia'
 import watermarkOption from './Watermark.vue'
 
@@ -94,6 +107,45 @@ const userInitial = computed(() => (userStore.user.name || '我').slice(0, 1))
 const accountEntryLabel = computed(() => (userStore.online ? '个人中心' : '登录'))
 
 let currentDownloadPreviewUrl = ''
+let activeDownloadXhr: XMLHttpRequest | null = null
+/** 导出流程取消时中止「保存作品」请求 */
+let activeDownloadSaveAbort: AbortController | null = null
+/** 取消或新开导出时递增，用于丢弃卡住的 createPoster / 旧流程对 loading 的写入 */
+let exportGeneration = 0
+const CLIENT_EXPORT_TIMEOUT_MS = 180000
+
+function isRequestCanceledError(e: unknown) {
+  const err = e as Record<string, unknown> | undefined
+  if (!err || typeof err !== 'object') return false
+  return err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || err.message === 'canceled'
+}
+
+/** 中止导出：释放 loading、打断保存与下载 XHR、清空进度条（取消按钮与 v-model 同步都会走到） */
+function abortActiveDownload() {
+  exportGeneration++
+  state.loading = false
+  activeDownloadSaveAbort?.abort()
+  activeDownloadSaveAbort = null
+  if (activeDownloadXhr) {
+    try {
+      activeDownloadXhr.abort()
+    } catch {
+      /* ignore */
+    }
+    activeDownloadXhr = null
+  }
+  emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+}
+
+watch(
+  () => props.modelValue,
+  (cont) => {
+    if (cont !== false) return
+    if (!state.loading && !activeDownloadXhr && !activeDownloadSaveAbort) return
+    abortActiveDownload()
+  },
+  { flush: 'sync' },
+)
 
 function updateDownloadPreview(url: string) {
   if (currentDownloadPreviewUrl && currentDownloadPreviewUrl.startsWith('blob:') && currentDownloadPreviewUrl !== url) {
@@ -145,7 +197,7 @@ function readLocalDraft(): TLocalDraft | null {
 }
 
 function applyLoadedData(content: string, type: string | number | undefined, width?: number, height?: number) {
-  const data = JSON.parse(content)
+  const data = deepNormalizeLoopbackMediaUrls(JSON.parse(content))
   controlStore.setShowMoveable(false)
   if (Number(type) === 1) {
     width && (dPage.value.width = width)
@@ -167,12 +219,34 @@ async function save() {
   await saveTemp()
 }
 
-async function saveTemp() {
-  const { tempid, tempType: type } = route.query
-  if (!tempid) return
+type TSaveTempOpts = {
+  /** 导出时传入，便于用户点「取消」中止保存请求 */
+  signal?: AbortSignal
+}
+
+async function saveTemp(opts?: TSaveTempOpts) {
+  const rawId = route.query.tempid ?? route.query.id
+  const designId = rawId != null && String(rawId).trim() !== '' ? String(rawId) : ''
+  if (!designId) return
+
+  const { tempType: type } = route.query
+
+  const signal = opts?.signal
+  const axiosExtra = signal
+    ? { signal, timeout: 120000 as number }
+    : {}
 
   let res = null as any
   const numericType = Number(type || 0)
+  const compCateForSave =
+    numericType === 1
+      ? String(
+          route.query.comp_cate ||
+            (typeof route.query.cate === 'string' ? route.query.cate : '') ||
+            (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('xp_comp_cate') : '') ||
+            'text',
+        ).trim() || 'text'
+      : ''
 
   try {
     if (numericType === 1) {
@@ -190,31 +264,47 @@ async function saveTemp() {
       }
 
       const payload = buildDraftPayload(numericType)
-      res = await api.home.saveTemp({
-        id: tempid,
-        type,
-        title: payload.title,
-        data: payload.data,
-        width: payload.width,
-        height: payload.height,
-      })
+      res = await api.home.saveTemp(
+        {
+          id: designId,
+          type,
+          title: payload.title,
+          data: payload.data,
+          width: payload.width,
+          height: payload.height,
+          comp_cate: compCateForSave,
+        },
+        {},
+        axiosExtra,
+      )
     } else {
       const payload = buildDraftPayload(numericType)
-      res = await api.home.saveTemp({
-        id: tempid,
-        title: payload.title,
-        data: payload.data,
-        width: payload.width,
-        height: payload.height,
-      })
+      res = await api.home.saveTemp(
+        {
+          id: designId,
+          title: payload.title,
+          data: payload.data,
+          width: payload.width,
+          height: payload.height,
+        },
+        {},
+        axiosExtra,
+      )
     }
 
     clearLocalDraft()
     if (res?.stat != 0) {
       useNotification('保存成功', '刚刚的修改已经保存好了。', { type: 'success' })
     }
-    !tempid && router.push({ path: '/home', query: { tempid: res.id }, replace: true })
+    if (res?.id != null && String(res.id) !== designId) {
+      const next = { ...route.query, tempid: String(res.id) } as Record<string, string | string[] | undefined>
+      delete next.id
+      router.replace({ path: route.path, query: next, replace: true })
+    }
   } catch (error: any) {
+    if (isRequestCanceledError(error) || signal?.aborted) {
+      throw error
+    }
     const message = String(error?.message || '')
     const isNetworkError = message.includes('Network Error') || message.includes('ERR_CONNECTION_REFUSED')
     if (isNetworkError) {
@@ -232,83 +322,330 @@ async function saveTemp() {
 }
 
 async function stateChange(e: string | number | boolean) {
-  const { tempid, tempType: type } = route.query
-  const { stat } = await api.home.saveTemp({ id: tempid, type, state: e ? 1 : 0 })
+  const designId = String(route.query.tempid ?? route.query.id ?? '')
+  if (!designId) return
+  const { tempType: type } = route.query
+  const { stat } = await api.home.saveTemp({ id: designId, type, state: e ? 1 : 0 })
   if (stat != 0) {
     useNotification('保存成功', '模板状态已经更新。')
   }
 }
 
-async function download() {
+type TDownloadFormat = 'png' | 'jpg' | 'pdf'
+
+/** 前端或服务端得到的 PNG Blob，按所选格式落盘 */
+async function persistExportBlob(sourcePng: Blob, fmt: TDownloadFormat, baseName: string): Promise<void> {
+  if (fmt === 'png') {
+    downloadBlob(sourcePng, `${baseName}.png`)
+    return
+  }
+  if (fmt === 'jpg') {
+    const jpg = await pngBlobToJpegBlob(sourcePng)
+    downloadBlob(jpg, `${baseName}.jpg`)
+    return
+  }
+  await savePngBlobAsPdf(sourcePng, baseName)
+}
+
+async function download(format: string = 'png') {
   if (state.loading === true) {
-    useNotification('正在导出', '当前已有导出任务，请稍后再试。')
-    return
-  }
-
-  state.loading = true
-  emit('update:modelValue', true)
-  emitDownloadChange({ downloadPercent: 1, downloadText: '正在准备导出，请稍候...', downloadImage: '' })
-
-  const currentRecord = pageStore.dCurrentPage
-  const backEndCapture = checkDownloadPoster(dLayouts.value[currentRecord])
-  const fileName = `${state.title || '未命名作品'}.png`
-
-  if (!backEndCapture) {
-    const result = (await canvasImage.value?.createPoster()) as { blob?: Blob } | undefined
-    const blob = result?.blob
-    const previewUrl = blob ? URL.createObjectURL(blob) : ''
-    if (blob) {
-      downloadBlob(blob, fileName)
+    const hasActiveTask = Boolean(activeDownloadXhr || activeDownloadSaveAbort || props.modelValue !== false)
+    if (!hasActiveTask) {
+      state.loading = false
+    } else {
+      useNotification('正在导出', '当前已有导出任务，请稍后再试。')
+      return
     }
-    emitDownloadChange({ downloadPercent: 100, downloadText: '导出成功，文件已保存到本地。', downloadImage: previewUrl })
-    state.loading = false
-    return
   }
 
-  await save()
-  const { id, tempid } = route.query
-  if (!id && !tempid) {
-    emitDownloadChange({ downloadPercent: 0, downloadText: '请稍候...', downloadImage: '' })
-    useNotification('暂时无法导出', '请先打开一个作品或模板后再导出。', { type: 'error' })
-    state.loading = false
+  if (!userStore.online) {
+    useNotification('请先登录', '下载作品需要先登录账号。', { type: 'warning' })
     return
   }
 
   try {
+    const quotaRes: any = await api.account.consumeDownloadQuota()
+    if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.code === 'number' && quotaRes.code !== 200) {
+      useNotification('无法导出', String(quotaRes.msg || '今日下载次数已用完或权限不足'), { type: 'warning' })
+      return
+    }
+    if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.used === 'number') {
+      userStore.setDownloadsTodayUsed(quotaRes.used)
+    }
+  } catch {
+    useNotification('无法导出', '无法校验下载额度，请检查网络后重试。', { type: 'error' })
+    return
+  }
+
+  const myGen = ++exportGeneration
+  state.loading = true
+  emit('update:modelValue', true)
+  emitDownloadChange({ downloadPercent: 1, downloadText: '正在准备导出，请稍候...', downloadImage: '' })
+
+  const saveAbort = new AbortController()
+  activeDownloadSaveAbort = saveAbort
+
+  let downloadAnimation: ReturnType<typeof setInterval> | null = null
+  const stopDownloadAnimation = () => {
+    if (downloadAnimation != null) {
+      clearInterval(downloadAnimation)
+      downloadAnimation = null
+    }
+  }
+
+  const currentRecord = pageStore.dCurrentPage
+  const backEndCapture = checkDownloadPoster(dLayouts.value[currentRecord])
+  const fmt: TDownloadFormat =
+    format === 'jpg' || format === 'pdf' ? (format as TDownloadFormat) : 'png'
+  const baseNameRaw = String(state.title || '未命名作品').trim() || '未命名作品'
+  const baseName = baseNameRaw.replace(/[\\/:*?"<>|]/g, '_')
+
+  try {
+    if (!backEndCapture) {
+      emitDownloadChange({ downloadPercent: 3, downloadText: '正在生成图片，请稍候...', downloadImage: '' })
+      const posterPromise = canvasImage.value?.createPoster() as Promise<{ blob?: Blob } | undefined> | undefined
+      const result = (await Promise.race([
+        posterPromise ?? Promise.resolve({ blob: undefined }),
+        new Promise<{ blob: undefined }>((resolve) => {
+          setTimeout(() => resolve({ blob: undefined }), CLIENT_EXPORT_TIMEOUT_MS)
+        }),
+      ])) as { blob?: Blob } | undefined
+      if (myGen !== exportGeneration || !props.modelValue) {
+        emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+        return
+      }
+      const blob = result?.blob
+      if (!blob || blob.size < 32) {
+        /** 模板常含外链主图，html2canvas 易因跨域污染画布导致 toBlob 失败；有 tempid/id 且截图服务可用时改走服务端导出 */
+        const canServerFallback =
+          Boolean(_config.SCREEN_URL) && (Boolean(route.query.tempid) || Boolean(route.query.id))
+        if (canServerFallback) {
+          emitDownloadChange({
+            downloadPercent: 6,
+            downloadText: '前端导出未完成，正在改用服务端生成…',
+            downloadImage: '',
+          })
+          try {
+            await saveTemp({ signal: saveAbort.signal })
+          } catch (e: unknown) {
+            if (isRequestCanceledError(e) || saveAbort.signal.aborted || !props.modelValue || myGen !== exportGeneration) {
+              emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+              return
+            }
+            useNotification(
+              '导出失败',
+              '服务端导出需要先保存到服务器，请确认本机 API(7001)已启动且网络正常后再试。',
+              { type: 'error' },
+            )
+            emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+            return
+          }
+          if (!props.modelValue || saveAbort.signal.aborted || myGen !== exportGeneration) {
+            emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+            return
+          }
+          const { id, tempid } = route.query
+          const previewUrl = `${api.home.download({
+            id,
+            tempid,
+            width: dPage.value.width,
+            height: dPage.value.height,
+            index: pageStore.dCurrentPage,
+          })}&r=${Math.random()}`
+          emitDownloadChange({ downloadPercent: 10, downloadText: '正在服务端生成图片…', downloadImage: previewUrl })
+          try {
+            if (fmt === 'png') {
+              await _dl.downloadImg(
+                previewUrl,
+                (progress: number, xhr: XMLHttpRequest) => {
+                  if (progress === DOWNLOAD_XHR_READY) {
+                    activeDownloadXhr = xhr
+                    return
+                  }
+                  if (!props.modelValue || myGen !== exportGeneration) {
+                    xhr.abort()
+                    return
+                  }
+                  if (progress > 0) {
+                    emitDownloadChange({
+                      downloadPercent: Math.min(99, Math.max(8, Math.round(progress))),
+                      downloadText: '服务端导出中…',
+                      downloadImage: previewUrl,
+                    })
+                  }
+                },
+                `${baseName}.png`,
+              )
+            } else {
+              const pngBlob = await fetchImageBlobFromUrl(previewUrl, (progress: number, xhr: XMLHttpRequest) => {
+                if (progress === DOWNLOAD_XHR_READY) {
+                  activeDownloadXhr = xhr
+                  return
+                }
+                if (!props.modelValue || myGen !== exportGeneration) {
+                  xhr.abort()
+                  return
+                }
+                if (progress > 0) {
+                  emitDownloadChange({
+                    downloadPercent: Math.min(99, Math.max(8, Math.round(progress))),
+                    downloadText: '服务端导出中…',
+                    downloadImage: previewUrl,
+                  })
+                }
+              })
+              if (!pngBlob) throw new Error('DOWNLOAD_EMPTY')
+              await persistExportBlob(pngBlob, fmt, baseName)
+            }
+            activeDownloadXhr = null
+            emitDownloadChange({
+              downloadPercent: 100,
+              downloadText: '导出成功，文件已保存到本地。',
+              downloadMsg: '',
+              downloadImage: previewUrl,
+            })
+          } catch {
+            activeDownloadXhr = null
+            if (props.modelValue && myGen === exportGeneration) {
+              useNotification(
+                '导出失败',
+                '服务端导出失败，请确认已运行 npm run serve:bg（或 serve）且 7001 截图服务可用后再试。',
+                { type: 'error' },
+              )
+            }
+            emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+          }
+          return
+        }
+        useNotification(
+          '导出失败',
+          !blob
+            ? '生成图片超时或已取消，请稍后重试或点击取消后再次导出。'
+            : '未能生成图片，请确认画布内容已加载完整后重试。',
+          { type: 'error' },
+        )
+        emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+        return
+      }
+      const previewUrl = URL.createObjectURL(blob)
+      try {
+        await persistExportBlob(blob, fmt, baseName)
+        emitDownloadChange({ downloadPercent: 100, downloadText: '导出成功，文件已保存到本地。', downloadImage: previewUrl })
+        // 成功时不能立刻 revoke：ProgressLoading 仍用 imageSrc 引用该 blob，否则控制台 net::ERR_FILE_NOT_FOUND
+      } catch {
+        URL.revokeObjectURL(previewUrl)
+        if (props.modelValue && myGen === exportGeneration) {
+          useNotification('导出失败', '保存所选格式时出错，请重试。', { type: 'error' })
+        }
+        emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+      }
+      return
+    }
+
+    emitDownloadChange({ downloadPercent: 2, downloadText: '正在保存作品...', downloadImage: '' })
+    try {
+      await saveTemp({ signal: saveAbort.signal })
+    } catch (e: unknown) {
+      if (isRequestCanceledError(e) || saveAbort.signal.aborted || !props.modelValue || myGen !== exportGeneration) {
+        emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+        return
+      }
+      throw e
+    }
+
+    if (!props.modelValue || saveAbort.signal.aborted || myGen !== exportGeneration) {
+      emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+      return
+    }
+
+    const { id, tempid } = route.query
+    if (!id && !tempid) {
+      emitDownloadChange({ downloadPercent: 0, downloadText: '请稍候...', downloadImage: '' })
+      useNotification('暂时无法导出', '请先打开一个作品或模板后再导出。', { type: 'error' })
+      return
+    }
+
     const { width, height } = dPage.value
     const previewUrl = `${api.home.download({ id, tempid, width, height, index: pageStore.dCurrentPage })}&r=${Math.random()}`
-    emit('update:modelValue', true)
-    emitDownloadChange({ downloadPercent: 1, downloadText: '正在处理图片...', downloadImage: previewUrl })
+    emitDownloadChange({ downloadPercent: 4, downloadText: '正在处理图片...', downloadImage: previewUrl })
 
     let timerCount = 0
-    const animation = setInterval(() => {
-      if (props.modelValue && timerCount < 75) {
+    let sawBytesProgress = false
+    downloadAnimation = setInterval(() => {
+      if (!props.modelValue || sawBytesProgress) {
+        stopDownloadAnimation()
+        return
+      }
+      if (timerCount < 75) {
         timerCount += randomNumber(1, 10)
-        emitDownloadChange({ downloadPercent: 1 + timerCount, downloadText: '正在生成图片', downloadImage: previewUrl })
+        emitDownloadChange({ downloadPercent: 4 + timerCount, downloadText: '正在生成图片', downloadImage: previewUrl })
       } else {
-        clearInterval(animation)
+        stopDownloadAnimation()
       }
     }, 800)
 
-    await _dl.downloadImg(
-      previewUrl,
-      (progress: number, xhr: XMLHttpRequest) => {
-        if (props.modelValue) {
-          clearInterval(animation)
-          if (progress >= timerCount) {
+    try {
+      if (fmt === 'png') {
+        await _dl.downloadImg(
+          previewUrl,
+          (progress: number, xhr: XMLHttpRequest) => {
+            if (progress === DOWNLOAD_XHR_READY) {
+              activeDownloadXhr = xhr
+              return
+            }
+            if (!props.modelValue || myGen !== exportGeneration) {
+              xhr.abort()
+              return
+            }
+            if (progress > 0) {
+              sawBytesProgress = true
+              stopDownloadAnimation()
+              emitDownloadChange({
+                downloadPercent: Math.min(99, Math.max(1, Math.round(progress))),
+                downloadText: '图片生成中...',
+                downloadImage: previewUrl,
+              })
+            }
+          },
+          `${baseName}.png`,
+        )
+      } else {
+        const pngBlob = await fetchImageBlobFromUrl(previewUrl, (progress: number, xhr: XMLHttpRequest) => {
+          if (progress === DOWNLOAD_XHR_READY) {
+            activeDownloadXhr = xhr
+            return
+          }
+          if (!props.modelValue || myGen !== exportGeneration) {
+            xhr.abort()
+            return
+          }
+          if (progress > 0) {
+            sawBytesProgress = true
+            stopDownloadAnimation()
             emitDownloadChange({
-              downloadPercent: Number(progress.toFixed(0)),
+              downloadPercent: Math.min(99, Math.max(1, Math.round(progress))),
               downloadText: '图片生成中...',
               downloadImage: previewUrl,
             })
           }
-        } else {
-          xhr.abort()
-          state.loading = false
-        }
-      },
-      fileName,
-    )
+        })
+        if (!pngBlob) throw new Error('DOWNLOAD_EMPTY')
+        await persistExportBlob(pngBlob, fmt, baseName)
+      }
+    } catch {
+      if (props.modelValue && myGen === exportGeneration) {
+        useNotification('导出失败', '图片暂时无法导出，请稍后重试。', { type: 'error' })
+      }
+      return
+    }
+
+    stopDownloadAnimation()
+    activeDownloadXhr = null
+
+    if (!props.modelValue || myGen !== exportGeneration) {
+      emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+      return
+    }
 
     emitDownloadChange({
       downloadPercent: 100,
@@ -317,9 +654,17 @@ async function download() {
       downloadImage: previewUrl,
     })
   } catch {
-    useNotification('导出失败', '图片暂时无法导出，请稍后重试。', { type: 'error' })
+    if (props.modelValue && myGen === exportGeneration) {
+      useNotification('导出失败', '图片暂时无法导出，请稍后重试。', { type: 'error' })
+    }
   } finally {
-    state.loading = false
+    activeDownloadSaveAbort = null
+    stopDownloadAnimation()
+    activeDownloadXhr = null
+    if (myGen === exportGeneration) {
+      state.loading = false
+      emit('update:modelValue', false)
+    }
   }
 }
 
@@ -345,15 +690,30 @@ async function load(cb: () => void) {
   }
 
   try {
-    const { data: content, title, state: templateState, width, height } = await api.home[apiName]({ id: id || tempId, type })
+    const detail = (await api.home[apiName]({ id: id || tempId, type })) as Record<string, unknown>
+    const { data: content, title, state: templateState, width, height } = detail
     if (!content) {
       initBoard()
       cb()
       return
     }
     state.stateBollean = !!templateState
-    state.title = title
+    state.title = String(title ?? '')
     applyLoadedData(content, type, width, height)
+    const resolvedCate = detail.cate ?? detail.category
+    const rawCate = route.query.cate
+    const cateFromQuery =
+      rawCate === undefined || rawCate === null
+        ? ''
+        : String(Array.isArray(rawCate) ? rawCate[0] ?? '' : rawCate)
+    /** URL 已带分类（含「全部」cate=0）时，尊重用户当前列表，不要用详情里的分类覆盖 */
+    const userChoseCategory = cateFromQuery !== ''
+    if (tempId && !id && resolvedCate != null && resolvedCate !== '' && !userChoseCategory) {
+      const next = String(resolvedCate)
+      if (String(route.query.cate ?? '') !== next) {
+        await router.replace({ path: route.path, query: { ...route.query, cate: next } })
+      }
+    }
     cb()
   } catch (error: any) {
     const message = String(error?.message || '')
@@ -403,7 +763,9 @@ function checkDownloadPoster(board: any) {
   let backEndCapture = false
   for (let i = 0; i < layers.length; i++) {
     const { type, mask, textEffects } = layers[i]
-    if ((type === 'w-image' && mask) || type === 'w-svg' || type === 'w-qrcode' || (textEffects && textEffects.length > 0)) {
+    // 仅对 html2canvas 难以还原的能力走服务端截图；w-svg / w-qrcode 在 DOM 中可正常克隆导出，
+    // 若一并强制走 Puppeteer，大画布 + 队列易超时，表现为「只有含装饰/二维码的模板」下载失败。
+    if ((type === 'w-image' && mask) || (textEffects && textEffects.length > 0)) {
       backEndCapture = true
       break
     }
@@ -418,6 +780,7 @@ defineExpose({
   stateChange,
   load,
   draw,
+  abortActiveDownload,
 })
 </script>
 
@@ -456,6 +819,25 @@ defineExpose({
     background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
     color: #fff;
   }
+
+  /* 与右侧「登录」胶囊按钮同量级：高度与字号对齐 */
+  :deep(.header-download-btn.el-button) {
+    min-height: 34px;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 999px;
+  }
+
+  :deep(.header-download-btn.el-button--primary) {
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
+  }
+
+  :deep(.header-download-btn.el-button--primary:hover) {
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+  }
 }
 
 .top-title {
@@ -490,6 +872,7 @@ defineExpose({
 }
 
 .account-entry {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -506,6 +889,18 @@ defineExpose({
   transition: all 0.18s ease;
   white-space: nowrap;
   line-height: 1;
+}
+
+.account-entry--guest {
+  width: auto;
+  min-width: 58px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-entry__login-text {
+  letter-spacing: 0.02em;
 }
 
 .account-entry:hover {
@@ -533,10 +928,6 @@ defineExpose({
   flex-shrink: 0;
 }
 
-.account-entry__avatar--guest {
-  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
-}
-
 .account-entry__avatar img {
   width: 22px;
   height: 22px;
@@ -555,3 +946,4 @@ defineExpose({
   height: 20px;
 }
 </style>
+

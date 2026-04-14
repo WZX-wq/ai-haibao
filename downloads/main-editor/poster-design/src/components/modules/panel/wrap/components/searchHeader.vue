@@ -1,7 +1,9 @@
 <template>
   <div class="search__wrap">
     <el-dropdown v-if="type !== 'none'" placement="bottom-start">
-      <div class="search__type"><i class="iconfont icon-ego-caidan" /></div>
+      <div class="search__type" @click="ensureCategoriesLoaded">
+        <i class="iconfont icon-ego-caidan" />
+      </div>
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item
@@ -11,12 +13,20 @@
           >
             <span :class="['cate__text', { 'cate--select': +state.currentIndex === +item.id }]">{{ item.name }}</span>
           </el-dropdown-item>
+          <el-dropdown-item divided @click="reloadCategories">
+            <span class="cate__reload">重新加载分类</span>
+          </el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
     <span v-else style="width: 1rem"></span>
 
-    <el-input v-model="state.searchValue" size="large" placeholder="输入关键词搜索" class="input-with-select">
+    <el-input
+      v-model="state.searchValue"
+      size="large"
+      placeholder="搜索关键词"
+      class="input-with-select"
+    >
       <template #append>
         <el-button><i class="iconfont icon-search"></i></el-button>
       </template>
@@ -25,7 +35,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, watch } from 'vue'
+import { onBeforeUnmount, reactive, watch } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import { useRoute } from 'vue-router'
 import api from '@/api'
@@ -47,6 +57,7 @@ type TState = {
   searchValue: string
   materialCates: TMaterialCatesData[]
   currentIndex: number | string
+  loading: boolean
 }
 
 const props = defineProps<TProps>()
@@ -57,28 +68,79 @@ const state = reactive<TState>({
   searchValue: '',
   materialCates: [],
   currentIndex: 0,
+  loading: false,
 })
-let categoryLoadNotified = false
 
-if (props.type !== 'none') {
-  api.home
-    .getCategories({ type: 1 })
-    .then((list: any[]) => {
-      state.materialCates = [{ id: 0, name: '全部' }].concat(list || [])
-      const cate = route.query.cate
-      if (typeof cate !== 'undefined') {
-        state.currentIndex = cate as string
-        const current = state.materialCates.find((item) => String(item.id) === String(cate))
-        current && action('change', current, current.id)
-      }
-    })
-    .catch(() => {
-      state.materialCates = [{ id: 0, name: '全部' }]
-      if (!categoryLoadNotified) {
-        categoryLoadNotified = true
-        useNotification('分类暂时不可用', '分类暂时无法显示，请稍后刷新页面。', { type: 'warning' })
-      }
-    })
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let categoryLoadNotified = false
+let requestSeq = 0
+
+function clearRetryTimer() {
+  if (retryTimer) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
+}
+
+function applyInitialRouteCate() {
+  const cate = route.query.cate
+  if (typeof cate === 'undefined') return
+  state.currentIndex = cate as string
+  const current = state.materialCates.find((item) => String(item.id) === String(cate))
+  if (current) {
+    action('change', current, current.id)
+  }
+}
+
+async function loadCategories(allowRetry = true, attempt = 0, showErrorToast = false) {
+  if (props.type === 'none') return
+  if (state.loading) return
+  state.loading = true
+  const seq = ++requestSeq
+  try {
+    const list = await api.home.getCategories({ type: 1 }) as any
+    if (!Array.isArray(list)) {
+      throw new Error('invalid category payload')
+    }
+    if (seq !== requestSeq) return
+    state.materialCates = [{ id: 0, name: '全部' }].concat(list)
+    categoryLoadNotified = false
+    applyInitialRouteCate()
+  } catch {
+    if (seq !== requestSeq) return
+    state.materialCates = [{ id: 0, name: '全部' }]
+    if (allowRetry && attempt < 6) {
+      clearRetryTimer()
+      const delay = 500 * (attempt + 1)
+      retryTimer = setTimeout(() => {
+        loadCategories(true, attempt + 1, false)
+      }, delay)
+      return
+    }
+    if (showErrorToast && !categoryLoadNotified) {
+      categoryLoadNotified = true
+      useNotification(
+        '分类暂不可用',
+        '分类列表加载失败，可在菜单中点击「重新加载分类」后重试。',
+        { type: 'warning' },
+      )
+    }
+  } finally {
+    if (seq === requestSeq) {
+      state.loading = false
+    }
+  }
+}
+
+function ensureCategoriesLoaded() {
+  if (!state.materialCates.length && !state.loading) {
+    loadCategories(true, 0, false)
+  }
+}
+
+function reloadCategories() {
+  clearRetryTimer()
+  loadCategories(false, 0, true)
 }
 
 watch(
@@ -86,13 +148,38 @@ watch(
   () => emit('update:modelValue', state.searchValue),
 )
 
+watch(
+  () => route.query.cate,
+  () => {
+    if (!state.materialCates.length) return
+    const raw = route.query.cate
+    if (typeof raw === 'undefined') return
+    const cateVal = Array.isArray(raw) ? raw[0] : raw
+    if (cateVal === undefined || cateVal === null || cateVal === '') return
+    state.currentIndex = cateVal as string
+    const current = state.materialCates.find((item) => String(item.id) === String(cateVal))
+    if (current) {
+      action('change', current, current.id)
+    }
+  },
+)
+
 function action(fn: 'change', type: TMaterialCatesData, currentIndex: number | string) {
   state.currentIndex = currentIndex
   emit(fn, type)
 }
 
+if (props.type !== 'none') {
+  loadCategories(true, 0, false)
+}
+
+onBeforeUnmount(() => {
+  clearRetryTimer()
+})
+
 defineExpose({
   action,
+  reloadCategories,
 })
 </script>
 
@@ -138,6 +225,11 @@ defineExpose({
 
   &--select {
     color: @main-color;
+  }
+
+  &__reload {
+    color: #2563eb;
+    font-weight: 600;
   }
 }
 </style>

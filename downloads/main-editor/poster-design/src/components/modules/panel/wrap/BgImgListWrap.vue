@@ -13,7 +13,7 @@
     <ul v-if="state.showList" v-infinite-scroll="loadData" class="infinite-list" :infinite-scroll-distance="150" style="overflow: auto">
       <div class="list" :style="modelStyle.list">
         <imageTip v-for="(item, i) in state.bgList" :key="i + 'i'" :detail="item">
-          <el-image class="list__img" :src="item.thumb" fit="cover" lazy loading="lazy" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)"></el-image>
+          <el-image class="list__img" :src="item.thumb" fit="cover" lazy @click.stop="selectItem(item)" @dragstart="dragStart($event, item)"></el-image>
         </imageTip>
       </div>
       <div v-show="state.loading" class="loading"><i class="el-icon-loading"></i> 加载中...</div>

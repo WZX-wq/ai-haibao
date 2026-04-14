@@ -9,7 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import imageSize from 'image-size'
 import { filePath as StaticPath } from '../configs'
-const FileUrl = 'http://127.0.0.1:7001/static/'
+import { getClientStaticBaseUrl } from './clientPublicUrl'
 
 export function copyFile(sourceFile: string, destinationFile: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -43,23 +43,34 @@ export function filesReader(directoryPath: string) {
       }
       const files = fs.readdirSync(fullDir)
       const filesArray: any = []
+      const dirUrl = String(directoryPath).replace(/\\/g, '/')
       files.forEach((file) => {
+        if (file === '.DS_Store' || file.startsWith('.')) {
+          return
+        }
         const filePath = path.join(directoryPath, file)
         const absolutePath = path.join(StaticPath, filePath)
-        const { width, height } = imageSize(absolutePath)
-        if (file !== '.DS_Store') {
-          const fileInfo = {
-            width,
-            height,
-            // filename: file,
-            // link: FileUrl + directoryPath,
-            url: `${FileUrl + directoryPath}/${file}`,
-            // filepath: StaticPath + filePath
-            // size: stats.size, // 文件大小
-            // modified: stats.mtime // 最后修改时间
-          }
-          filesArray.push(fileInfo)
+        if (!fs.statSync(absolutePath).isFile()) {
+          return
         }
+        let width = 0
+        let height = 0
+        try {
+          const dim = imageSize(absolutePath)
+          width = dim.width || 0
+          height = dim.height || 0
+        } catch {
+          /* ignore */
+        }
+        const key = `${dirUrl}/${file}`
+        const fileInfo = {
+          id: file,
+          key,
+          width,
+          height,
+          url: `${getClientStaticBaseUrl()}${key}`,
+        }
+        filesArray.push(fileInfo)
       })
       // JSON.stringify(filesArray, null, 2)
       resolve(filesArray)

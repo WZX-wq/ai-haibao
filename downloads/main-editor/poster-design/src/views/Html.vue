@@ -14,7 +14,7 @@
     </div>
     <div v-else class="empty-state">
       <div class="empty-card">
-        <div class="empty-badge">HTML</div>
+        <div class="empty-badge">网页预览</div>
         <h1>当前没有可渲染的模板页面</h1>
         <p>请通过导出 HTML 或模板预览流程进入该页面，并带上 <code>tempid</code> 或 <code>id</code> 参数。</p>
         <button class="ghost-btn" @click="goHome">返回编辑器</button>
@@ -71,13 +71,13 @@ async function load() {
       backgroundImage = content.page?.backgroundImage
       backgroundImage && delete content.page.backgroundImage
 
-      await nextTick()
-
       pageGroup.value.push({
         pageData: content.page,
         dWidgets: widgets,
         zoom,
       })
+      await nextTick()
+      await nextTick()
 
       const imgsData: HTMLImageElement[] = []
       const svgsData: HTMLImageElement[] = []

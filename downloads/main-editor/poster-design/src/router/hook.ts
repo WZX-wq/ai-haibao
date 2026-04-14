@@ -5,7 +5,6 @@ import config from '@/config'
 const routeTitles: Record<string, string> = {
   Welcome: '欢迎页',
   Home: '编辑器',
-  AiPoster: 'AI 海报助手',
   AccountCenter: '个人中心',
   Login: '登录',
   OAuthCallback: '登录回调',

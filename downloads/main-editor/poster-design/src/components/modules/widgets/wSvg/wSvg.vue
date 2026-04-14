@@ -23,6 +23,7 @@
 
 import { useCanvasStore, useForceStore, useWidgetStore } from '@/store'
 import { TWSvgSetting } from './wSvgSetting'
+import { resolveSnapRootToSvgElement } from './snapSvgRoot'
 import { CSSProperties, computed, nextTick, onBeforeMount, onMounted, onUpdated, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { TUpdateWidgetPayload } from '@/store/design/widget/actions/widget'
@@ -192,68 +193,66 @@ function handlemousemove(e: MouseEvent) {
 }
 
 function loadSvg() {
-  // console.log(this.params)
   const Snap = (window as any).Snap
   return new Promise<void>((resolve) => {
-    // Snap.load(
-    // props.params.svgUrl,
-    //   function (svg: Record<string, any>) {
-        // 链接加载方法
-    //   },
-    // )
-    const svg = Snap.parse(props.params.svgUrl)
-    let svg2 = Snap(svg.node)
-        let items = svg2.node.childNodes
-        svg2.node.removeAttribute('width')
-        svg2.node.removeAttribute('height')
-        svg2.node.setAttribute('style', 'height: inherit;width: inherit;')
-        // svg2.node.setAttribute('height', 'inherit')
-        svgElements = []
-        const colorsObj = color2obj()
-
-        deepElement(items)
-
-        function deepElement(els: Record<string, any>) {
-          // 判断是NodeList对象则继续递归，否则进入元素处理工厂
-          if (els.item) {
-            els.forEach((element: Record<string, any>) => {
-              elementFactory(element)
-              if (element.childNodes.length > 0) {
-                element.childNodes.forEach((element: Record<string, any>) => {
-                  deepElement(element)
-                })
-              }
-            })
-          } else {
-            elementFactory(els)
-          }
-        }
-        // 元素工厂: 遍历元素中是否存在可自定义的颜色属性
-        function elementFactory(element: Record<string, any>) {
-          const attrsColor: Record<string, any> = {}
-          try {
-            element.attributes.forEach((attr: Record<string, any>) => {
-              if (colorsObj[attr.value]) {
-                // console.log(attr.name, colorsObj[attr.value])
-                attr.value = colorsObj[attr.value]
-                attrsColor[attr.name] = props.params.colors.findIndex((x) => x == attr.value)
-              }
-            })
-          } catch (e) {}
-          if (JSON.stringify(attrsColor) !== '{}' && svgElements) {
-            svgElements.push({
-              item: element,
-              attrsColor,
-            })
-          }
-          // console.log(element.attributes, element.getAttribute('fill'), _this.params.colors)
-        }
-        
-        if (widgetRef.value) {
-          // svg.node.classList.add('svg__box')
-          widgetRef.value.appendChild(svg.node)
-        }
+    try {
+      const parsed = Snap.parse(props.params.svgUrl)
+      const svg2 = resolveSnapRootToSvgElement(parsed, Snap)
+      const node = svg2?.node as Element | undefined
+      if (!node || typeof node.removeAttribute !== 'function') {
         resolve()
+        return
+      }
+
+      const items = svg2.node.childNodes
+      node.removeAttribute('width')
+      node.removeAttribute('height')
+      node.setAttribute('style', 'height: inherit;width: inherit;')
+      svgElements = []
+      const colorsObj = color2obj()
+
+      deepElement(items)
+
+      function deepElement(els: Record<string, any>) {
+        if (els.item) {
+          els.forEach((element: Record<string, any>) => {
+            elementFactory(element)
+            if (element.childNodes.length > 0) {
+              element.childNodes.forEach((element: Record<string, any>) => {
+                deepElement(element)
+              })
+            }
+          })
+        } else {
+          elementFactory(els)
+        }
+      }
+
+      function elementFactory(element: Record<string, any>) {
+        const attrsColor: Record<string, any> = {}
+        try {
+          element.attributes.forEach((attr: Record<string, any>) => {
+            if (colorsObj[attr.value]) {
+              attr.value = colorsObj[attr.value]
+              attrsColor[attr.name] = props.params.colors.findIndex((x) => x == attr.value)
+            }
+          })
+        } catch (e) {}
+        if (JSON.stringify(attrsColor) !== '{}' && svgElements) {
+          svgElements.push({
+            item: element,
+            attrsColor,
+          })
+        }
+      }
+
+      if (widgetRef.value) {
+        widgetRef.value.appendChild(svg2.node as Node)
+      }
+    } catch {
+      /* ignore */
+    }
+    resolve()
   })
 }
 

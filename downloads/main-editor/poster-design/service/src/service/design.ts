@@ -1,11 +1,53 @@
-import { Request, Response } from 'express'
 import fs from 'fs'
 import path from 'path'
 import axios from '../utils/http'
 import { send, randomCode } from '../utils/tools'
+import { ensureUserDesignsSchema, getMysqlPool, isMysqlConfigured } from '../utils/mysql'
+import { tryResolveSession } from './account'
 import { getTemplateCategories, getTemplateDetail, getTemplateList } from './templateCatalog'
+import { getClientStaticBaseUrl, internalApiUrl } from '../utils/clientPublicUrl'
+import { mockPath, mockRel } from '../utils/mockRoot'
+/** 与内置模板 id 区分；大于等于此值的 id 仅走 user_designs */
+const USER_DESIGN_ID_MIN = 1000000000
 
-const FileUrl = 'http://127.0.0.1:7001/static/'
+function isUserDesignId(id: unknown): boolean {
+  const n = Number(id)
+  return Number.isFinite(n) && n >= USER_DESIGN_ID_MIN
+}
+
+function formatSqlDateTime(value: Date | string | null | undefined): string {
+  if (!value) return ''
+  const dt = typeof value === 'string' ? new Date(value) : value
+  if (Number.isNaN(dt.getTime())) return ''
+  return dt.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function listCoverUrl(id: number | string, width: number, height: number) {
+  const cw = Math.max(1, Math.round(Number(width)))
+  const ch = Math.max(1, Math.round(Number(height)))
+  return `${getClientStaticBaseUrl()}${id}-screenshot-vp-${cw}x${ch}.png`
+}
+
+function rowToDetailPayload(row: Record<string, any>, cover: string) {
+  const dataStr =
+    typeof row.data_json === 'string' ? row.data_json : JSON.stringify(row.data_json ?? '')
+  return {
+    id: Number(row.id),
+    title: row.title || '',
+    width: Number(row.width) || 0,
+    height: Number(row.height) || 0,
+    cate: Number(row.cate) || 0,
+    category: Number(row.cate) || 0,
+    data: dataStr,
+    cover,
+    created_time: formatSqlDateTime(row.created_at),
+    updated_time: formatSqlDateTime(row.updated_at),
+    original: '',
+    resource: '',
+    state: String(row.state ?? 1),
+    tag: null,
+  }
+}
 
 function parseJsonFile(filePath: string) {
   const raw = fs.readFileSync(filePath, 'utf8')
@@ -50,26 +92,50 @@ function mergeUniqueById<T extends { id: number | string }>(baseList: T[], incom
 }
 
 function getCustomTemplateList() {
-  return readJsonIfExists(path.resolve(__dirname, '../mock/templates/list.json'), [])
+  return readJsonIfExists(mockPath('templates', 'list.json'), [])
 }
 
 function getSavedTemplatePath(id: number | string) {
-  return path.resolve(__dirname, `../mock/templates/${id}.json`)
+  return mockPath('templates', `${id}.json`)
+}
+
+const templateStaticDir = () => path.resolve(__dirname, '../../static')
+
+/** 匹配 ${id}-screenshot-vp-WxH.png 或旧版 ${id}-screenshot-vp.png */
+function findViewportScreenshotBasename(id: number | string): string | null {
+  const dir = templateStaticDir()
+  const spref = `${String(id)}-screenshot-vp-`
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.startsWith(spref) && name.endsWith('.png')) return name
+    }
+  } catch {
+    /* ignore */
+  }
+  const legacy = `${id}-screenshot-vp.png`
+  if (fs.existsSync(path.join(dir, legacy))) return legacy
+  return null
 }
 
 function getTemplateScreenshotPath(id: number | string) {
+  const base = findViewportScreenshotBasename(id)
+  if (base) return path.join(templateStaticDir(), base)
   return path.resolve(__dirname, `../../static/${id}-screenshot.png`)
 }
 
 function getTemplateScreenshotUrl(id: number | string, version?: number | string) {
   const query = version ? `?v=${version}` : ''
-  return `${FileUrl}${id}-screenshot.png${query}`
+  const base = findViewportScreenshotBasename(id)
+  const name = base || `${id}-screenshot.png`
+  return `${getClientStaticBaseUrl()}${name}${query}`
 }
 
 function getTemplatePreviewUrl(id: number | string, savedTemplatePath: string, width: number, height: number) {
   const savedStats = fs.statSync(savedTemplatePath)
   if (width > 0 && height > 0) {
-    return `http://127.0.0.1:7001/api/screenshots?tempid=${id}&width=${width}&height=${height}&type=file&index=0&force=1&v=${savedStats.mtimeMs}`
+    return internalApiUrl(
+      `api/screenshots?tempid=${id}&width=${width}&height=${height}&type=file&index=0&force=1&v=${savedStats.mtimeMs}`,
+    )
   }
 
   return ''
@@ -131,9 +197,22 @@ function buildTemplateTitle(currentTitle: string, headline: string) {
 }
 
 function getTemplateScreenshotFallback(id: number | string) {
+  const base = findViewportScreenshotBasename(id)
+  if (base) return `${getClientStaticBaseUrl()}${base}`
   const screenshotPath = path.resolve(__dirname, `../../static/${id}-screenshot.png`)
   if (!fs.existsSync(screenshotPath)) return ''
-  return `${FileUrl}${id}-screenshot.png`
+  return `${getClientStaticBaseUrl()}${id}-screenshot.png`
+}
+
+function getMergedTemplateList() {
+  const baseList = getTemplateList()
+  const customList = getCustomTemplateList()
+  return enrichTemplateListWithSavedDetails(mergeUniqueById(baseList, customList))
+}
+
+function findMergedTemplateMeta(id: number | string) {
+  const mergedList = getMergedTemplateList()
+  return mergedList.find((item: any) => String(item.id) === String(id)) || null
 }
 
 function enrichTemplateListWithSavedDetails(list: any[]) {
@@ -168,7 +247,7 @@ function enrichTemplateListWithSavedDetails(list: any[]) {
 }
 
 function getMockPosterList() {
-  return readJsonIfExists(path.resolve(__dirname, '../mock/posters/list.json'), [])
+  return readJsonIfExists(mockPath('posters', 'list.json'), [])
 }
 
 function filterTemplateList(list: any[], query: any) {
@@ -181,32 +260,78 @@ function filterTemplateList(list: any[], query: any) {
   })
 }
 
-export async function getTemplates(req: any, res: Response) {
+export async function getTemplates(req: any, res: any) {
   const type = Number(req.query.type || 0)
   if (type === 1) {
     const cate = req.query.cate || 'text'
-    const tempPath = path.resolve(__dirname, `../mock/components/list/${cate}.json`)
-    const list = readJsonIfExists(tempPath, [])
+    const listKey = String(cate)
+    const tempPath = mockPath('components', 'list', `${cate}.json`)
+    let list: any[] = readJsonIfExists(tempPath, [])
+
+    if (isMysqlConfigured()) {
+      const session = await tryResolveSession(req)
+      if (session) {
+        await ensureUserDesignsSchema()
+        const db = await getMysqlPool()
+        const [rows] = await db.query(
+          `SELECT id, title, width, height, cate, state, updated_at FROM user_designs
+           WHERE user_id = ? AND design_type = 1 AND component_list_key = ? ORDER BY updated_at DESC`,
+          [session.userId, listKey],
+        )
+        const fromDb = (rows as Record<string, any>[]).map((row) => ({
+          id: row.id,
+          title: row.title,
+          width: row.width,
+          height: row.height,
+          cate: listKey,
+          state: row.state ?? 1,
+          cover: listCoverUrl(row.id, row.width, row.height),
+        }))
+        list = mergeUniqueById(fromDb, list)
+      }
+    }
+
     const page = Number(req.query.page || 1)
     const pageSize = Number(req.query.pageSize || list.length || 20)
     send.success(res, { list: paginateList(list, page, pageSize) })
     return
   }
 
-  const baseList = getTemplateList()
-  const customList = getCustomTemplateList()
-  const mergedList = enrichTemplateListWithSavedDetails(mergeUniqueById(baseList, customList))
+  const mergedList = getMergedTemplateList()
   const filtered = filterTemplateList(mergedList, req.query || {})
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || filtered.length || 20)
   send.success(res, { list: paginateList(filtered, page, pageSize) })
 }
 
-export async function getDetail(req: any, res: Response) {
+export async function getDetail(req: any, res: any) {
   const type = Number(req.query.type || 0)
   const id = req.query.id
   if (type === 1) {
-    const detailPath = path.resolve(__dirname, `../mock/components/detail/${id}.json`)
+    if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
+      const session = await tryResolveSession(req)
+      if (!session) {
+        send.error(res, 'template not found')
+        return
+      }
+      await ensureUserDesignsSchema()
+      const db = await getMysqlPool()
+      const [rows] = await db.query(
+        'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 1 LIMIT 1',
+        [String(id), session.userId],
+      )
+      const row = Array.isArray(rows) ? (rows as Record<string, any>[])[0] : null
+      if (!row) {
+        send.error(res, 'template not found')
+        return
+      }
+      const cover =
+        getTemplateScreenshotFallback(row.id) || listCoverUrl(row.id, row.width, row.height)
+      send.success(res, rowToDetailPayload(row, cover))
+      return
+    }
+
+    const detailPath = mockPath('components', 'detail', `${id}.json`)
     const detail = readJsonIfExists(detailPath, null)
     if (!detail) {
       send.error(res, 'template not found')
@@ -216,16 +341,45 @@ export async function getDetail(req: any, res: Response) {
     return
   }
 
+  if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
+    const session = await tryResolveSession(req)
+    if (!session) {
+      send.error(res, 'template not found')
+      return
+    }
+    await ensureUserDesignsSchema()
+    const db = await getMysqlPool()
+    const [rows] = await db.query(
+      'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 0 LIMIT 1',
+      [String(id), session.userId],
+    )
+    const row = Array.isArray(rows) ? (rows as Record<string, any>[])[0] : null
+    if (!row) {
+      send.error(res, 'template not found')
+      return
+    }
+    const cover =
+      getTemplateScreenshotFallback(row.id) || listCoverUrl(row.id, row.width, row.height)
+    send.success(res, rowToDetailPayload(row, cover))
+    return
+  }
+
   const catalogDetail = getTemplateDetail(id)
-  const savedTemplatePath = path.resolve(__dirname, `../mock/templates/${id}.json`)
+  const savedTemplatePath = mockPath('templates', `${id}.json`)
   if (fs.existsSync(savedTemplatePath)) {
     const savedDetail = parseJsonFile(savedTemplatePath)
     if (isRenderableTemplateData(savedDetail?.data)) {
-      send.success(res, savedDetail)
+      const meta = findMergedTemplateMeta(id)
+      const withCate =
+        meta && typeof meta.cate === 'number' ? { ...savedDetail, cate: meta.cate } : { ...savedDetail }
+      send.success(res, withCate)
       return
     }
     if (catalogDetail) {
-      send.success(res, catalogDetail)
+      const meta = findMergedTemplateMeta(id)
+      const payload =
+        meta && typeof meta.cate === 'number' ? { ...(catalogDetail as Record<string, unknown>), cate: meta.cate } : catalogDetail
+      send.success(res, payload)
       return
     }
     send.error(res, 'template not found')
@@ -233,14 +387,17 @@ export async function getDetail(req: any, res: Response) {
   }
 
   if (catalogDetail) {
-    send.success(res, catalogDetail)
+    const meta = findMergedTemplateMeta(id)
+    const payload =
+      meta && typeof meta.cate === 'number' ? { ...(catalogDetail as Record<string, unknown>), cate: meta.cate } : catalogDetail
+    send.success(res, payload)
     return
   }
 
   send.error(res, 'template not found')
 }
 
-export async function getCategories(req: any, res: Response) {
+export async function getCategories(req: any, res: any) {
   const type = Number(req.query.type || 1)
   if (type === 1) {
     send.success(res, getTemplateCategories())
@@ -249,41 +406,104 @@ export async function getCategories(req: any, res: Response) {
   send.success(res, [])
 }
 
-export async function getMyDesigns(req: any, res: Response) {
+export async function getMyDesigns(req: any, res: any) {
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 10)
-  const list = getMockPosterList()
-  send.success(res, { list: paginateList(list, page, pageSize) })
+
+  if (!isMysqlConfigured()) {
+    const list = getMockPosterList()
+    send.success(res, { list: paginateList(list, page, pageSize) })
+    return
+  }
+
+  const userId = req.userDesignUserId as number | undefined
+  if (!userId) {
+    send.error(res, '未登录')
+    return
+  }
+
+  await ensureUserDesignsSchema()
+  const db = await getMysqlPool()
+  const safePage = Math.max(1, page)
+  const safePageSize = Math.max(1, pageSize)
+  const offset = (safePage - 1) * safePageSize
+
+  const [[countRow]]: any = await db.query(
+    'SELECT COUNT(*) AS total FROM user_designs WHERE user_id = ? AND design_type = 0',
+    [userId],
+  )
+  const total = Number(countRow?.total) || 0
+
+  const [rows] = await db.query(
+    `SELECT id, title, width, height, cate, state, updated_at FROM user_designs
+     WHERE user_id = ? AND design_type = 0 ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+    [userId, safePageSize, offset],
+  )
+
+  const list = (rows as Record<string, any>[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    width: row.width,
+    height: row.height,
+    cate: row.cate,
+    state: row.state,
+    cover: listCoverUrl(row.id, row.width, row.height),
+    isDelect: true,
+    fail: false,
+    top: 0,
+    left: 0,
+    url: '',
+  }))
+
+  send.success(res, { list, total })
 }
 
-export async function getWorkDetail(req: any, res: Response) {
+export async function getWorkDetail(req: any, res: any) {
   return getDetail(req, res)
 }
 
-export async function getMaterial(req: any, res: Response) {
+export async function getMaterial(req: any, res: any) {
   const cate = req.query.cate
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 20)
-  const detail = readJsonIfExists(path.resolve(__dirname, `../mock/materials/${cate}.json`), [])
+  const detail = readJsonIfExists(mockPath('materials', `${cate}.json`), [])
   send.success(res, { list: paginateList(detail, page, pageSize) })
 }
 
-export async function getPhotos(req: any, res: Response) {
+export async function getPhotos(req: any, res: any) {
   const cate = req.query.cate
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 30)
-  const detail = readJsonIfExists(path.resolve(__dirname, `../mock/materials/photos/${cate}.json`), [])
+  const detail = readJsonIfExists(mockPath('materials', 'photos', `${cate}.json`), [])
   send.success(res, { list: paginateList(detail, page, pageSize) })
 }
 
-export async function deleteWork(req: any, res: Response) {
+export async function deleteWork(req: any, res: any) {
   const id = String(req.body.id || '')
   if (!id) {
     send.error(res, 'missing work id')
     return
   }
 
-  const listPath = path.resolve(__dirname, '../mock/posters/list.json')
+  if (isMysqlConfigured()) {
+    const userId = req.userDesignUserId as number | undefined
+    if (!userId) {
+      res.status(401).json({ code: 401, msg: '未登录' })
+      return
+    }
+    await ensureUserDesignsSchema()
+    const db = await getMysqlPool()
+    const [result] = await db.query('DELETE FROM user_designs WHERE id = ? AND user_id = ?', [id, userId])
+    const affected = (result as { affectedRows?: number })?.affectedRows ?? 0
+    if (affected > 0) {
+      send.success(res, true)
+      return
+    }
+    send.error(res, 'work not found')
+    return
+  }
+
+  const listPath = mockPath('posters', 'list.json')
   const list = readJsonIfExists(listPath, [])
   const nextList = list.filter((item: any) => String(item.id) !== id)
 
@@ -296,7 +516,7 @@ export async function deleteWork(req: any, res: Response) {
   send.success(res, true)
 }
 
-export async function saveTemplate(req: any, res: Response) {
+export async function saveTemplate(req: any, res: any) {
   const type = Number(req.body.type || 0)
   let id = req.body.id
   const title = req.body.title
@@ -316,23 +536,146 @@ export async function saveTemplate(req: any, res: Response) {
       }
     }
 
+    if (isMysqlConfigured()) {
+      const session = await tryResolveSession(req)
+      if (!session) {
+        res.status(401).json({ code: 401, msg: '未登录' })
+        return
+      }
+
+      await ensureUserDesignsSchema()
+      const db = await getMysqlPool()
+      const userId = session.userId
+      const designType = type === 1 ? 1 : 0
+      const compListKey =
+        designType === 1 ? String(req.body.comp_cate || '').trim() || 'text' : null
+      const dataJson = typeof data === 'string' ? data : JSON.stringify(data ?? null)
+      const numCate = Number(req.body.cate || 0) || 0
+
+      let targetId: string
+      if (id) {
+        const [ownRows] = await db.query(
+          'SELECT id FROM user_designs WHERE id = ? AND user_id = ? AND design_type = ? LIMIT 1',
+          [String(id), userId, designType],
+        )
+        const ownedList = ownRows as { id: number | string }[]
+        if (ownedList?.length) {
+          targetId = String(ownedList[0].id)
+          if (designType === 1) {
+            await db.query(
+              `UPDATE user_designs SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, component_list_key = ?, updated_at = NOW()
+               WHERE id = ? AND user_id = ?`,
+              [
+                String(title || ''),
+                Number(width) || 0,
+                Number(height) || 0,
+                numCate,
+                dataJson,
+                compListKey,
+                targetId,
+                userId,
+              ],
+            )
+          } else {
+            await db.query(
+              `UPDATE user_designs SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, updated_at = NOW()
+               WHERE id = ? AND user_id = ?`,
+              [
+                String(title || ''),
+                Number(width) || 0,
+                Number(height) || 0,
+                cate,
+                dataJson,
+                targetId,
+                userId,
+              ],
+            )
+          }
+        } else {
+          if (designType === 1) {
+            const [ins] = await db.query(
+              `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, component_list_key, state, data_json)
+               VALUES (?, 1, ?, ?, ?, ?, ?, 1, ?)`,
+              [
+                userId,
+                String(title || ''),
+                Number(width) || 0,
+                Number(height) || 0,
+                numCate,
+                compListKey,
+                dataJson,
+              ],
+            )
+            targetId = String((ins as { insertId?: number | string }).insertId ?? '')
+          } else {
+            const [ins] = await db.query(
+              `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
+               VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
+              [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, dataJson],
+            )
+            targetId = String((ins as { insertId?: number | string }).insertId ?? '')
+          }
+        }
+      } else if (designType === 1) {
+        const [ins] = await db.query(
+          `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, component_list_key, state, data_json)
+           VALUES (?, 1, ?, ?, ?, ?, ?, 1, ?)`,
+          [
+            userId,
+            String(title || ''),
+            Number(width) || 0,
+            Number(height) || 0,
+            numCate,
+            compListKey,
+            dataJson,
+          ],
+        )
+        targetId = String((ins as { insertId?: number | string }).insertId ?? '')
+      } else {
+        const [ins] = await db.query(
+          `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
+           VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
+          [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, dataJson],
+        )
+        targetId = String((ins as { insertId?: number | string }).insertId ?? '')
+      }
+
+      if (!targetId) {
+        send.error(res, 'save template failed')
+        return
+      }
+
+      const size = width > height ? 640 : 320
+      const fetchScreenshotUrl = internalApiUrl(
+        `api/screenshots?tempid=${targetId}&tempType=${type}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`,
+      )
+      await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+
+      send.success(res, { id: targetId })
+      return
+    }
+
     const isAdd = !id
     id = id || randomCode(8)
-    const savePath = path.resolve(__dirname, `../mock/${folder}/${id}.json`)
+    const savePath = mockRel(`${folder}/${id}.json`)
     const jsonData = { id, data, title, width, height, cate }
     fs.writeFileSync(savePath, JSON.stringify(jsonData))
 
     const size = width > height ? 640 : 320
     // Use file/png here to avoid the Windows-native jpg compression path
     // that can crash the local dev service during save.
-    const fetchScreenshotUrl = `http://127.0.0.1:7001/api/screenshots?tempid=${id}&tempType=${type}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`
+    const fetchScreenshotUrl = internalApiUrl(
+      `api/screenshots?tempid=${id}&tempType=${type}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`,
+    )
     await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
 
     if (isAdd) {
-      const list = readJsonIfExists(path.resolve(__dirname, `../mock/${listPath}`), [])
-      const cover = `${FileUrl}/${id}-screenshot.png`
+      const list = readJsonIfExists(mockRel(listPath), [])
+      const cw = Math.max(1, Math.round(Number(width)))
+      const ch = Math.max(1, Math.round(Number(height)))
+      const cover = `${getClientStaticBaseUrl()}${id}-screenshot-vp-${cw}x${ch}.png`
       list.unshift({ id, cover, title, width, height, cate, state: 1 })
-      writeJsonFile(path.resolve(__dirname, `../mock/${listPath}`), list)
+      writeJsonFile(mockRel(listPath), list)
     }
     send.success(res, { id })
   } catch (error) {

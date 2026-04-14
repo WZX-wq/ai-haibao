@@ -13,6 +13,7 @@ export default {
   // 后端示例
   UPLOAD: path + '/file/upload',
   USER_IMAGES: '/design/user/image',
+  DELETE_USER_IMAGE: '/design/user/image/del',
   ADD_USER_IMAGE: '/design/user/add_image',
   GET_TEMPLATE_LIST: '/design/list',
   GET_CATEGORIES: '/design/cate',
@@ -29,6 +30,7 @@ export default {
   AUTH_ME: '/auth/me',
   AUTH_ACCOUNT_CENTER: '/auth/account-center',
   AUTH_LOGOUT: '/auth/logout',
+  USAGE_DOWNLOAD_CONSUME: '/usage/download/consume',
   ADMIN_USERS: '/admin/users',
   ADMIN_USER_PERMISSIONS: '/admin/user/permissions',
   ADMIN_SESSIONS: '/admin/sessions',

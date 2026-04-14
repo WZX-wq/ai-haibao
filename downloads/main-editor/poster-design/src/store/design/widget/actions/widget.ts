@@ -11,7 +11,28 @@ import useHistoryStore from '../../history'
 import { TWidgetStore, TdWidgetData } from '..'
 import { customAlphabet } from 'nanoid/non-secure'
 import { decodeTextIfNeeded, repairKnownMojibake } from '@/utils/decodeText'
+import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 const nanoid = customAlphabet('1234567890abcdef', 12)
+
+/** 模板/作品 JSON 常含 uuid=-1 或多处重复，会导致 Vue key 与 vuedraggable item-key 冲突 */
+export function assignStableLayerUuids(layers: TdWidgetData[]) {
+  const used = new Set<string>()
+  for (const item of layers) {
+    const raw = item.uuid as string | number | undefined | null
+    const s = raw === undefined || raw === null || raw === '' ? '' : String(raw)
+    const num = Number(raw)
+    const bad =
+      s === '' ||
+      s === '-1' ||
+      num < 0 ||
+      Number.isNaN(num) ||
+      used.has(s)
+    if (bad) {
+      item.uuid = nanoid()
+    }
+    used.add(String(item.uuid))
+  }
+}
 
 function normalizeWidget(widget: TdWidgetData) {
   widget.name && (widget.name = repairKnownMojibake(widget.name))
@@ -221,12 +242,14 @@ export function setWidgetStyle(state: TWidgetStore, { uuid, key, value }: TsetWi
 }
 
 export function setDWidgets(state: TWidgetStore, e: TdWidgetData[]) {
-  state.dWidgets = e.map((item) => normalizeWidget(item))
+  const next = e.map((item) => normalizeWidget(item))
+  assignStableLayerUuids(next)
+  state.dWidgets = next
   updateDWidgets(state)
 }
 
 export function setDLayouts(state: TWidgetStore, data: any[]) {
-  state.dLayouts = data
+  state.dLayouts = deepNormalizeLoopbackMediaUrls(data)
   state.dWidgets = state.getWidgets()
   const pageStore = useCanvasStore()
   pageStore.setDPage(data[pageStore.dCurrentPage].global)

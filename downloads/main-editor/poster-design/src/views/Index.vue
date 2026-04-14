@@ -4,6 +4,7 @@
       <div class="top-nav-wrap">
         <div class="top-left">
           <div class="name">{{ state.APP_NAME }}</div>
+          <el-button size="small" plain class="back-welcome-btn" @click="goWelcome">{{ ui.welcome }}</el-button>
           <div class="operation">
             <div :class="['operation-item', { disable: !undoable }]" @click="undoable ? handleHistory('undo') : ''"><i class="iconfont icon-undo" /></div>
             <div :class="['operation-item', { disable: !redoable }]" @click="redoable ? handleHistory('redo') : ''"><i class="iconfont icon-redo" /></div>
@@ -15,7 +16,18 @@
           <el-divider direction="vertical" />
         </div>
         <HeaderOptions ref="optionsRef" v-model="state.isContinue" @change="optionsChange">
-          <el-button ref="ref4" size="large" class="primary-btn" type="primary" @click="dealWith('download')">{{ $t('header.download') }}</el-button>
+          <el-dropdown trigger="click" @command="onDownloadFormatCommand">
+            <el-button ref="ref4" class="primary-btn header-download-btn" type="primary">
+              {{ $t('header.download') }}
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="png">下载 PNG</el-dropdown-item>
+                <el-dropdown-item command="jpg">下载 JPG</el-dropdown-item>
+                <el-dropdown-item command="pdf">下载 PDF</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </HeaderOptions>
       </div>
     </div>
@@ -50,7 +62,7 @@
 <script lang="ts" setup>
 import _config from '../config'
 import {
-  CSSProperties, computed, onBeforeUnmount, onMounted, reactive, ref, Ref,
+  CSSProperties, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, Ref, watch,
 } from 'vue'
 import RightClickMenu from '@/components/business/right-click-menu/RcMenu.vue'
 import Moveable from '@/components/business/moveable/Moveable.vue'
@@ -65,12 +77,17 @@ import { wGroupSetting } from '@/components/modules/widgets/wGroup/groupSetting'
 import { storeToRefs } from 'pinia'
 import { useCanvasStore, useControlStore, useHistoryStore, useWidgetStore, useGroupStore } from '@/store'
 import type { ButtonInstance } from 'element-plus'
+import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import Tour from './components/Tour.vue'
 import createDesign from '@/components/business/create-design'
 import multipleBoards from '@/components/modules/layout/multipleBoards'
 import useHistory from '@/common/hooks/history'
+import { useRoute, useRouter } from 'vue-router'
+import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 
 useHistory()
+const router = useRouter()
+const route = useRoute()
 
 const ref1 = ref<ButtonInstance>()
 const ref2 = ref<any>()
@@ -80,6 +97,7 @@ const appliedDesignSessionKey = 'aiPosterAppliedDesign'
 const ui = {
   file: '\u6587\u4ef6',
   cancel: '\u53d6\u6d88',
+  welcome: '\u8fd4\u56de\u9996\u9875',
 } as const
 const pageStore = useCanvasStore()
 
@@ -161,6 +179,15 @@ onMounted(() => {
   loadData()
 })
 
+watch(
+  () => [route.name, route.query.tempid, route.query.id, route.query.tempType] as const,
+  (next, prev) => {
+    if (next[0] !== 'Home') return
+    if (prev && next[1] === prev[1] && next[2] === prev[2] && next[3] === prev[3]) return
+    void nextTick(() => loadData())
+  },
+)
+
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', fixTopBarScroll)
   document.removeEventListener('keydown', handleKeydowm(controlStore, checkCtrl, instanceFn, dealCtrl), false)
@@ -172,6 +199,14 @@ function handleHistory(data: 'undo' | 'redo') {
   historyStore.handleHistory(data)
 }
 
+function goWelcome() {
+  if (dHistoryStack.value.changes.length > 0) {
+    const shouldLeave = window.confirm('当前有未保存修改，确定返回首页吗？')
+    if (!shouldLeave) return
+  }
+  router.push('/welcome')
+}
+
 function changeLineGuides() {
   state.showLineGuides = !state.showLineGuides
 }
@@ -179,7 +214,12 @@ function changeLineGuides() {
 function downloadCancel() {
   state.downloadPercent = 0
   state.downloadImage = ''
-  state.isContinue = false
+  /** isContinue 为 true 时交给 v-model + HeaderOptions watch 只 abort 一次；已为 false 时 watch 不会触发，需直接中止以免 loading 卡死 */
+  if (state.isContinue) {
+    state.isContinue = false
+  } else {
+    optionsRef.value?.abortActiveDownload?.()
+  }
 }
 
 function loadData() {
@@ -195,7 +235,7 @@ function applyAiPosterDesignIfNeeded() {
   const raw = sessionStorage.getItem(appliedDesignSessionKey)
   if (!raw) return
   try {
-    const payload = JSON.parse(raw)
+    const payload = deepNormalizeLoopbackMediaUrls(JSON.parse(raw))
     if (!payload?.page || !Array.isArray(payload.widgets)) return
     widgetStore.setDLayouts([{ global: payload.page, layers: payload.widgets }])
     pageStore.setDCurrentPage(0)
@@ -228,8 +268,8 @@ const fns: any = {
   save: () => {
     optionsRef.value?.save(false)
   },
-  download: () => {
-    optionsRef.value?.download()
+  download: (format?: string) => {
+    optionsRef.value?.download(format || 'png')
   },
   changeLineGuides,
   newDesign: () => {
@@ -239,6 +279,10 @@ const fns: any = {
 
 const dealWith = (fnName: string, params?: any) => {
   fns[fnName](params)
+}
+
+function onDownloadFormatCommand(cmd: string) {
+  dealWith('download', cmd)
 }
 
 defineExpose({
@@ -253,6 +297,34 @@ defineExpose({
   :deep(.el-divider--vertical) {
     margin: 0 10px;
     border-left-color: rgba(148, 163, 184, 0.32);
+  }
+
+  :deep(.back-welcome-btn) {
+    margin-right: 8px;
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #475569;
+  }
+}
+
+@media (max-width: 900px) {
+  .top-nav {
+    :deep(.top-nav-wrap) {
+      min-height: auto;
+      padding: 8px 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    :deep(.top-left) {
+      width: 100%;
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    :deep(.operation) {
+      margin-left: 0;
+    }
   }
 }
 

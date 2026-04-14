@@ -180,6 +180,7 @@ async function deleteBg() {
 }
 async function downloadBG() {
   await _dl.downloadImg(state.innerElement.backgroundImage, (p) => {
+    if (p < 0) return
     state.downP = p < 99 ? p / 100 : 0
   })
 }

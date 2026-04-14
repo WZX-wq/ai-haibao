@@ -30,10 +30,17 @@ import fs from 'fs'
  */
 export async function screenshots(req: any, res: any) {
   let { id, tempid, tempType, width, height, screenshot_url, type = 'file', size, quality, index = 0, force, r } = req.query
+  const useInjectedCapture = !(req.query.prevent === '0' || req.query.prevent === 0 || req.query.prevent === 'false')
   id == 'undefined' && (id = null)
   const url = (screenshot_url || drawLink) + `${id ? '?id=' : '?tempid='}`
   id = id || tempid
-  const path = filePath + `${id}-screenshot.png`
+  /** type=file 为侧栏/列表视口缩略图：仅截视口并单独缓存，避免 fullPage 整页图被前端当成异常竖条换成默认封面 */
+  const isViewportFile = type === 'file'
+  const wNum = Math.max(1, Math.round(Number(width)))
+  const hNum = Math.max(1, Math.round(Number(height)))
+  /** 视口尺寸进文件名，避免从 292×390 改为真实画布尺寸后仍命中旧缓存 */
+  const path =
+    filePath + `${id}-screenshot${isViewportFile ? `-vp-${wNum}x${hNum}` : ''}.png`
   const thumbPath = type === 'cover' && tempType != 1 ? filePath + `${id}-cover.jpg` : null
   const shouldBypassCache = force === '1' || force === 1 || typeof r !== 'undefined'
 
@@ -49,15 +56,24 @@ export async function screenshots(req: any, res: any) {
       return
     }
     const targetUrl = url + id + `${tempType ? '&tempType=' + tempType : ''}` + `&index=${index}`
-    queueRun(saveScreenshot, targetUrl, { width, height, path, thumbPath, size, quality })
+    queueRun(saveScreenshot, targetUrl, {
+      width,
+      height,
+      path,
+      thumbPath,
+      size,
+      quality,
+      prevent: useInjectedCapture,
+      fullPage: !isViewportFile,
+    })
       .then(() => {
-        res.setHeader('Content-Type', 'image/jpg')
-        // const stats = fs.statSync(path)
-        // res.setHeader('Cache-Control', stats.size)
-        type === 'file' ? res.sendFile(path) : res.sendFile(thumbPath)
+        if (res.headersSent) return
+        res.setHeader('Content-Type', type === 'file' ? 'image/png' : 'image/jpg')
+        type === 'file' ? res.sendFile(path) : res.sendFile(thumbPath as string)
       })
-      .catch((e: any) => {
-        res.json({ code: 500, msg: '图片生成错误' })
+      .catch(() => {
+        if (res.headersSent) return
+        res.status(500).json({ code: 500, msg: '图片生成错误' })
       })
   } else {
     res.json({ code: 500, msg: '缺少参数，请检查' })
@@ -97,17 +113,12 @@ export async function printscreen(req: any, res: any) {
     }
     queueRun(saveScreenshot, url, { width, height, path, thumbPath, size, quality, prevent, ua, devices, scale, wait }, sign)
       .then(() => {
-        if (!res.headersSent) {
-          // res.setHeader('Content-Type', 'image/jpg')
-          // const stats = fs.statSync(path)
-          // res.setHeader('Cache-Control', stats.size)
-          res.json({ code: 200, msg: '截图成功', data: { path, thumbPath } })
-        } else {
-          res.json({ code: 200, msg: 'ok' })
-        }
+        if (res.headersSent) return
+        res.json({ code: 200, msg: '截图成功', data: { path, thumbPath } })
       })
-      .catch((e: any) => {
-        res.json({ code: 500, msg: '图片生成错误!' })
+      .catch(() => {
+        if (res.headersSent) return
+        res.status(500).json({ code: 500, msg: '图片生成错误!' })
       })
   } else {
     res.json({ code: 500, msg: '缺少参数，请检查' })

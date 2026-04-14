@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div id="widget-panel">
     <div class="widget-classify">
       <ul class="classify-wrap">
@@ -69,6 +69,7 @@ defineExpose({
   flex-direction: row;
   font-weight: 600;
   height: 100%;
+  min-height: 0;
   position: relative;
 
   .widget-classify {
@@ -170,6 +171,11 @@ defineExpose({
     background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
     flex: 1;
     height: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .side-wrap {

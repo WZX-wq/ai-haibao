@@ -20,25 +20,45 @@
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as accountApi from '@/api/account.ts'
-import { LocalStorageKey } from '@/config.ts'
-import useUserStore from '@/store/base/user.ts'
+import * as accountApi from '@/api/account'
+import { LocalStorageKey } from '@/config'
+import useUserStore from '@/store/base/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const errorMessage = ref('')
 
-const titleText = computed(() => errorMessage.value ? '\u767b\u5f55\u5931\u8d25' : '\u6b63\u5728\u5b8c\u6210\u767b\u5f55')
-const statusText = computed(() => errorMessage.value || '\u6b63\u5728\u4e0e\u672c\u5730\u670d\u52a1\u4ea4\u6362 token \u5e76\u521b\u5efa\u4f1a\u8bdd\uff0c\u8bf7\u7a0d\u5019\u3002')
+const titleText = computed(() => (errorMessage.value ? '登录失败' : '正在完成登录'))
+const statusText = computed(() => errorMessage.value || '正在与服务器交换令牌并创建会话，请稍候。')
+
+function queryString(v: unknown): string {
+  if (v === undefined || v === null) return ''
+  if (Array.isArray(v)) return String(v[0] ?? '')
+  return String(v)
+}
 
 async function finishLogin() {
-  const code = String(route.query.code || '')
-  const state = String(route.query.state || '')
+  const oauthErr = queryString(route.query.error).trim()
+  if (oauthErr) {
+    const desc = queryString(route.query.error_description || route.query.error_message).trim()
+    let text = desc ? desc.replace(/\+/g, ' ') : oauthErr
+    if (desc) {
+      try {
+        text = decodeURIComponent(text)
+      } catch {
+        /* 非标准编码时保留原文 */
+      }
+    }
+    throw new Error(text || '授权未完成或被取消')
+  }
+
+  const code = queryString(route.query.code).trim()
+  const state = queryString(route.query.state).trim()
   const storedState = localStorage.getItem(LocalStorageKey.authStateKey) || sessionStorage.getItem(LocalStorageKey.authStateKey) || ''
 
   if (!code || !state || storedState !== state) {
-    throw new Error('\u56de\u8c03\u53c2\u6570\u65e0\u6548\u6216 state \u6821\u9a8c\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55')
+    throw new Error('回调参数无效或状态校验失败，请重新登录')
   }
 
   const result = await accountApi.callbackLogin({
@@ -48,7 +68,7 @@ async function finishLogin() {
   })
 
   if ((result as any).code === 400 || !result.local_token) {
-    throw new Error((result as any).msg || '\u767b\u5f55\u5931\u8d25')
+    throw new Error((result as any).msg || '登录失败')
   }
 
   userStore.setAuthSession({
@@ -62,6 +82,9 @@ async function finishLogin() {
     },
     permissions: result.permissions,
   })
+  if (typeof result.downloads_today_used === 'number') {
+    userStore.setDownloadsTodayUsed(result.downloads_today_used)
+  }
 
   localStorage.removeItem(LocalStorageKey.authStateKey)
   sessionStorage.removeItem(LocalStorageKey.authStateKey)
@@ -72,7 +95,7 @@ onMounted(async () => {
   try {
     await finishLogin()
   } catch (error: any) {
-    errorMessage.value = String(error?.message || '\u767b\u5f55\u5931\u8d25')
+    errorMessage.value = String(error?.message || '登录失败')
     setTimeout(() => {
       router.replace({ path: '/login', query: { message: errorMessage.value } })
     }, 1200)

@@ -30,6 +30,7 @@ import zoomControl from '@/components/modules/layout/zoomControl/index.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCanvasStore, useWidgetStore } from '@/store'
+import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,6 +66,7 @@ async function load() {
       const { global, layers } = content[index]
       content = { page: global, widgets: layers }
     }
+    content = deepNormalizeLoopbackMediaUrls(content)
     const widgets = isGroupTemplate ? content : content.widgets
 
     if (isGroupTemplate) {
@@ -84,6 +86,7 @@ async function load() {
       }
     }
 
+    await nextTick()
     await nextTick()
 
     const imgsData: HTMLImageElement[] = []
@@ -230,6 +233,35 @@ async function load() {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .empty-state {
+    padding: 20px 14px;
+  }
+
+  .empty-card {
+    padding: 24px 16px;
+    border-radius: 18px;
+
+    h1 {
+      font-size: 22px;
+      line-height: 1.3;
+    }
+
+    p {
+      font-size: 14px;
+    }
+  }
+
+  .empty-actions {
+    margin-top: 18px;
+  }
+
+  .ghost-btn {
+    width: 100%;
+    padding: 10px 14px;
   }
 }
 </style>

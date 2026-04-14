@@ -19,11 +19,11 @@
       :style="state.editBoxStyle"
       class="svg__edit__wrap"
     >
-      <img class="edit__model" :src="params.imgUrl" />
+      <img class="edit__model" :src="safeImgUrl" />
     </div>
     <div :style="{ transform: params.flip ? `rotate${params.flip}(180deg)` : undefined, borderRadius: params.radius + 'px', '-webkit-mask-image': getMaskStyleValue(params.mask), 'mask-image': getMaskStyleValue(params.mask) }" :class="['img__box', { mask: params.mask }]">
-      <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${params.imgUrl}') ${params.sliceData.left} round` }"></div>
-      <img v-else ref="targetRef" class="target" style="transform-origin: center" :src="params.imgUrl" />
+      <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${safeImgUrl}') ${params.sliceData.left} round` }"></div>
+      <img v-else ref="targetRef" class="target" style="transform-origin: center" :style="targetImgStyle" :src="safeImgUrl" />
     </div>
     <div v-if="isMask" class="drop__mask">
       <div putIn="true" :style="{ fontSize: params.width / 12 + 'px' }" class="drop__btn">拖入</div>
@@ -42,6 +42,7 @@ import setting from "./wImageSetting"
 import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCanvasStore, useControlStore, useForceStore, useWidgetStore } from '@/store'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   params: typeof setting
@@ -65,6 +66,7 @@ type TState = {
 }
 
 const props = defineProps<TProps>()
+const safeImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
 const state = reactive<TState>({
   position: 'absolute', // 'absolute'relative
   editBoxStyle: {
@@ -115,12 +117,25 @@ const isMask = computed(() => {
 const isDraw = computed(() => {
   return route.name === 'Draw'
 })
+/** AI 海报主图：铺满图框，避免横图在竖框里缩成「小图」观感 */
+const targetImgStyle = computed(() => {
+  if (props.params.name === 'ai_hero') {
+    return {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover' as const,
+      objectPosition: 'center center',
+    }
+  }
+  return { width: '100%', height: '100%' }
+})
 
 function getMaskStyleValue(mask?: string) {
   if (!mask) {
     return 'initial'
   }
-  return `url(${mask.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
+  const n = normalizeLoopbackMediaUrl(mask)
+  return `url(${n.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
 }
 
 watch(

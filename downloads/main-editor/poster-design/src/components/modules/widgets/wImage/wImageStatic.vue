@@ -18,15 +18,16 @@
     }"
   >
     <div :style="{ transform: params.flip ? `rotate${params.flip}(180deg)` : undefined, borderRadius: params.radius + 'px', '-webkit-mask-image': getMaskStyleValue(params.mask), 'mask-image': getMaskStyleValue(params.mask) }" :class="['img__box', { mask: params.mask }]">
-      <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${params.imgUrl}') ${params.sliceData.left} round` }"></div>
-      <img v-else ref="targetRef" class="target" style="transform-origin: center" :src="params.imgUrl" />
+      <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${safeImgUrl}') ${params.sliceData.left} round` }"></div>
+      <img v-else ref="targetRef" class="target" style="transform-origin: center" :src="safeImgUrl" />
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { CSSProperties, reactive, ref } from 'vue'
+import { CSSProperties, computed, reactive, ref } from 'vue'
 import setting from "./wImageSetting"
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   params: typeof setting
@@ -50,6 +51,7 @@ type TState = {
 }
 
 const props = defineProps<TProps>()
+const safeImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
 const state = reactive<TState>({
   position: 'absolute', // 'absolute'relative
   editBoxStyle: {
@@ -73,7 +75,8 @@ function getMaskStyleValue(mask?: string) {
   if (!mask) {
     return 'initial'
   }
-  return `url(${mask.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
+  const n = normalizeLoopbackMediaUrl(mask)
+  return `url(${n.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
 }
 
 </script>

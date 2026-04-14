@@ -1,36 +1,51 @@
-<!--
- * @Author: ShawnPhang
- * @Date: 2021-12-16 16:20:16
- * @Description: 瀑布流组件
- * @LastEditors: ShawnPhang <https://m.palxp.cn>
- * @Date: 2024-03-06 21:16:00
--->
 <template>
   <div ref="imgWaterFall" :style="{ height: state.countHeight + 'px' }" class="img-water-fall">
-    <!-- backgroundImage: `url(${item.cover})` -->
     <div
-      v-for="(item, i) in state.list" :key="i + 'iwf'"
-      :style="{ top: item.top + 'px', left: item.left + 'px', width: state.width + 'px', height: item.height + 'px' }"
-      class="img-box" @click.stop="selectItem(item, i)"
+      v-for="(item, i) in state.list"
+      :key="`t-${item.id}`"
+      :data-template-id="item.id"
+      :style="{ top: `${item.top}px`, left: `${item.left}px`, width: `${state.width}px`, height: `${item.height}px` }"
+      :class="['img-box', { 'img-box--active': isActiveItem(item) }]"
+      @click.stop="selectItem(item)"
     >
       <edit-model v-if="edit" :options="props.edit" :data="{ item, i }">
-        {{ item.isDelect }}
         <div v-if="item.isDelect" class="list__mask">已删除</div>
-        <el-image v-if="!item.fail" class="img" :src="item.thumb || item.cover" lazy loading="lazy" @error="loadError(item)" />
-        <div v-else class="fail_img">{{ item.title }}</div>
+        <img
+          v-if="!item.fail"
+          class="img"
+          :src="getCardImage(item)"
+          alt="template-cover"
+          loading="eager"
+          decoding="async"
+          @error="loadError(item, i, $event)"
+          @load="loadSuccess(item, i, $event)"
+        />
+        <div v-else class="fail_img">{{ item.title || '模板' }}</div>
       </edit-model>
-      <el-image v-else class="img" :src="item.thumb || item.cover" lazy loading="lazy" @error="loadError(item)" />
+
+      <img
+        v-else
+        class="img"
+        :src="getCardImage(item)"
+        alt="template-cover"
+        loading="eager"
+        decoding="async"
+        @error="loadError(item, i, $event)"
+        @load="loadSuccess(item, i, $event)"
+      />
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-// const NAME = 'img-water-fall'
-import { IGetTempListData } from '@/api/home';
 import { reactive, watch } from 'vue'
+import { IGetTempListData } from '@/api/home'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   listData: IGetTempListData[]
+  /** 与路由 tempid 对齐，用于高亮当前打开的模板 */
+  activeTempId?: number | null
   edit?: Record<string, any>
 }
 
@@ -45,61 +60,113 @@ type TEmits = {
   (event: 'load'): void
 }
 
-const props = defineProps<TProps>()
+const props = withDefaults(defineProps<TProps>(), {
+  activeTempId: null,
+})
 const emit = defineEmits<TEmits>()
 
+const isActiveItem = (item: IGetTempListData) => {
+  if (props.activeTempId == null) return false
+  return Number(item.id) === Number(props.activeTempId)
+}
+
 const state = reactive<TState>({
-  width: 146, // 图片的宽度
+  width: 146,
   list: [],
   countHeight: 0,
 })
 
-const columnHeights: number[] = [] // 列的高度
-const columnNums = 2 // 总共有多少列
-const gap = 7 // 图片之间的间隔
+const columnHeights: number[] = []
+const columnNums = 2
+const gap = 7
 
 watch(
   () => props.listData,
   () => {
     columnHeights.length = 0
-    const widthLimit = state.width * columnNums //  + gap * (columnNums - 1) // 每行宽度
-    const cloneList = JSON.parse(JSON.stringify(props.listData))
-    for (let i = 0; i < cloneList.length; i++) {
+    const widthLimit = state.width * columnNums
+    const cloneList = JSON.parse(JSON.stringify(props.listData || []))
+
+    for (let i = 0; i < cloneList.length; i += 1) {
       let index = i % columnNums
       const item = cloneList[i]
-      item.height = (item.height / item.width) * state.width // 图片高度
-      item.left = index * (widthLimit / columnNums + gap) // 定位
-      item.top = columnHeights[index] + gap || 0 // 定位
-      // columnHeights[index] = isNaN(columnHeights[index]) ? item.height : item.height + columnHeights[index] + gap // 记录列高度
-      // 找出最短边
+      const width = Number(item.width) || 1
+      const height = Number(item.height) || 1
+      item.height = (height / width) * state.width
+      item.left = index * (widthLimit / columnNums + gap)
+      item.top = columnHeights[index] + gap || 0
       if (isNaN(columnHeights[index])) {
         columnHeights[index] = item.height
       } else {
         index = columnHeights.indexOf(Math.min(...columnHeights))
         item.left = index * (widthLimit / columnNums + gap)
         item.top = columnHeights[index] + gap || 0
-        columnHeights[index] = item.height + columnHeights[index] + gap
+        columnHeights[index] += item.height + gap
       }
     }
-    state.countHeight = Math.max(...columnHeights)
+
+    state.countHeight = columnHeights.length ? Math.max(...columnHeights) : 0
     state.list = cloneList
   },
+  { immediate: true },
 )
 
-const load = () => {
-  emit('load')
+const normalizeLocalHost = (value?: string) => {
+  const src = value || ''
+  if (!src) return src
+  const host = window.location.hostname
+  if (host === 'localhost') return src.replace('://127.0.0.1:', '://localhost:')
+  if (host === '127.0.0.1') return src.replace('://localhost:', '://127.0.0.1:')
+  return src
 }
-const selectItem = (value: IGetTempListData, index: number) => {
-  emit('select', value)
+
+/**
+ * 不可把截图 URL 强行改成 292×390：Draw 页画布按模板真实像素（如 1242×1660）渲染，
+ * 视口若更小只会截到左上角 → 侧栏出现「巨大文字碎片」。服务端已用视口截图（非 fullPage），
+ * 此处必须保留 URL 中的 width/height 与模板一致。
+ */
+const getCardImage = (item: IGetTempListData) => {
+  const raw = item.thumb || item.cover || item.url || ''
+  const normalized = normalizeLoopbackMediaUrl(normalizeLocalHost(raw))
+  return normalized || '/template-cover-1.png'
 }
-const loadError = (item: IGetTempListData) => {
-  // 优先尝试 thumb（真实截图），失败则回退到 cover（SVG 兜底）
+
+const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cover-1.png' : '/template-cover-2.png')
+
+const load = () => emit('load')
+const selectItem = (value: IGetTempListData) => emit('select', value)
+
+const loadError = (item: IGetTempListData, index: number, event?: Event) => {
+  const target = event?.target as HTMLImageElement | null
   if (item.thumb && item.cover && item.thumb !== item.cover) {
     item.thumb = ''
+    item.fail = false
+    if (target) target.src = getCardImage(item)
+    return
+  }
+  if (item.cover && item.url && item.cover !== item.url) {
+    item.cover = item.url
+    item.fail = false
+    if (target) target.src = getCardImage(item)
+    return
+  }
+  if (target) {
+    target.src = getFallbackByIndex(index)
     item.fail = false
     return
   }
   item.fail = true
+}
+
+const loadSuccess = (item: IGetTempListData, index: number, event?: Event) => {
+  const target = event?.target as HTMLImageElement | null
+  // 后端截图异常时会返回同一张占位图（典型尺寸 292x1130），这里做兜底替换
+  if (target && target.naturalWidth > 0 && target.naturalHeight > target.naturalWidth * 3) {
+    target.src = getFallbackByIndex(index)
+    item.fail = false
+    return
+  }
+  item.fail = false
 }
 
 defineExpose({
@@ -118,23 +185,28 @@ defineExpose({
   justify-content: center;
   color: #999999;
 }
+
 .img-water-fall {
   position: relative;
   margin-left: 14px;
+
   .img-box {
     position: absolute !important;
     cursor: pointer;
-    position: relative;
     background-size: cover;
     border-radius: 5px;
     border: 1px solid #e0e5ea;
     overflow: hidden;
+
     .img {
       display: block;
       width: 100%;
       height: 100%;
+      object-fit: contain;
+      background: #f1f5f9;
     }
   }
+
   .img-box:hover::before {
     content: ' ';
     background: rgba(0, 0, 0, 0.15);
@@ -146,7 +218,15 @@ defineExpose({
     z-index: 1;
     pointer-events: none;
   }
+
+  .img-box--active {
+    outline: 2px solid #2563eb;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+    z-index: 2;
+  }
 }
+
 .list {
   &__mask {
     position: absolute;

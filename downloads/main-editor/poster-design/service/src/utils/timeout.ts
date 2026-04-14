@@ -8,7 +8,11 @@
 
 export default async (req: any, res: any, next: any) => {
   const { queueList } = require('../utils/node-queue.ts')
-  const time = 30000 // 设置所有HTTP请求的服务器响应超时时间
+  const rawPath = String(req.path || req.url || '').split('?')[0]
+  /** Puppeteer 截图常超过 30s；原全局超时会在截图未完成时先发 408 JSON，随后 sendFile 导致重复响应 → 上游异常、Nginx 502 */
+  const isScreenshot =
+    rawPath.includes('/screenshots') || rawPath.includes('/printscreen')
+  const time = isScreenshot ? 180000 : 30000
   res.setTimeout(time, () => {
     const statusCode = 408
     const index = queueList.findIndex((x: any) => x.sign === req._queueSign)

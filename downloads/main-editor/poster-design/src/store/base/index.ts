@@ -1,4 +1,4 @@
-﻿/*
+/*
  * @Author: Jeremy Yu
  * @Date: 2024-03-17 15:00:00
  * @Description: Base鍏ㄥ眬鐘舵€佺鐞?
@@ -29,7 +29,7 @@ type TUserAction = {
 const useBaseStore = defineStore<'base', TStoreBaseState, {}, TUserAction>('base', {
   state: () => ({
     loading: null,
-    watermark: _config.APP_NAME,
+    watermark: _config.WATERMARK_DEFAULT_TEXT,
     fonts: [], // 缂撳瓨瀛椾綋鍒楄〃
   }),
   actions: {

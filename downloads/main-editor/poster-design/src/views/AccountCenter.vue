@@ -1,168 +1,506 @@
 <template>
-  <div class="account-page">
-    <div class="account-shell">
-      <header class="topbar">
-        <div>
-          <h1>个人中心</h1>
-          <p>管理账号信息、配额与功能权限</p>
+  <!-- 未登录：单栏居中 -->
+  <div v-if="!userStore.online" class="ac-page ac-page--guest">
+    <div class="ac-guest-body">
+      <section class="ac-login-card">
+        <div class="ac-login-card__icon">
+          <el-icon :size="48"><User /></el-icon>
         </div>
-        <div class="topbar-actions">
-          <el-button plain @click="router.push('/home?tempid=303')">返回编辑器</el-button>
-          <el-button v-if="userStore.online" @click="logout">退出登录</el-button>
-          <el-button v-else type="primary" @click="router.push('/login')">去登录</el-button>
-        </div>
-      </header>
-
-      <section v-if="!userStore.online" class="empty-card">
-        <h2>当前未登录</h2>
-        <p>登录后可查看账号信息、会员权益、配额和功能权限。</p>
-        <el-button type="primary" @click="router.push('/login')">去登录</el-button>
+        <h2>登录后解锁完整能力</h2>
+        <p>登录后将展示会员、额度与最近记录。</p>
+        <button type="button" class="ac-sidebar-upgrade" @click="go('/login')">
+          <el-icon :size="14"><Right /></el-icon>
+          立即登录
+        </button>
       </section>
+    </div>
+  </div>
 
-      <main v-else class="layout">
-        <aside class="side-panel">
-          <div class="profile">
-            <div class="avatar">
-              <img v-if="displayUser.avatar" :src="displayUser.avatar" :alt="displayUser.name || 'avatar'">
-              <span v-else>{{ userInitial }}</span>
+  <!-- 已登录：侧栏 + 主区（对齐 account-center-optimized.html） -->
+  <div v-else class="ac-page">
+    <aside class="ac-sidebar" aria-label="账户导航">
+      <router-link to="/welcome" class="ac-sidebar-logo">鲲穹设计</router-link>
+      <div class="ac-sidebar-avatar" :title="displayUser.name || '用户'">
+        <img v-if="displayUser.avatar" :src="displayUser.avatar" alt="" />
+        <span v-else>{{ userInitial }}</span>
+      </div>
+      <div class="ac-sidebar-username">{{ displayUser.name || '用户' }}</div>
+      <button type="button" class="ac-sidebar-upgrade" @click="toastInfo('会员开通请联系管理员')">
+        <el-icon :size="14"><Star /></el-icon>
+        升级会员
+      </button>
+      <ul class="ac-sidebar-nav">
+        <li>
+          <a href="#ac-section-stats" class="is-active" @click.prevent="scrollToId('ac-section-stats')">
+            <el-icon :size="20"><DataBoard /></el-icon>
+            额度与权益
+          </a>
+        </li>
+      </ul>
+    </aside>
+
+    <div class="ac-main-wrap">
+      <div class="ac-page-header">
+        <div class="ac-page-header__left">
+          <h1>账户与权益</h1>
+          <p>额度、权限与最近操作一览</p>
+        </div>
+        <div class="ac-page-header__right">
+          <div class="ac-pills">
+            <span class="ac-pill ac-pill--gray">等级 {{ vipLevelText }}</span>
+            <span class="ac-pill ac-pill--green">{{ sessionStatusText }}</span>
+          </div>
+          <div class="ac-header-btns">
+            <button type="button" class="ac-btn ac-btn--primary" @click="go('/home?tempid=303')">
+              <el-icon :size="15"><EditPen /></el-icon>
+              进入编辑器
+            </button>
+            <button type="button" class="ac-btn ac-btn--outline" @click="go('/welcome')">
+              <el-icon :size="15"><House /></el-icon>
+              首页
+            </button>
+            <button type="button" class="ac-btn ac-btn--outline" @click="logout">
+              <el-icon :size="15"><SwitchButton /></el-icon>
+              退出
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <main class="ac-content">
+        <div id="ac-section-stats" class="ac-stats-row">
+          <!-- 今日额度 -->
+          <div class="ac-stat-card ac-stat-card--quota">
+            <div class="ac-stat-card__tags">
+              <span class="ac-stat-tag ac-stat-tag--orange">{{ vipBadgeText }}</span>
+              <span class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
             </div>
-            <h2>{{ displayUser.name || '未设置昵称' }}</h2>
-            <p>{{ emailText }}</p>
-            <p class="muted">ID: {{ accountIdText }}</p>
+            <div class="ac-stat-card__head">
+              <span class="ac-stat-card__title">今日额度</span>
+            </div>
+            <div class="ac-stat-card__body">
+              <div class="ac-ring-wrap">
+                <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                  <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
+                  <circle
+                    class="ac-ring-fill ac-ring-fill--orange"
+                    cx="40"
+                    cy="40"
+                    :r="ringR"
+                    :stroke-dasharray="String(ringC)"
+                    :stroke-dashoffset="String(downloadRingOffset)"
+                  />
+                </svg>
+                <div class="ac-ring-text">
+                  <span class="ac-ring-num">{{ quotaRingCenter }}</span>
+                  <span class="ac-ring-label">已使用</span>
+                </div>
+              </div>
+              <div class="ac-stat-info">
+                <div class="ac-stat-big">{{ downloadsUsedText }}</div>
+                <div class="ac-stat-desc">今日已用额度</div>
+              </div>
+            </div>
+            <button type="button" class="ac-stat-card__btn" @click="go('/home?tempid=303')">使用</button>
           </div>
 
-          <div class="status-stack">
-            <div class="status-item">
-              <span>账号类型</span>
-              <strong>{{ vipBadgeText }}</strong>
+          <!-- 上传限制 -->
+          <div class="ac-stat-card ac-stat-card--upload">
+            <div class="ac-stat-card__head">
+              <span class="ac-stat-card__title">上传限制</span>
+              <div class="ac-stat-card__ico">
+                <el-icon :size="18"><Upload /></el-icon>
+              </div>
             </div>
-            <div class="status-item">
-              <span>会员等级</span>
-              <strong>{{ center?.vip_status.vip_level ?? userStore.permissions.vip_level ?? 0 }}</strong>
+            <div class="ac-stat-card__body ac-stat-card__body--push">
+              <div class="ac-stat-info">
+                <div class="ac-stat-big">{{ maxFileSizeText }}</div>
+                <div class="ac-stat-desc">单次上传大小上限</div>
+              </div>
             </div>
-            <div class="status-item">
-              <span>会话状态</span>
-              <strong>{{ center?.account_overview.session_status || '正常' }}</strong>
+            <button type="button" class="ac-stat-card__btn" @click="toastInfo('升级会员可提升单文件上限')">
+              了解详情
+            </button>
+          </div>
+
+          <!-- 会员有效期 -->
+          <div class="ac-stat-card ac-stat-card--expiry">
+            <div class="ac-stat-card__head">
+              <span class="ac-stat-card__title">{{ vipExpireCardTitle }}</span>
+              <span v-if="effectivePermissions.is_vip && vipDaysLeft != null" class="ac-stat-tag ac-stat-tag--glass">
+                {{ vipDaysLeftTag }}
+              </span>
+            </div>
+            <div class="ac-stat-card__body">
+              <div class="ac-ring-wrap">
+                <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                  <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
+                  <circle
+                    class="ac-ring-fill ac-ring-fill--light"
+                    cx="40"
+                    cy="40"
+                    :r="ringR"
+                    :stroke-dasharray="String(ringC)"
+                    :stroke-dashoffset="String(expiryRingOffset)"
+                  />
+                </svg>
+                <div class="ac-ring-text">
+                  <span class="ac-ring-num ac-ring-num--sm">{{ expiryRingLabel }}</span>
+                </div>
+              </div>
+              <div class="ac-expiry-block">
+                <div class="ac-expiry-label">会员到期时间</div>
+                <div class="ac-expiry-days">
+                  {{ vipDaysLeftDisplay }}<span v-if="vipDaysLeftUnit" class="ac-expiry-unit">{{ vipDaysLeftUnit }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="ac-section-info" class="ac-info-row">
+          <div class="ac-info-card">
+            <div class="ac-info-card__head">
+              <div class="ac-info-card__title">
+                <el-icon :size="18"><UserFilled /></el-icon>
+                基本信息
+              </div>
+              <button type="button" class="ac-info-link" @click="toastInfo('账号绑定以统一登录中心为准')">
+                管理
+                <el-icon :size="14"><ArrowRight /></el-icon>
+              </button>
+            </div>
+            <div class="ac-info-card__body">
+              <div class="ac-info-item">
+                <div class="ac-info-item__left">
+                  <div class="ac-info-item__ico">
+                    <el-icon :size="16"><Document /></el-icon>
+                  </div>
+                  <span class="ac-info-item__label">模板管理</span>
+                </div>
+                <div class="ac-info-item__right">
+                  <span class="ac-info-item__val">{{ templateManageSummary }}</span>
+                </div>
+              </div>
+              <div class="ac-progress-wrap">
+                <div class="ac-progress-bar">
+                  <div
+                    class="ac-progress-fill"
+                    :class="effectivePermissions.allow_template_manage ? 'ac-progress-fill--green' : 'ac-progress-fill--gray'"
+                    :style="{ width: `${templateProgressPct}%` }"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <nav class="menu">
-            <button class="menu-item active" type="button">账号信息</button>
-            <button class="menu-item" type="button" @click="notifyPreparing">订单记录</button>
-            <button class="menu-item" type="button" @click="notifyPreparing">积分记录</button>
-          </nav>
-        </aside>
-
-        <section class="content">
-          <div v-if="message" class="notice">{{ message }}</div>
-
-          <section class="card metrics">
-            <article class="metric">
-              <span>每日次数</span>
-              <strong>{{ center?.quota_card.daily_limit_count ?? userStore.permissions.daily_limit_count }}</strong>
-              <em>今日可用</em>
-            </article>
-            <article class="metric">
-              <span>最大文件</span>
-              <strong>{{ prettyFileSize(center?.quota_card.max_file_size ?? userStore.permissions.max_file_size) }}</strong>
-              <em>单次上传</em>
-            </article>
-            <article class="metric">
-              <span>会话到期</span>
-              <strong>{{ center?.account_overview.expired_at || '以系统为准' }}</strong>
-              <em>登录安全</em>
-            </article>
-          </section>
-
-          <section class="card">
-            <h3>基础信息</h3>
-            <div class="rows">
-              <div class="row">
-                <label>账号来源</label>
-                <div>{{ displayUser.provider || '统一登录' }}</div>
+          <div class="ac-info-card ac-info-card--wide">
+            <div class="ac-info-card__head">
+              <div class="ac-info-card__title">
+                <el-icon :size="18"><Lock /></el-icon>
+                功能权限
               </div>
-              <div class="row">
-                <label>登录邮箱</label>
-                <div>{{ emailText }}</div>
+              <button type="button" class="ac-info-link" @click="scrollToId('ac-section-quick')">
+                常用入口
+                <el-icon :size="14"><ArrowRight /></el-icon>
+              </button>
+            </div>
+            <div class="ac-info-card__body">
+              <div class="ac-perm-list">
+                <div v-for="row in permissionRows" :key="row.key" class="ac-perm-item">
+                  <div class="ac-perm-item__left">
+                    <div :class="['ac-perm-dot', row.on ? 'is-on' : 'is-off']" />
+                    <div>
+                      <div class="ac-perm-name">{{ row.label }}</div>
+                      <div :class="['ac-perm-status', { 'is-on': row.on }]">{{ row.desc }}</div>
+                    </div>
+                  </div>
+                  <label
+                    class="ac-toggle"
+                    :title="row.on ? '由后台配置' : '由后台配置'"
+                    @click.prevent="toastInfo('权限由管理员在后台配置，此处仅展示状态')"
+                  >
+                    <input type="checkbox" :checked="row.on" disabled />
+                    <span class="ac-toggle-slider" />
+                  </label>
+                </div>
               </div>
-              <div class="row">
-                <label>会员到期</label>
-                <div>{{ center?.vip_status.vip_expire_time || '未设置' }}</div>
+              <div id="ac-section-quick" class="ac-quick-entries">
+                <button
+                  v-for="action in quickActions.slice(0, 3)"
+                  :key="action.path"
+                  type="button"
+                  :class="['ac-quick-entry', quickToneClass(action.path)]"
+                  @click="openPath(action.path)"
+                >
+                  <el-icon :size="20"><component :is="quickActionIcon(action.path)" /></el-icon>
+                  {{ action.label }}
+                </button>
               </div>
             </div>
-          </section>
+          </div>
+        </div>
 
-          <section class="card">
-            <h3>功能权限</h3>
-            <div class="chips">
-              <span class="chip">{{ featureText('AI 工具', center?.feature_permission_card.allow_ai_tools ?? userStore.permissions.allow_ai_tools) }}</span>
-              <span class="chip">{{ featureText('批量功能', center?.feature_permission_card.allow_batch ?? userStore.permissions.allow_batch) }}</span>
-              <span class="chip">{{ featureText('无水印导出', center?.feature_permission_card.allow_no_watermark ?? userStore.permissions.allow_no_watermark) }}</span>
-              <span class="chip">{{ featureText('模板管理', center?.feature_permission_card.allow_template_manage ?? userStore.permissions.allow_template_manage) }}</span>
+        <div id="ac-section-recent" class="ac-info-card ac-recent-card">
+          <div class="ac-info-card__head">
+            <div class="ac-info-card__title">
+              <el-icon :size="18"><Clock /></el-icon>
+              最近记录
             </div>
-          </section>
-
-          <section class="card">
-            <h3>常用入口</h3>
-            <div class="quick-actions">
-              <el-button
-                v-for="action in center?.quick_actions || defaultQuickActions"
-                :key="action.path"
-                plain
-                @click="openPath(action.path)"
-              >
-                {{ action.label }}
-              </el-button>
-            </div>
-          </section>
-
-          <section class="card">
-            <h3>最近记录</h3>
-            <ul v-if="center?.recent_records?.length" class="record-list">
-              <li v-for="(item, index) in center.recent_records.slice(0, 5)" :key="index">{{ normalizeRecordText(item) }}</li>
+          </div>
+          <div class="ac-info-card__body">
+            <ul v-if="recentRecords.length" class="ac-activity">
+              <li v-for="(item, index) in recentRecords" :key="index" class="ac-activity__item">
+                <span :class="['ac-activity__dot', activityDotClass(item)]" />
+                <div class="ac-activity__content">
+                  <div class="ac-activity__title">{{ normalizeRecordText(item) }}</div>
+                  <div class="ac-activity__meta">最近同步</div>
+                </div>
+              </li>
             </ul>
-            <p v-else class="muted">暂无记录</p>
-          </section>
-        </section>
+            <p v-else class="ac-empty">当前没有最近记录</p>
+          </div>
+        </div>
       </main>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
+import type { Component } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import * as accountApi from '@/api/account.ts'
-import useUserStore from '@/store/base/user.ts'
+import { ElMessage } from 'element-plus'
+import {
+  ArrowRight,
+  Clock,
+  Document,
+  EditPen,
+  DataBoard,
+  House,
+  Lock,
+  MagicStick,
+  PictureFilled,
+  Promotion,
+  Right,
+  Star,
+  SwitchButton,
+  Upload,
+  User,
+  UserFilled,
+} from '@element-plus/icons-vue'
+import * as accountApi from '@/api/account'
+import useUserStore from '@/store/base/user'
 import useNotification from '@/common/methods/notification'
-import type { AccountCenterResult } from '@/api/account'
+import type { AccountCenterResult, AccountPermissions } from '@/api/account'
+
+type QuickAction = { label: string; path: string }
 
 const router = useRouter()
 const userStore = useUserStore()
 const center = ref<AccountCenterResult | null>(null)
-const message = ref('')
 
-const defaultQuickActions = [
-  { label: '进入编辑器', path: '/home?tempid=303' },
+const ringR = 32
+const ringC = 2 * Math.PI * ringR
+
+const defaultQuickActions: QuickAction[] = [
   { label: 'AI 生成海报', path: '/ai-poster' },
-  { label: '模板页', path: '/welcome' },
+  { label: '模板库', path: '/home?tempid=303' },
+  { label: '我的作品', path: '/home?tempid=303' },
+  { label: '进入编辑器', path: '/home?tempid=303' },
+  { label: '自由绘制', path: '/home' },
+  { label: '导入 PSD', path: '/psd' },
 ]
 
 const displayUser = computed(() => ({
-  id: center.value?.account_overview.user.id || userStore.user.id || null,
-  name: center.value?.account_overview.user.name || userStore.user.name || '',
-  avatar: center.value?.account_overview.user.avatar || userStore.user.avatar || '',
-  email: center.value?.account_overview.user.email || userStore.user.email || '',
-  provider: center.value?.account_overview.user.provider || userStore.user.provider || '',
+  id: center.value?.account_overview?.user?.id || userStore.user.id || null,
+  name: center.value?.account_overview?.user?.name || userStore.user.name || '',
+  avatar: center.value?.account_overview?.user?.avatar || userStore.user.avatar || '',
+  email: center.value?.account_overview?.user?.email || userStore.user.email || '',
 }))
 
-const userInitial = computed(() => (displayUser.value.name || '我').slice(0, 1))
-const emailText = computed(() => displayUser.value.email || '未绑定邮箱')
-const accountIdText = computed(() => (displayUser.value.id ? String(displayUser.value.id) : '未分配'))
-const vipBadgeText = computed(() => (center.value?.vip_status.is_vip || userStore.permissions.is_vip ? 'VIP 用户' : '免费用户'))
+const effectivePermissions = computed<AccountPermissions>(() => {
+  if (center.value?.feature_permission_card) {
+    return {
+      is_vip: center.value.vip_status?.is_vip ?? userStore.permissions.is_vip,
+      vip_level: center.value.vip_status?.vip_level ?? userStore.permissions.vip_level,
+      vip_expire_time: center.value.vip_status?.vip_expire_time ?? userStore.permissions.vip_expire_time,
+      daily_limit_count: center.value.quota_card?.daily_limit_count ?? userStore.permissions.daily_limit_count,
+      max_file_size: center.value.quota_card?.max_file_size ?? userStore.permissions.max_file_size,
+      allow_batch: center.value.feature_permission_card.allow_batch,
+      allow_no_watermark: center.value.feature_permission_card.allow_no_watermark,
+      allow_ai_tools: center.value.feature_permission_card.allow_ai_tools,
+      allow_template_manage: center.value.feature_permission_card.allow_template_manage,
+    }
+  }
+  return {
+    is_vip: userStore.permissions.is_vip,
+    vip_level: userStore.permissions.vip_level,
+    vip_expire_time: userStore.permissions.vip_expire_time,
+    daily_limit_count: userStore.permissions.daily_limit_count,
+    max_file_size: userStore.permissions.max_file_size,
+    allow_batch: userStore.permissions.allow_batch,
+    allow_no_watermark: userStore.permissions.allow_no_watermark,
+    allow_ai_tools: userStore.permissions.allow_ai_tools,
+    allow_template_manage: userStore.permissions.allow_template_manage,
+  }
+})
 
-function featureText(label: string, enabled: boolean) {
-  return `${label}：${enabled ? '已开通' : '未开通'}`
+const userInitial = computed(() => (displayUser.value.name || '用').slice(0, 1))
+const vipBadgeText = computed(() => (effectivePermissions.value.is_vip ? '会员' : '免费版'))
+const vipLevelText = computed(() => String(effectivePermissions.value.vip_level ?? 0))
+const sessionStatusText = computed(
+  () => mapSessionStatusToZh(center.value?.account_overview?.session_status) || '在线',
+)
+const quotaSubTag = computed(() => {
+  const limit = dailyLimit.value
+  if (limit <= 0) return '不限次'
+  return `每日 ${limit} 次`
+})
+
+const downloadsUsed = computed(() => {
+  if (userStore.downloadsTodayUsed != null) return userStore.downloadsTodayUsed
+  return center.value?.quota_card?.downloads_today_used ?? 0
+})
+
+const dailyLimit = computed(() => Number(effectivePermissions.value.daily_limit_count ?? 0))
+
+const downloadPercent = computed(() => {
+  const limit = dailyLimit.value
+  const used = downloadsUsed.value
+  if (limit <= 0) return null
+  return Math.min(100, Math.round((used / limit) * 100))
+})
+
+const downloadRingOffset = computed(() => {
+  const p = downloadPercent.value
+  if (p === null) return ringC * 0.4
+  return ringC - (p / 100) * ringC
+})
+
+const quotaRingCenter = computed(() => {
+  const limit = dailyLimit.value
+  const used = downloadsUsed.value
+  if (limit <= 0) return String(used)
+  return `${used}/${limit}`
+})
+
+const downloadsUsedText = computed(() => {
+  const limit = dailyLimit.value
+  const used = downloadsUsed.value
+  if (limit <= 0) return `${used}（不限次）`
+  return `${used} / ${limit}`
+})
+
+const maxFileSizeText = computed(() => prettyFileSize(effectivePermissions.value.max_file_size ?? 0))
+
+const vipExpireCardTitle = computed(() => (effectivePermissions.value.is_vip ? '会员有效期' : '会员状态'))
+
+const vipExpireRaw = computed(() => effectivePermissions.value.vip_expire_time)
+
+const vipDaysLeft = computed(() => {
+  const raw = vipExpireRaw.value
+  if (raw == null || !String(raw).trim()) return null
+  const d = new Date(String(raw).trim())
+  if (Number.isNaN(d.getTime())) return null
+  return Math.ceil((d.getTime() - Date.now()) / 86400000)
+})
+
+const vipDaysLeftDisplay = computed(() => {
+  if (!effectivePermissions.value.is_vip) return '—'
+  const n = vipDaysLeft.value
+  if (n === null) return '—'
+  if (n <= 0) return '已到期'
+  return String(n)
+})
+
+const vipDaysLeftUnit = computed(() => {
+  if (!effectivePermissions.value.is_vip) return ''
+  const n = vipDaysLeft.value
+  if (n === null || n <= 0) return ''
+  return ' 天'
+})
+
+const vipDaysLeftTag = computed(() => {
+  const n = vipDaysLeft.value
+  if (n == null) return '会员'
+  if (n <= 0) return '已到期'
+  return `剩余${n}天`
+})
+
+const expiryRingLabel = computed(() => (effectivePermissions.value.is_vip ? '倒计时' : '未开通'))
+
+const expiryRingOffset = computed(() => {
+  if (!effectivePermissions.value.is_vip) return ringC * 0.75
+  const n = vipDaysLeft.value
+  if (n == null) return ringC * 0.5
+  if (n <= 0) return 0
+  const pct = Math.min(100, Math.max(5, (n / 30) * 100))
+  return ringC - (pct / 100) * ringC
+})
+
+const templateManageSummary = computed(() =>
+  effectivePermissions.value.allow_template_manage ? '已授权管理模板' : '未开通模板管理',
+)
+
+const templateProgressPct = computed(() => (effectivePermissions.value.allow_template_manage ? 100 : 28))
+
+const quickActions = computed<QuickAction[]>(() => {
+  const list = center.value?.quick_actions?.filter((item) => item?.label && item?.path) || []
+  return list.length ? list : defaultQuickActions
+})
+
+const recentRecords = computed(() => center.value?.recent_records?.slice(0, 5) || [])
+
+const permissionRows = computed(() => {
+  const p = effectivePermissions.value
+  const limit = dailyLimit.value
+  const aiDesc = p.allow_ai_tools
+    ? limit > 0
+      ? `已开启 · 每日 ${limit} 次`
+      : '已开启'
+    : '未开启'
+  return [
+    {
+      key: 'ai',
+      label: 'AI 工具',
+      desc: aiDesc,
+      on: !!p.allow_ai_tools,
+    },
+    {
+      key: 'wm',
+      label: '无水印导出',
+      desc: p.allow_no_watermark ? '已开启' : '需升级会员',
+      on: !!p.allow_no_watermark,
+    },
+  ]
+})
+
+function quickActionIcon(path: string): Component {
+  const p = String(path || '')
+  if (p.includes('ai-poster')) return MagicStick
+  if (p.includes('psd')) return PictureFilled
+  if (p.includes('tempid')) return EditPen
+  if (p === '/home' || p.startsWith('/home')) return House
+  return Promotion
+}
+
+function quickToneClass(path: string): string {
+  const p = String(path || '')
+  if (p.includes('ai-poster')) return ''
+  if (p.includes('tempid') || p.includes('home')) return 'ac-quick-entry--green'
+  return ''
+}
+
+function activityDotClass(record: unknown): string {
+  const t = normalizeRecordText(record)
+  if (t.includes('下载')) return 'is-download'
+  if (t.includes('导出')) return 'is-export'
+  return 'is-edit'
+}
+
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function prettyFileSize(value: number) {
@@ -173,12 +511,31 @@ function prettyFileSize(value: number) {
   return `${value} B`
 }
 
+function mapSessionStatusToZh(status: string | null | undefined): string {
+  if (status == null || !String(status).trim()) return ''
+  const key = String(status).trim().toLowerCase()
+  const map: Record<string, string> = {
+    active: '在线',
+    valid: '有效',
+    expired: '已过期',
+    invalid: '无效',
+    revoked: '已撤销',
+    pending: '待生效',
+    inactive: '未激活',
+  }
+  return map[key] ?? String(status).trim()
+}
+
 function normalizeRecordText(record: any) {
   if (typeof record === 'string') return record
   if (record?.title) return String(record.title)
   if (record?.name) return String(record.name)
   if (record?.id) return `记录 #${record.id}`
-  return '已更新一条记录'
+  return '已同步一条新记录'
+}
+
+function go(path: string) {
+  router.push(path)
 }
 
 function openPath(path: string) {
@@ -189,21 +546,20 @@ function openPath(path: string) {
   router.push(path)
 }
 
-function notifyPreparing() {
-  useNotification('功能准备中', '该模块正在完善中，后续会开放。', { type: 'info' })
+function toastInfo(msg: string) {
+  ElMessage.info(msg)
 }
 
-async function load() {
+async function loadCenter() {
   if (!userStore.online) return
   try {
-    const result = await accountApi.getAccountCenter()
-    if ((result as any).code === 400) {
-      message.value = '个人中心暂时无法打开，请稍后再试。'
-      return
+    center.value = await accountApi.getAccountCenter()
+    const used = center.value?.quota_card?.downloads_today_used
+    if (typeof used === 'number') {
+      userStore.setDownloadsTodayUsed(used)
     }
-    center.value = result
   } catch {
-    message.value = ''
+    center.value = null
   }
 }
 
@@ -212,304 +568,932 @@ async function logout() {
     await accountApi.logout()
     userStore.clearAuthSession()
     center.value = null
-    message.value = ''
     useNotification('已退出登录', '你的账号已安全退出。', { type: 'success' })
+    router.replace('/welcome')
   } catch {
-    useNotification('退出失败', '暂时无法退出，请稍后再试。', { type: 'warning' })
+    useNotification('退出登录失败', '请检查网络后重试。', { type: 'warning' })
   }
 }
 
-onMounted(load)
+onMounted(loadCenter)
 </script>
 
 <style scoped lang="less">
-.account-page {
-  --bg: #f4f6fb;
-  --card: #ffffff;
-  --line: #e7ecf4;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --primary: #2563eb;
+/* 设计变量对齐 Desktop 参考稿 account-center-optimized.html */
+.ac-page {
+  --ac-primary: #5b5fc7;
+  --ac-primary-light: #8b8fe8;
+  --ac-primary-50: #f0f0fb;
+  --ac-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --ac-gradient-btn: linear-gradient(90deg, #c084fc, #6366f1);
+  --ac-success: #52c41a;
+  --ac-success-light: #f6ffed;
+  --ac-bg: #f0f2f5;
+  --ac-card: #ffffff;
+  --ac-text: #1f2937;
+  --ac-text-2: #6b7280;
+  --ac-text-3: #9ca3af;
+  --ac-border: #e5e7eb;
+  --ac-border-light: #f3f4f6;
+  --ac-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --ac-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ac-radius: 12px;
+  --ac-radius-sm: 8px;
+
   min-height: 100vh;
-  padding: 24px;
-  background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 38%), var(--bg);
-}
-
-.account-shell {
-  max-width: 1180px;
-  margin: 0 auto;
-}
-
-.topbar {
   display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: flex-start;
-  margin-bottom: 14px;
+  background: var(--ac-bg);
+  color: var(--ac-text);
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-.topbar h1 {
-  margin: 0;
-  font-size: 30px;
-  color: var(--ink);
+.ac-page--guest {
+  flex-direction: column;
 }
 
-.topbar p {
-  margin: 6px 0 0;
-  color: var(--muted);
-}
-
-.topbar-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.empty-card {
-  background: var(--card);
-  border-radius: 16px;
-  padding: 28px;
-  border: 1px solid var(--line);
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 14px;
-}
-
-.side-panel {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px;
-  height: fit-content;
-  position: sticky;
-  top: 20px;
-}
-
-.profile {
-  text-align: center;
-}
-
-.avatar {
-  width: 78px;
-  height: 78px;
-  margin: 0 auto;
-  border-radius: 50%;
-  overflow: hidden;
+.ac-guest-body {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-  color: #1e293b;
-  font-size: 30px;
+  padding: 40px 20px;
+}
+
+/* ========== 侧栏 ========== */
+.ac-sidebar {
+  width: 240px;
+  min-height: 100vh;
+  background: var(--ac-card);
+  border-right: 1px solid var(--ac-border-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 20px 24px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.ac-sidebar-logo {
+  font-size: 18px;
   font-weight: 700;
+  color: var(--ac-primary);
+  margin-bottom: 32px;
+  align-self: flex-start;
+  padding-left: 4px;
+  text-decoration: none;
 }
 
-.avatar img {
+.ac-sidebar-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c7d2fe, #a5b4fc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ac-primary);
+  margin-bottom: 12px;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.ac-sidebar-username {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ac-text);
+  margin-bottom: 16px;
+  text-align: center;
+  word-break: break-all;
+}
+
+.ac-sidebar-upgrade {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  padding: 10px 0;
+  background: var(--ac-gradient-btn);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+  }
 }
 
-.profile h2 {
-  margin: 10px 0 0;
-  color: var(--ink);
+.ac-sidebar-nav {
+  list-style: none;
+  width: 100%;
+  margin-top: 32px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: var(--ac-radius-sm);
+    font-size: 14px;
+    color: var(--ac-text-2);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--ac-border-light);
+      color: var(--ac-text);
+    }
+
+    &.is-active {
+      background: var(--ac-primary-50);
+      color: var(--ac-primary);
+      font-weight: 500;
+    }
+  }
 }
 
-.profile p {
-  margin: 4px 0 0;
-  color: var(--muted);
+.ac-main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.status-stack {
-  margin-top: 14px;
-  display: grid;
+/* ========== 页头 ========== */
+.ac-page-header {
+  padding: 24px 28px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ac-page-header__left h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ac-text);
+  margin: 0 0 4px;
+}
+
+.ac-page-header__left p {
+  font-size: 13px;
+  color: var(--ac-text-3);
+  margin: 0;
+}
+
+.ac-page-header__right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ac-pills {
+  display: flex;
   gap: 8px;
 }
 
-.status-item {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #fafcff;
-}
-
-.status-item span {
-  display: block;
-  color: var(--muted);
+.ac-pill {
+  padding: 4px 12px;
+  border-radius: 14px;
   font-size: 12px;
+  font-weight: 500;
 }
 
-.status-item strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--ink);
+.ac-pill--gray {
+  background: var(--ac-border-light);
+  color: var(--ac-text-2);
 }
 
-.menu {
-  margin-top: 14px;
-  display: grid;
+.ac-pill--green {
+  background: var(--ac-success-light);
+  color: var(--ac-success);
+}
+
+.ac-header-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ac-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
-}
-
-.menu-item {
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  text-align: left;
-  color: #334155;
+  padding: 8px 18px;
+  border-radius: var(--ac-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-family: inherit;
+  white-space: nowrap;
 }
 
-.menu-item.active {
-  border-color: rgba(37, 99, 235, 0.35);
-  background: #eff6ff;
-  color: var(--primary);
+.ac-btn--primary {
+  background: var(--ac-primary);
+  color: #fff;
+
+  &:hover {
+    background: #4a4eb5;
+    box-shadow: var(--ac-shadow-md);
+  }
+}
+
+.ac-btn--outline {
+  background: #fff;
+  color: var(--ac-text-2);
+  border: 1px solid var(--ac-border);
+
+  &:hover {
+    border-color: var(--ac-text-3);
+    color: var(--ac-text);
+  }
+}
+
+/* ========== 主内容 ========== */
+.ac-content {
+  padding: 20px 28px 40px;
+  flex: 1;
+}
+
+.ac-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ac-stat-card {
+  border-radius: var(--ac-radius);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.ac-stat-card__tags {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 55%;
+}
+
+.ac-stat-tag {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(4px);
+}
+
+.ac-stat-tag--orange {
+  background: rgba(255, 149, 0, 0.9);
+}
+
+.ac-stat-tag--green {
+  background: rgba(82, 196, 26, 0.9);
+}
+
+.ac-stat-tag--glass {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.ac-stat-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ac-stat-card__title {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.ac-stat-card__ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac-stat-card__body {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.ac-stat-card__body--push {
+  margin-top: auto;
+}
+
+.ac-stat-card--quota {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.ac-stat-card--upload {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+}
+
+.ac-stat-card--expiry {
+  background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+}
+
+.ac-ring-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.ac-ring-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.ac-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 6;
+}
+
+.ac-ring-fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s ease;
+}
+
+.ac-ring-fill--orange {
+  stroke: #ff9500;
+}
+
+.ac-ring-fill--light {
+  stroke: rgba(255, 255, 255, 0.95);
+}
+
+.ac-ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac-ring-num {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ac-ring-num--sm {
+  font-size: 13px;
   font-weight: 600;
 }
 
-.content {
+.ac-ring-label {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.ac-stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ac-stat-big {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ac-stat-desc {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.ac-stat-card__btn {
+  align-self: flex-start;
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  font-family: inherit;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.35);
+  }
+}
+
+.ac-expiry-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.ac-expiry-label {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.ac-expiry-days {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ac-expiry-unit {
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* ========== 信息行 ========== */
+.ac-info-row {
   display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 16px;
+}
+
+.ac-info-card {
+  background: var(--ac-card);
+  border-radius: var(--ac-radius);
+  border: 1px solid var(--ac-border-light);
+  box-shadow: var(--ac-shadow-sm);
+  overflow: hidden;
+}
+
+.ac-info-card--wide {
+  min-width: 0;
+}
+
+.ac-recent-card {
+  margin-top: 16px;
+}
+
+.ac-info-card__head {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ac-border-light);
+}
+
+.ac-info-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ac-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ac-info-link {
+  font-size: 12px;
+  color: var(--ac-primary);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--ac-primary-light);
+  }
+}
+
+.ac-info-card__body {
+  padding: 16px 20px 20px;
+}
+
+.ac-info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.ac-info-item__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ac-info-item__ico {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ac-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-border-light);
+  color: var(--ac-text-3);
+}
+
+.ac-info-item__label {
+  font-size: 13px;
+  color: var(--ac-text-2);
+}
+
+.ac-info-item__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ac-info-item__val {
+  font-size: 13px;
+  color: var(--ac-text-3);
+}
+
+.ac-progress-wrap {
+  padding: 0 0 4px;
+}
+
+.ac-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--ac-border-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ac-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s ease;
+}
+
+.ac-progress-fill--green {
+  background: var(--ac-success);
+}
+
+.ac-progress-fill--gray {
+  background: var(--ac-border);
+}
+
+/* 权限列表 */
+.ac-perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ac-perm-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--ac-radius-sm);
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--ac-border-light);
+  }
+}
+
+.ac-perm-item__left {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.notice {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff7ed;
-  color: #c2410c;
+.ac-perm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.is-on {
+    background: var(--ac-success);
+  }
+
+  &.is-off {
+    background: var(--ac-border);
+  }
 }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px;
+.ac-perm-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ac-text);
 }
 
-.card h3 {
-  margin: 0 0 12px;
-  color: var(--ink);
+.ac-perm-status {
+  font-size: 11px;
+  color: var(--ac-text-3);
+  margin-top: 1px;
+
+  &.is-on {
+    color: var(--ac-success);
+  }
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.ac-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+}
+
+.ac-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #d1d5db;
+  border-radius: 11px;
+  transition: 0.2s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.ac-toggle input:checked + .ac-toggle-slider {
+  background: var(--ac-success);
+}
+
+.ac-toggle input:checked + .ac-toggle-slider::before {
+  transform: translateX(18px);
+}
+
+.ac-toggle input:disabled + .ac-toggle-slider {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 快捷入口 */
+.ac-quick-entries {
+  display: flex;
   gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ac-border-light);
+  flex-wrap: wrap;
 }
 
-.metric {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px;
-  background: #fafcff;
-}
-
-.metric span {
-  display: block;
-  color: var(--muted);
+.ac-quick-entry {
+  flex: 1;
+  min-width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: var(--ac-radius-sm);
+  border: 1px solid var(--ac-border-light);
+  background: #fff;
   font-size: 12px;
+  color: var(--ac-text-2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: var(--ac-primary);
+    color: var(--ac-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--ac-shadow-sm);
+  }
 }
 
-.metric strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--ink);
+.ac-quick-entry--green:hover {
+  border-color: var(--ac-success);
+  color: var(--ac-success);
+}
+
+/* 最近记录 */
+.ac-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ac-activity__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ac-border-light);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.ac-activity__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ac-text-3);
+
+  &.is-download {
+    background: #4a90e2;
+  }
+
+  &.is-export {
+    background: #764ba2;
+  }
+
+  &.is-edit {
+    background: var(--ac-success);
+  }
+}
+
+.ac-activity__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-activity__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ac-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-activity__meta {
+  font-size: 12px;
+  color: var(--ac-text-3);
+  margin-top: 2px;
+}
+
+.ac-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--ac-text-3);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* 登录卡片 */
+.ac-login-card {
+  max-width: 420px;
+  width: 100%;
+  background: var(--ac-card);
+  border-radius: var(--ac-radius);
+  border: 1px solid var(--ac-border-light);
+  box-shadow: var(--ac-shadow-md);
+  padding: 36px 28px;
+  text-align: center;
+}
+
+.ac-login-card__icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 18px;
+  border-radius: var(--ac-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ac-primary);
+  background: var(--ac-primary-50);
+  border: 1px solid var(--ac-border-light);
+}
+
+.ac-login-card h2 {
+  margin: 0;
   font-size: 22px;
 }
 
-.metric em {
-  display: block;
-  margin-top: 2px;
-  color: #94a3b8;
-  font-style: normal;
-  font-size: 12px;
+.ac-login-card p {
+  margin: 10px 0 22px;
+  color: var(--ac-text-2);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.rows {
-  display: grid;
-  gap: 8px;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.row:last-child {
-  border-bottom: 0;
-}
-
-.row label {
-  color: var(--muted);
-}
-
-.row div {
-  color: var(--ink);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: #334155;
-  background: #f1f5f9;
-}
-
-.quick-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.record-list {
-  margin: 0;
-  padding-left: 16px;
-  color: #475569;
-  line-height: 1.8;
-}
-
-.muted {
-  color: #94a3b8;
-}
-
-@media (max-width: 980px) {
-  .layout {
+@media (max-width: 1100px) {
+  .ac-stats-row {
     grid-template-columns: 1fr;
   }
 
-  .side-panel {
-    position: static;
-  }
-
-  .metrics {
+  .ac-info-row {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
-  .account-page {
-    padding: 14px;
-  }
-
-  .topbar {
+@media (max-width: 900px) {
+  .ac-page:not(.ac-page--guest) {
     flex-direction: column;
   }
 
-  .topbar-actions {
+  .ac-sidebar {
+    width: 100%;
+    height: auto;
+    min-height: unset;
+    position: relative;
+    flex-direction: row;
     flex-wrap: wrap;
+    justify-content: center;
+    padding: 20px 16px;
+    gap: 12px;
+
+    .ac-sidebar-logo {
+      width: 100%;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .ac-sidebar-nav {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .ac-sidebar-upgrade {
+      width: auto;
+      padding: 10px 24px;
+    }
+  }
+
+  .ac-quick-entries {
+    flex-direction: column;
+  }
+
+  .ac-quick-entry {
+    flex-direction: row;
+    justify-content: center;
   }
 }
 </style>

@@ -79,6 +79,17 @@ function getSafeText(text, fallback) {
     const value = String(text || '').trim();
     return value || fallback;
 }
+/** 去掉误写入画布上的「用途：引流」等参数回声或占位说明 */
+export function stripInternalPromptEcho(text) {
+    let s = String(text || '').trim();
+    if (!s)
+        return '';
+    s = s.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(主题|用途|行业|风格|尺寸|补充信息)[：:]/.test(l)).join('\n');
+    s = s.replace(/主视觉预览图[/／、\s]*氛围图/g, '');
+    s = s.replace(/(?:^|[\s\u3000；;，,])(主题|用途|行业|风格|尺寸)[：:]\s*[^\s\n\u3000；;，,。]{1,32}/g, ' ');
+    s = s.replace(/\s{2,}/g, ' ').trim();
+    return s;
+}
 function getBackgroundGradient(palette) {
     return `linear-gradient(135deg, ${palette.background} 0%, ${palette.secondary} 55%, ${palette.primary} 100%)`;
 }
@@ -125,9 +136,16 @@ function makeQrcodeWidget(name, overrides) {
     }, overrides);
 }
 function estimateTextHeight(text, fontSize, width) {
-    const charsPerLine = Math.max(8, Math.floor(width / Math.max(fontSize * 0.62, 1)));
-    const lines = Math.max(1, Math.ceil(getSafeText(text, '').length / charsPerLine));
-    return Math.round(fontSize * getLineHeight(fontSize) * lines + fontSize * 0.6);
+    const t = getSafeText(text, '');
+    if (!t.length)
+        return Math.round(fontSize * getLineHeight(fontSize) + fontSize * 0.45);
+    const cjkCount = (t.match(/[\u3000-\u9FFF\uFF00-\uFFEF]/g) || []).length;
+    const cjkHeavy = cjkCount >= Math.max(1, t.length * 0.35);
+    // 拉丁字母约 0.62em 宽；中文等全角字更接近 1em，沿用 0.62 会低估行数导致块高度过小、与下一层文案重叠
+    const avgCharPx = cjkHeavy ? Math.max(fontSize * 0.98, 12) : Math.max(fontSize * 0.62, 10);
+    const charsPerLine = Math.max(3, Math.floor(Math.max(1, width) / avgCharPx));
+    const lines = Math.max(1, Math.ceil(t.length / charsPerLine));
+    return Math.round(fontSize * getLineHeight(fontSize) * lines + fontSize * 0.72);
 }
 function fitTitleFont(text, width, height, baseFont) {
     let fontSize = baseFont;
@@ -148,17 +166,107 @@ function splitBodyLines(body, maxLines) {
     }
     return out;
 }
+function widgetTextBottom(w) {
+    if (!w)
+        return 0;
+    const est = Math.max(Number(w.height) || 0, estimateTextHeight(String(w.text || ''), Number(w.fontSize) || 20, Number(w.width) || 400));
+    return w.top + est;
+}
+/** 按主标题→副标题→正文→列表→CTA 顺序压实垂直间距，避免估算误差导致叠字 */
+function reflowAiTextStack(widgets, pageHeight) {
+    const gap = Math.round(pageHeight * 0.026);
+    let cursor = null;
+    const apply = (w) => {
+        if (!w)
+            return;
+        let est = Math.max(Number(w.height) || 0, estimateTextHeight(String(w.text || ''), Number(w.fontSize) || 20, Number(w.width) || 400));
+        if (w.name === 'ai_title' || w.name === 'ai_slogan')
+            est = Math.ceil(est * 1.14);
+        w.height = Math.round(est);
+        if (w.record)
+            w.record.height = Math.round(est);
+        if (cursor === null) {
+            cursor = w.top + est + gap;
+            return;
+        }
+        if (w.top < cursor)
+            w.top = Math.round(cursor);
+        cursor = w.top + est + gap;
+    };
+    apply(widgets.find((x) => x.name === 'ai_title'));
+    apply(widgets.find((x) => x.name === 'ai_slogan'));
+    apply(widgets.find((x) => x.name === 'ai_body'));
+    widgets
+        .filter((x) => x.name && x.name.startsWith('ai_list_'))
+        .sort((a, b) => (Number(String(a.name).split('_').pop()) || 0) - (Number(String(b.name).split('_').pop()) || 0))
+        .forEach((w) => apply(w));
+    const cta = widgets.find((x) => x.name === 'ai_cta');
+    if (cta) {
+        const cEst = Math.max(Number(cta.height) || 0, Math.round(Number(cta.fontSize) * 2.2));
+        cta.height = cEst;
+        if (cta.record)
+            cta.record.height = cEst;
+        if (cursor != null && cta.top < cursor)
+            cta.top = Math.min(Math.round(cursor), pageHeight - cEst - gap * 6);
+        cursor = cta.top + cEst + gap;
+    }
+}
+function aiTextStackBottom(widgets) {
+    let max = 0;
+    ['ai_title', 'ai_slogan', 'ai_body'].forEach((name) => {
+        const w = widgets.find((x) => x.name === name);
+        if (w)
+            max = Math.max(max, widgetTextBottom(w));
+    });
+    widgets.filter((x) => x.name && x.name.startsWith('ai_list_')).forEach((w) => {
+        max = Math.max(max, widgetTextBottom(w));
+    });
+    const cta = widgets.find((x) => x.name === 'ai_cta');
+    if (cta)
+        max = Math.max(max, widgetTextBottom(cta));
+    return max;
+}
+/** 去掉副标题里与主标题重复的开头/前缀，避免两行大字叠在同一视觉区 */
+export function dedupePosterTitleSlogan(title, slogan) {
+    const rawS = getSafeText(slogan, '');
+    const t = getSafeText(title, '').trim();
+    let s = rawS.trim();
+    if (t && s) {
+        if (s.startsWith(t)) {
+            s = s.slice(t.length).replace(/^[\s，,。、；;:：]+/u, '').trim();
+        }
+        else {
+            const idx = s.indexOf(t);
+            if (idx >= 0 && idx <= 10) {
+                s = (s.slice(0, idx) + s.slice(idx + t.length)).replace(/^[\s，,。、；;:：]+/u, '').trim();
+            }
+        }
+        if (s.length < 4 && rawS.trim())
+            s = rawS.trim();
+    }
+    return { title: t, slogan: s };
+}
 export function buildPosterLayout({ input, result }) {
     const width = result.size?.width || defaultSizes[2].width;
     const height = result.size?.height || defaultSizes[2].height;
     const palette = result.palette;
-    const marginX = Math.round(width * 0.085);
-    const marginTop = Math.round(height * 0.08);
-    const safeBottom = Math.round(height * 0.085);
+    const head = dedupePosterTitleSlogan(result.title, result.slogan);
+    const layoutTitle = stripInternalPromptEcho(head.title) || getSafeText(result.title, '').trim();
+    const layoutSlogan = stripInternalPromptEcho(head.slogan) || getSafeText(result.slogan, '').trim();
+    const layoutBody = stripInternalPromptEcho(result.body) || getSafeText(result.body, '补充描述文案');
+    const marginX = Math.round(width * 0.088);
+    const marginTop = Math.round(height * 0.082);
+    const safeBottom = Math.round(height * 0.088);
     const sizeProfile = getSizeProfile(width, height);
     const planFamily = result.designPlan?.layoutFamily;
     const selectedFamily = resolveLayoutFamily(planFamily, width, height);
     const isWide = width > height;
+    const includeHeroLayer = Boolean(String(result.hero?.imageUrl || '').trim());
+    let heroWidth = 0;
+    let heroHeight = 0;
+    let heroTop = 0;
+    let heroLeft = 0;
+    if (includeHeroLayer) {
     const heroRatioW = selectedFamily === 'split-editorial' ? 0.46 : selectedFamily === 'grid-product' ? 0.58 : selectedFamily === 'magazine-cover' ? 0.92 : isWide ? 0.36 : 0.78;
     let heroHRatio = selectedFamily === 'split-editorial' ? 0.56 : selectedFamily === 'grid-product' ? 0.28 : selectedFamily === 'magazine-cover' ? 0.52 : isWide ? 0.58 : 0.34;
     if (sizeProfile === 'banner') {
@@ -167,10 +275,10 @@ export function buildPosterLayout({ input, result }) {
     if (sizeProfile === 'square') {
         heroHRatio = Math.max(heroHRatio, 0.42);
     }
-    let heroWidth = Math.round(width * heroRatioW);
-    let heroHeight = Math.round(height * heroHRatio);
-    let heroTop = selectedFamily === 'premium-offer' ? Math.round(height * 0.18) : selectedFamily === 'magazine-cover' ? Math.round(height * 0.06) : isWide ? Math.round(height * 0.16) : Math.round(height * 0.26);
-    let heroLeft = selectedFamily === 'split-editorial'
+    heroWidth = Math.round(width * heroRatioW);
+    heroHeight = Math.round(height * heroHRatio);
+    heroTop = selectedFamily === 'premium-offer' ? Math.round(height * 0.18) : selectedFamily === 'magazine-cover' ? Math.round(height * 0.06) : isWide ? Math.round(height * 0.16) : Math.round(height * 0.26);
+    heroLeft = selectedFamily === 'split-editorial'
         ? width - marginX - heroWidth
         : selectedFamily === 'hero-center' || selectedFamily === 'magazine-cover'
             ? Math.round((width - heroWidth) / 2)
@@ -236,6 +344,7 @@ export function buildPosterLayout({ input, result }) {
         heroLeft = Math.round((width - heroWidth) / 2);
         heroTop = Math.round(height * 0.46);
     }
+    }
     let textWidth = selectedFamily === 'split-editorial' ? Math.round(width * 0.42) : selectedFamily === 'clean-course' ? Math.round(width * 0.52) : isWide ? Math.round(width * 0.44) : Math.round(width * 0.7);
     if (selectedFamily === 'split-editorial' && sizeProfile === 'banner') {
         textWidth = Math.round(width * 0.32);
@@ -255,8 +364,8 @@ export function buildPosterLayout({ input, result }) {
     }
     const titleFontMax = sizeProfile === 'banner' ? (isWide ? 52 : 72) : isWide ? 74 : 88;
     const titleFontMin = sizeProfile === 'banner' ? 22 : 30;
-    const titleFont = fitTitleFont(result.title, textWidth, titleHeightLimit, getTextFont(width, titleFontMax, titleFontMin));
-    const titleHeight = estimateTextHeight(result.title, titleFont, textWidth);
+    const titleFont = fitTitleFont(layoutTitle, textWidth, titleHeightLimit, getTextFont(width, titleFontMax, titleFontMin));
+    const titleHeight = estimateTextHeight(layoutTitle, titleFont, textWidth);
     const sloganFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 18 : 22) : isWide ? 22 : 30, 14);
     const bodyFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 16 : 18) : isWide ? 20 : 26, 14);
     const ctaFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 18 : 20) : isWide ? 22 : 26, 16);
@@ -271,40 +380,51 @@ export function buildPosterLayout({ input, result }) {
     if (selectedFamily === 'list-recruitment') {
         titleTop = marginTop;
     }
-    const sloganTop = titleTop + titleHeight + Math.round(height * 0.03);
-    const sloganHeight = estimateTextHeight(result.slogan, sloganFont, textWidth);
-    let bodyTop = sloganTop + sloganHeight + Math.round(height * 0.024);
+    const titleToSloganGap = Math.round(height * 0.038) + Math.min(Math.round(height * 0.026), Math.round(titleFont * 0.3));
+    const sloganTop = titleTop + titleHeight + titleToSloganGap;
+    const sloganHeight = estimateTextHeight(layoutSlogan, sloganFont, textWidth);
+    let bodyTop = sloganTop + sloganHeight + Math.round(height * 0.03);
     if (selectedFamily === 'magazine-cover') {
         bodyTop = sloganTop + sloganHeight + Math.round(height * 0.02);
     }
     if (selectedFamily === 'list-recruitment') {
         bodyTop = sloganTop + sloganHeight + Math.round(height * 0.02);
     }
-    const bodyHeight = estimateTextHeight(result.body, bodyFont, textWidth);
+    let bodyHeight = estimateTextHeight(layoutBody, bodyFont, textWidth);
+    /** 竖版主图在文案下方时，正文过长会把主图压成一条「小图」，限制正文块高度为主图留出空间 */
+    const portraitBigHeroFamilies = new Set(['hero-left', 'xiaohongshu-note', 'festive-frame']);
+    if (includeHeroLayer && !isWide && portraitBigHeroFamilies.has(selectedFamily))
+        bodyHeight = Math.min(bodyHeight, Math.round(height * 0.2));
     let ctaTop = Math.min(bodyTop + bodyHeight + Math.round(height * 0.04), height - safeBottom - ctaHeight - (qrCorner && !isWide ? qrSize + 24 : 0));
     const heroBottomLimit = Math.max(Math.round(height * 0.2), height - safeBottom - (qrCorner && !isWide ? qrSize + 20 : 0));
     const portraitStackFamilies = new Set(['hero-left', 'list-recruitment', 'xiaohongshu-note', 'festive-frame']);
+    if (includeHeroLayer) {
     if (!isWide && portraitStackFamilies.has(selectedFamily)) {
         const textBottom = Math.max(bodyTop + bodyHeight, ctaTop + ctaHeight);
-        const stackGap = Math.round(height * 0.025);
+        const stackGap = Math.round(height * 0.029);
         heroTop = Math.max(heroTop, textBottom + stackGap);
         heroHeight = Math.min(heroHeight, heroBottomLimit - heroTop);
     }
     heroWidth = Math.min(heroWidth, width - marginX * 2);
-    heroHeight = Math.max(Math.round(height * 0.14), Math.min(heroHeight, heroBottomLimit - Math.round(height * 0.04)));
+    const heroCapByTop = Math.max(Math.round(height * 0.12), heroBottomLimit - heroTop - Math.round(height * 0.03));
+    const minHeroPortrait = !isWide && portraitBigHeroFamilies.has(selectedFamily) ? Math.round(height * 0.38) : Math.round(height * 0.14);
+    heroHeight = Math.min(Math.max(heroHeight, minHeroPortrait), heroCapByTop);
     heroTop = Math.max(Math.round(height * 0.04), Math.min(heroTop, heroBottomLimit - heroHeight));
     heroLeft = Math.max(marginX, Math.min(heroLeft, width - marginX - heroWidth));
-    let widgets = [
-        makeImageWidget('ai_hero', {
+    }
+    let widgets = [];
+    if (includeHeroLayer) {
+        widgets.push(makeImageWidget('ai_hero', {
             left: heroLeft,
             top: heroTop,
             width: heroWidth,
             height: heroHeight,
             radius: Math.max(18, Math.round(Math.min(heroWidth, heroHeight) * 0.04)),
             imgUrl: result.hero?.imageUrl || '',
-        }),
-        makeTextWidget('ai_title', {
-            text: getSafeText(result.title, 'AI 海报标题'),
+        }));
+    }
+    widgets.push(makeTextWidget('ai_title', {
+            text: getSafeText(layoutTitle, 'AI 海报标题'),
             left: textLeft,
             top: titleTop,
             width: textWidth,
@@ -324,7 +444,7 @@ export function buildPosterLayout({ input, result }) {
             },
         }),
         makeTextWidget('ai_slogan', {
-            text: getSafeText(result.slogan, '推荐副标题'),
+            text: getSafeText(layoutSlogan, '推荐副标题'),
             left: selectedFamily === 'hero-center' ? Math.round((width - textWidth) / 2) : textLeft,
             top: sloganTop,
             width: textWidth,
@@ -343,7 +463,7 @@ export function buildPosterLayout({ input, result }) {
             },
         }),
         makeTextWidget('ai_body', {
-            text: getSafeText(result.body, '补充描述文案'),
+            text: getSafeText(layoutBody, '补充描述文案'),
             left: selectedFamily === 'hero-center' ? Math.round((width - textWidth) / 2) : textLeft,
             top: bodyTop,
             width: textWidth,
@@ -380,7 +500,7 @@ export function buildPosterLayout({ input, result }) {
                 dir: 'horizontal',
             },
         }),
-    ];
+    );
     if (selectedFamily === 'premium-offer' && sizeProfile === 'square') {
         const tw = Math.round(width * 0.86);
         const titleW = widgets.find((w) => w.name === 'ai_title');
@@ -609,6 +729,30 @@ export function buildPosterLayout({ input, result }) {
             dotColor2: palette.text,
         }));
     }
+    if (selectedFamily !== 'magazine-cover') {
+        reflowAiTextStack(widgets, height);
+        const hero = widgets.find((w) => w.name === 'ai_hero');
+        if (hero && !isWide && portraitStackFamilies.has(selectedFamily)) {
+            const textBottom = aiTextStackBottom(widgets);
+            const stackGap = Math.round(height * 0.029);
+            const nextTop = textBottom + stackGap;
+            if (hero.top < nextTop)
+                hero.top = nextTop;
+            const heroBottomLimit2 = Math.max(Math.round(height * 0.18), height - safeBottom - (qrCorner && !isWide ? qrSize + 20 : 0));
+            const cap2 = Math.max(Math.round(height * 0.12), heroBottomLimit2 - Number(hero.top) - Math.round(height * 0.03));
+            const minH2 = portraitBigHeroFamilies.has(selectedFamily) ? Math.round(height * 0.38) : Math.round(height * 0.14);
+            hero.height = Math.min(Math.max(Number(hero.height), minH2), cap2);
+            hero.left = Math.max(marginX, Math.min(Number(hero.left), width - marginX - Number(hero.width)));
+        }
+        const qr = widgets.find((w) => w.name === 'ai_qrcode');
+        const ctaW = widgets.find((w) => w.name === 'ai_cta');
+        if (qr && ctaW && wantQr && qrStrategy === 'cta') {
+            const qrS = Number(qr.width) || 0;
+            const ch = Number(ctaW.height) || Math.round(Number(ctaW.fontSize) * 2.2);
+            qr.top = ctaW.top + Math.round((ch - qrS) / 2);
+            qr.left = textLeft + Number(ctaW.width) + Math.round(width * 0.02);
+        }
+    }
     return {
         page: {
             width,
@@ -625,23 +769,27 @@ export function buildPosterLayout({ input, result }) {
     };
 }
 export function replacePosterTexts(widgets, input, result) {
+    const head = dedupePosterTitleSlogan(result.title, result.slogan);
+    const layoutTitle = stripInternalPromptEcho(head.title) || getSafeText(result.title, '').trim();
+    const layoutSlogan = stripInternalPromptEcho(head.slogan) || getSafeText(result.slogan, '').trim();
+    const layoutBody = stripInternalPromptEcho(result.body) || getSafeText(result.body, '补充描述文案');
     const title = widgets.find((item) => item.name === 'ai_title');
     const slogan = widgets.find((item) => item.name === 'ai_slogan');
     const body = widgets.find((item) => item.name === 'ai_body');
     const cta = widgets.find((item) => item.name === 'ai_cta');
     const qr = widgets.find((item) => item.name === 'ai_qrcode');
     if (title)
-        title.text = getSafeText(result.title, 'AI 海报标题');
+        title.text = getSafeText(layoutTitle, 'AI 海报标题');
     if (slogan)
-        slogan.text = getSafeText(result.slogan, '推荐副标题');
+        slogan.text = getSafeText(layoutSlogan, '推荐副标题');
     if (body)
-        body.text = getSafeText(result.body, input.content || '补充描述文案');
+        body.text = getSafeText(layoutBody, input.content || '补充描述文案');
     if (cta)
-        cta.text = getSafeText(result.cta, '立即了解');
+        cta.text = getSafeText(stripInternalPromptEcho(result.cta), '立即了解');
     if (qr && input.qrUrl)
         qr.value = input.qrUrl;
     widgets.filter((w) => w.name && w.name.startsWith('ai_list_')).forEach((w, i) => {
-        const lines = splitBodyLines(result.body, 3);
+        const lines = splitBodyLines(layoutBody, 3);
         if (lines[i])
             w.text = `· ${lines[i]}`;
     });

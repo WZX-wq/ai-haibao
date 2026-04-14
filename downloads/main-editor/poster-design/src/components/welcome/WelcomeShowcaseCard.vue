@@ -147,7 +147,7 @@ const fitZoom = computed(() => {
 })
 
 function openAi() {
-  router.push({ path: '/ai-poster', query: { theme: props.item.theme, returnTo: props.editorReturn } })
+  router.push({ path: '/home', query: { aiTheme: props.item.theme, returnTo: props.editorReturn } })
 }
 </script>
 

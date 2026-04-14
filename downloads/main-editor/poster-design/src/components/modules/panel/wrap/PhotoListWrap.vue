@@ -123,15 +123,22 @@ const getDataList = async () => {
   }
   loading = true
   state.page += 1
+  const requestedPage = state.page
   const pageSize = 30
-  const { list = [] } = await api.material.getImagesList({ cate: state.currentCategory?.id, page: state.page, pageSize })
-  if (list.length <= 0) {
-    state.loadDone = true
-  } else {
-    state.recommendImgList = state.recommendImgList.concat(list)
-    if (list.length < pageSize) {
+  try {
+    const { list = [] } = await api.material.getImagesList({ cate: state.currentCategory?.id, page: state.page, pageSize })
+    if (list.length <= 0) {
       state.loadDone = true
+    } else {
+      state.recommendImgList = state.recommendImgList.concat(list)
+      if (list.length < pageSize) {
+        state.loadDone = true
+      }
     }
+  } catch (error) {
+    console.error('Failed to load photo list', error)
+    state.page = Math.max(0, requestedPage - 1)
+    state.loadDone = false
   }
   setTimeout(() => {
     loading = false

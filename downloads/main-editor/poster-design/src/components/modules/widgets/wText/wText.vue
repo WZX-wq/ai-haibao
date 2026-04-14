@@ -28,7 +28,9 @@
     }"
     @dblclick="(e) => dblclickText(e)"
   >
-    <template v-if="params.textEffects && !state.editable">
+    <template
+      v-if="Array.isArray(params.textEffects) && params.textEffects.length > 0 && !state.editable"
+    >
       <div
         v-for="(ef, efi) in params.textEffects"
         :key="efi + 'effect'"
@@ -46,7 +48,17 @@
         v-html="params.text"
       ></div>
     </template>
-    <div ref="editWrap" :style="{ fontFamily: `'${params.fontClass.value}'` }" class="edit-text" spellcheck="false" :contenteditable="state.editable ? 'plaintext-only' : false" @input="writingText($event)" @blur="writeDone($event)" v-html="params.text"></div>
+    <div
+      ref="editWrap"
+      v-show="state.editable || !params.textEffects?.length"
+      :style="{ fontFamily: `'${params.fontClass.value}'` }"
+      class="edit-text"
+      spellcheck="false"
+      :contenteditable="state.editable ? 'plaintext-only' : false"
+      @input="writingText($event)"
+      @blur="writeDone($event)"
+      v-html="params.text"
+    ></div>
   </div>
 </template>
 

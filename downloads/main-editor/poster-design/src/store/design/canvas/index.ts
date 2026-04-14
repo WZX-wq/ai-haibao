@@ -12,6 +12,7 @@ import { TCanvasState, TScreeData, TGuidelinesData, TStoreAction, TPageState } f
 import useWidgetStore from '../widget'
 import pageDefault from './page-default';
 import { repairKnownMojibake } from '@/utils/decodeText'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 /** 画布全局设置 */
 const CanvasStore = defineStore<"canvasStore", TCanvasState, {}, TStoreAction>("canvasStore", {
@@ -77,6 +78,9 @@ const CanvasStore = defineStore<"canvasStore", TCanvasState, {}, TStoreAction>("
     setDPage(data: TPageState) {
       if (data?.name) {
         data.name = repairKnownMojibake(data.name)
+      }
+      if (data && typeof data.backgroundImage === 'string' && data.backgroundImage) {
+        data.backgroundImage = normalizeLoopbackMediaUrl(data.backgroundImage)
       }
       this.dPage = data
       this.updateDPage()

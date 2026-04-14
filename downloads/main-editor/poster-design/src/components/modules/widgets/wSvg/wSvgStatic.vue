@@ -17,6 +17,7 @@
 
 <script lang="ts" setup>
 import { TWSvgSetting } from './wSvgSetting'
+import { resolveSnapRootToSvgElement, shouldUseSnapLoad } from './snapSvgRoot'
 import { CSSProperties, computed, nextTick, onBeforeMount, onMounted, onUpdated, reactive, ref, watch } from 'vue';
 
 type TProps = {
@@ -44,83 +45,92 @@ onMounted(async () => {
   await loadSvg()
 })
 
+function applySvgDom(svg2: Record<string, any>) {
+  const node = svg2?.node as Element | undefined
+  if (!node || typeof node.removeAttribute !== 'function') return false
+
+  const items = svg2.node.childNodes
+  node.removeAttribute('width')
+  node.removeAttribute('height')
+  node.setAttribute('style', 'height: inherit;width: inherit;')
+  svgElements = []
+  const colorsObj = color2obj()
+
+  deepElement(items)
+
+  function deepElement(els: Record<string, any>) {
+    if (els.item) {
+      els.forEach((element: Record<string, any>) => {
+        elementFactory(element)
+        if (element.childNodes.length > 0) {
+          element.childNodes.forEach((element: Record<string, any>) => {
+            deepElement(element)
+          })
+        }
+      })
+    } else {
+      elementFactory(els)
+    }
+  }
+
+  function elementFactory(element: Record<string, any>) {
+    const attrsColor: Record<string, any> = {}
+    try {
+      element.attributes.forEach((attr: Record<string, any>) => {
+        if (colorsObj[attr.value]) {
+          attr.value = colorsObj[attr.value]
+          attrsColor[attr.name] = props.params.colors.findIndex((x) => x == attr.value)
+        }
+      })
+    } catch (e) {}
+    if (JSON.stringify(attrsColor) !== '{}' && svgElements) {
+      svgElements.push({
+        item: element,
+        attrsColor,
+      })
+    }
+  }
+
+  if (widgetRef.value) {
+    widgetRef.value.appendChild(svg2.node as Node)
+  }
+  return true
+}
+
 function loadSvg() {
-  // console.log(this.params)
   const Snap = (window as any).Snap
+  const src = String(props.params.svgUrl || '').trim()
+  if (!Snap || !src) {
+    return Promise.resolve()
+  }
+
+  if (!shouldUseSnapLoad(src)) {
+    return new Promise<void>((resolve) => {
+      try {
+        const parsed = Snap.parse(src)
+        const svg2 = resolveSnapRootToSvgElement(parsed, Snap)
+        applySvgDom(svg2 as Record<string, any>)
+      } catch {
+        /* ignore */
+      }
+      resolve()
+    })
+  }
+
   return new Promise<void>((resolve) => {
-    Snap.load(
-      props.params.svgUrl,
-      function (svg: Record<string, any>) {
-        let svg2 = Snap(svg.node)
-        // let item = svg2.select('circle')
-        // item.attr({
-        //   fill: 'rgb(255, 0, 0)',
-        // })
-        // console.log(item.attr('fill'))
-
-        let items = svg2.node.childNodes
-        svg2.node.removeAttribute('width')
-        svg2.node.removeAttribute('height')
-        svg2.node.setAttribute('style', 'height: inherit;width: inherit;')
-        // svg2.node.setAttribute('height', 'inherit')
-        svgElements = []
-        const colorsObj = color2obj()
-
-        deepElement(items)
-
-        function deepElement(els: Record<string, any>) {
-          // 判断是NodeList对象则继续递归，否则进入元素处理工厂
-          if (els.item) {
-            els.forEach((element: Record<string, any>) => {
-              elementFactory(element)
-              if (element.childNodes.length > 0) {
-                element.childNodes.forEach((element: Record<string, any>) => {
-                  deepElement(element)
-                })
-              }
-            })
-          } else {
-            elementFactory(els)
-          }
-        }
-        // 元素工厂: 遍历元素中是否存在可自定义的颜色属性
-        function elementFactory(element: Record<string, any>) {
-          const attrsColor: Record<string, any> = {}
-          try {
-            element.attributes.forEach((attr: Record<string, any>) => {
-              if (colorsObj[attr.value]) {
-                // console.log(attr.name, colorsObj[attr.value])
-                attr.value = colorsObj[attr.value]
-                attrsColor[attr.name] = props.params.colors.findIndex((x) => x == attr.value)
-              }
-            })
-          } catch (e) {}
-          if (JSON.stringify(attrsColor) !== '{}' && svgElements) {
-            svgElements.push({
-              item: element,
-              attrsColor,
-            })
-          }
-          // console.log(element.attributes, element.getAttribute('fill'), _this.params.colors)
-        }
-
-        // _this.viewBox = svg2.node.viewBox.baseVal
-        // _this.svgImg = img
-
-        // img.attr({
-        //   width: '100%',
-        //   height: '100%',
-        //   transform: '',
-        //   'xlink:href': _this.params.imgUrl || '',
-        // })
-        if (widgetRef.value) {
-          // svg.node.classList.add('svg__box')
-          widgetRef.value.appendChild(svg.node)
+    try {
+      Snap.load(src, function (svg: Record<string, any>) {
+        try {
+          const svg2 = resolveSnapRootToSvgElement(svg, Snap)
+          applySvgDom(svg2 as Record<string, any>)
+        } catch {
+          /* ignore */
         }
         resolve()
-      },
-      document.getElementById(props.params.uuid),
-    )
+      })
+    } catch {
+      resolve()
+    }
   })
 }
 

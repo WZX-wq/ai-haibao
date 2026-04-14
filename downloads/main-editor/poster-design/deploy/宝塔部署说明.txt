@@ -1,0 +1,68 @@
+鲲穹设计 / poster-design — Docker 部署（远程 MySQL，不依赖宝塔数据库）
+
+一、说明
+- Compose 内不再启动 MySQL，只启动 api + Nginx(web)。
+- 数据库使用你已有的远程实例（阿里云 RDS、腾讯云 CDB、自建公网 MySQL 等），在 .env 填写与线上一致的连接参数。
+
+二、远程库准备
+1. 在远程库创建数据库（若尚无）：poster_design，字符集 utf8mb4。
+2. 首次部署请在远程库执行初始化脚本（按顺序）：
+   deploy/mysql/init/01-account.sql
+   deploy/mysql/init/02-user-designs.sql
+   （可用 Navicat、DMS、mysql 客户端连接远程后执行。）
+3. 白名单：把「运行 Docker 的服务器公网出口 IP」加入云数据库白名单，否则 api 容器连不上。
+4. 若远程库仅内网地址：需保证宿主机或容器网络能路由到该内网（例如同 VPC、专线）；必要时用云厂商「内网地址 + 同区域 ECS」部署。
+
+三、配置
+1. cd deploy
+2. 编辑 .env：
+   - DB_HOST：远程主机名或 IP
+   - DB_PORT：一般为 3306
+   - DB_NAME、DB_USERNAME、DB_PASSWORD：与当前远程库一致
+   - 其余 OAuth、域名、AI 密钥按需填写
+
+四、启动
+1. docker compose -f docker-compose.yaml up -d --build
+   - 若报错 resolve docker/dockerfile:1 或腾讯云 mirror…500：部署包内 Dockerfile 已去掉 # syntax= 行；若你仍用旧包，请删除 Dockerfile.web / Dockerfile.api 首行 # syntax=docker/dockerfile:1 后重试。
+2. 对外端口由 deploy/.env 的 HTTP_PUBLISH_PORT 决定（compose 默认 8080；若你改为 8098，则映射为 8098:80）。
+
+3. 宝塔站点反代（推荐做法）
+- 宝塔「网站」→ 你的域名 →「反向代理」→ 目标 URL 填：http://127.0.0.1:<HTTP_PUBLISH_PORT>（与 deploy/.env 一致，例如 8080 或 8098）。
+- 用「整站」一条反代即可：不要把代理范围写成只含 /api 或 /api/。Docker 里的 Nginx 已负责把 /api、/design、/auth、/admin、/ai、/usage、/static/ 转到 api 容器；宝塔只要把该域名的全部请求转到上述 web 对外端口。
+- 切勿把域名反代到「仅 api 进程」的 7001 端口。若反代到 7001：浏览器访问 /oauth/callback 会由 Express 直接处理且无该路由 → 典型为英文「Not Found / The requested URL was not found on the server」；侧栏模板图、/static 素材也会异常。正确做法是只暴露 web 容器对外端口（由 HTTP_PUBLISH_PORT 映射到容器内 80）。
+- 自检（在服务器 SSH）：curl -sI http://127.0.0.1:<HTTP_PUBLISH_PORT>/oauth/callback（如 8098 则 curl 127.0.0.1:8098）应返回 200，且 Content-Type 含 text/html。若为 404，先检查是否误连 7001：curl -sI http://127.0.0.1:7001/oauth/callback 多为 404。
+- HTTPS：反代「高级」或站点「配置文件」里需带 X-Forwarded-Proto（宝塔常见模板已带）；鲲穹回调地址要与浏览器实际访问的 https 域名一致（见 .env 的 OAUTH_REDIRECT_URI）。
+- 上传大图：站点配置里建议 client_max_body_size 100m;（与容器内一致）。
+
+4. 若坚持「静态在宝塔、只反代接口」（不推荐）
+- 须为下列路径反代到同一后端，下例 8080 请改成你的 HTTP_PUBLISH_PORT（如 8098）（经容器内 Nginx 再进 api；勿随意改成直连 7001 除非你知道前端 base 怎么配）：
+  - location ~ ^/(api|design|auth|admin|ai|usage)(/|$) { proxy_pass http://127.0.0.1:8080; ... }
+  - location /static/ { proxy_pass http://127.0.0.1:8080; ... }
+- 漏 /usage → 导出扣次 404；漏 /design → 大量接口失败。
+
+五、登录（鲲穹统一登录中心）
+- 在 login.kunqiongai.com 注册应用，回调 URL 与 .env 中 OAUTH_REDIRECT_URI 一致（如 https://poster.kunqiongai.com/oauth/callback）。
+- 回调页英文/中文「未找到」404：① 宝塔只反代了 /api、未整站指到 HTTP_PUBLISH_PORT；② 或整条域名误指到 api 的 7001（须指到 web 对外端口，与 .env 一致）。`/oauth/callback` 须由「web 容器内 Nginx」try_files 回 index.html。
+- 登录失败时查看：docker compose logs api
+
+常见问题：打开登录却整页变成「飞书扫码登录」、地址栏是 accounts.feishu.cn / open.feishu.cn
+- 原因：.env 里误用了飞书开放平台域名（如 OAUTH_BASE_URL=https://accounts.feishu.cn、OAUTH_TOKEN_BASE_URL=https://open.feishu.cn），或 client_id 用了飞书 cli_ 应用。
+- 处理：按 deploy/oauth2-api.md 改为鲲穹——OAUTH_BASE_URL 与 OAUTH_TOKEN_BASE_URL 均应为 https://login.kunqiongai.com，OAUTH_AUTHORIZE_PATH=authorize.html，OAUTH_TOKEN_PATH=api/oauth/token，OAUTH_TOKEN_REQUEST_FORMAT=json；client_id/secret 使用在鲲穹控制台注册的应用。改完后在 deploy 目录执行 docker compose up -d --build。
+- 若 api 已加校验，误配时「获取登录地址」接口会返回上述说明文字，请对照修改 .env。
+
+六、侧栏「素材 / 文字 / 图片」列表为空
+- 原因：生产环境为单文件 dist/server.js，旧逻辑用 __dirname/../mock 会指到 /app/mock，而镜像里 json 在 /app/src/mock。
+- 处理：使用最新代码（mockRoot 自动探测 src/mock）或镜像内已建 /app/mock → src/mock 符号链接；重建 api 镜像后应恢复。
+
+七、模板主图 / 静态资源 URL
+- 新版 api 默认把「模板主图、列表 thumb / cover、用户上传图 URL、设计列表封面、AI 抠图返回地址」等写成相对路径 /static/…（或同源 /api/screenshots?…），避免浏览器请求 127.0.0.1 导致 ERR_CONNECTION_REFUSED。
+- 进程内自调截图仍用 INTERNAL_API_ORIGIN（默认同容器 127.0.0.1:${PORT}），与返回给前端的 URL 分离。
+- 若仍见旧数据里带 http://127.0.0.1:7001：请重新部署 api；数据库里已存的模板/作品 JSON 需重新保存或再选模板触发前端 deepNormalize。
+- 可选：SERVICE_STATIC_BASE_URL=https://你的域名/static/
+
+八、数据持久化
+- 仅上传与截图缓存卷：poster_api_static（挂载 api 容器 /app/static）
+- 业务数据均在远程 MySQL
+
+九、接口 401（如 /design/user/image）
+- 表示未登录或 Token 无效，需先完成鲲穹登录；与静态图 127 问题无关。

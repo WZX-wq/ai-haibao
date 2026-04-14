@@ -36,31 +36,43 @@ export default class PreLoad {
   }
   public doms() {
     return new Promise<void>((resolve) => {
+      const tries: number[] = []
       const work = () => {
-        if (this.i < this.arr.length) {
-          (this.arr[this.i] as HTMLImageElement).complete && this.i++
-          setTimeout(() => {
-            work()
-          }, 100)
-        } else {
+        if (this.i >= this.arr.length) {
           resolve()
+          return
         }
+        const img = this.arr[this.i] as HTMLImageElement
+        tries[this.i] = (tries[this.i] || 0) + 1
+        const stalled = !img || tries[this.i] > 200
+        if (img?.complete || stalled) {
+          this.i++
+        }
+        setTimeout(work, 100)
       }
       work()
     })
   }
-  /** 判断是否加载svg */
+  /**
+   * 等待 SVG 容器出现子节点（Snap.parse / Snap.load 异步挂载）。
+   * 旧逻辑在 childNodes.length===0 时永不 i++，会导致 Promise 死锁，服务端截图页卡死。
+   */
   public svgs() {
     return new Promise<void>((resolve) => {
+      const tries: number[] = []
       const work = () => {
-        if (this.i < this.arr.length) {
-          (this.arr[this.i] as ChildNode[]).length > 0 && this.i++
-          setTimeout(() => {
-            work()
-          }, 100)
-        } else {
+        if (this.i >= this.arr.length) {
           resolve()
+          return
         }
+        const nodes = this.arr[this.i] as ChildNode[]
+        tries[this.i] = (tries[this.i] || 0) + 1
+        const hasChildren = !!(nodes && nodes.length > 0)
+        const giveUp = tries[this.i] > 80
+        if (hasChildren || giveUp) {
+          this.i++
+        }
+        setTimeout(work, 50)
       }
       work()
     })

@@ -43,7 +43,6 @@
               :src="item.cover"
               fit="contain"
               lazy
-              loading="lazy"
             />
           </div>
         </div>
@@ -55,7 +54,6 @@
       v-infinite-scroll="load"
       class="infinite-list"
       :infinite-scroll-distance="150"
-      style="overflow: auto"
     >
       <classHeader :is-back="true" @back="back">{{ state.currentCategory.name }}</classHeader>
       <el-space fill wrap :fillRatio="30" direction="horizontal" class="list">
@@ -110,7 +108,6 @@
             :src="item.cover"
             fit="contain"
             lazy
-            loading="lazy"
           />
         </div>
       </el-space>
@@ -121,7 +118,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onBeforeUnmount, onMounted, reactive } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import api from '@/api'
 import getComponentsData from '@/common/methods/DesignFeatures/setComponents'
 import DragHelper from '@/common/hooks/dragHelper'
@@ -181,6 +178,8 @@ const compTextFallbackByRaw: Record<string, string> = {
 const dragHelper = new DragHelper()
 let isAlive = true
 let isDrag = false
+/** 拖拽结束后仍会触发 click，避免与 drop 插入重复一份组合 */
+let suppressNextSelectClick = false
 let startPoint = { x: 99999, y: 99999 }
 let tempDetail: TTempDetail | null = null
 const compsCache: Record<string | number, TTempDetail> = {}
@@ -200,6 +199,19 @@ const dPage = useCanvasStore().dPage
 const pageOptions = { type: 1, page: 0, pageSize: 20 }
 const isCurrentTextCategory = computed(() => state.currentCategory?.cate === 'text')
 const isCurrentCompCategory = computed(() => state.currentCategory?.cate === 'comp')
+
+watch(
+  () => state.currentCategory?.cate,
+  (cate) => {
+    if (typeof cate === 'string' && cate) {
+      try {
+        sessionStorage.setItem('xp_comp_cate', cate)
+      } catch {
+        /* ignore */
+      }
+    }
+  },
+)
 
 onBeforeUnmount(() => {
   isAlive = false
@@ -239,6 +251,9 @@ onMounted(async () => {
 
 const mouseup = (e: MouseEvent) => {
   e.preventDefault()
+  if (isDrag) {
+    suppressNextSelectClick = true
+  }
   isDrag = false
   tempDetail = null
   startPoint = { x: 99999, y: 99999 }
@@ -264,6 +279,7 @@ const load = async (init: boolean = false) => {
 
   state.loading = true
   pageOptions.page += 1
+  const requestedPage = pageOptions.page
 
   try {
     const res = await api.home.getCompList({
@@ -283,10 +299,11 @@ const load = async (init: boolean = false) => {
   } catch (error) {
     console.error('Failed to load component list', error)
     if (isAlive) {
+      pageOptions.page = Math.max(0, requestedPage - 1)
       if (init) {
         state.list = []
       }
-      state.loadDone = true
+      state.loadDone = false
     }
   } finally {
     setTimeout(() => {
@@ -325,17 +342,26 @@ const back = () => {
 }
 
 function parseCompDetailData(detail: TTempDetail | null) {
-  if (!detail?.data || typeof detail.data !== 'string') {
-    console.warn('Component detail payload is missing data', detail)
+  const payload = (detail as any)?.data ?? detail
+  if (payload === null || typeof payload === 'undefined') {
     return null
   }
 
-  try {
-    return JSON.parse(detail.data)
-  } catch (error) {
-    console.error('Failed to parse component detail data', error, detail)
-    return null
+  if (typeof payload === 'string') {
+    if (!payload.trim()) return null
+    try {
+      return JSON.parse(payload)
+    } catch (error) {
+      console.error('Failed to parse component detail data', error, detail)
+      return null
+    }
   }
+
+  if (Array.isArray(payload) || typeof payload === 'object') {
+    return payload
+  }
+
+  return null
 }
 
 function cleanupPreviewText(value?: string) {
@@ -569,6 +595,7 @@ function offsetGroupToCanvas(group: any[], pageWidth: number, pageHeight: number
 }
 
 const dragStart = async (e: MouseEvent, { id, width, height, cover }: TGetCompListResult) => {
+  isDrag = false
   startPoint = { x: e.x, y: e.y }
   try {
     const img = await setItem2Data({ width, height, url: cover })
@@ -589,6 +616,10 @@ const dragStart = async (e: MouseEvent, { id, width, height, cover }: TGetCompLi
 }
 
 const selectItem = async (item: TGetCompListResult) => {
+  if (suppressNextSelectClick) {
+    suppressNextSelectClick = false
+    return
+  }
   if (isDrag) {
     return
   }
@@ -597,12 +628,13 @@ const selectItem = async (item: TGetCompListResult) => {
 
   try {
     tempDetail = tempDetail || (await getCompDetail({ id: item.id, type: 1 }))
-    if (!tempDetail?.data || typeof tempDetail.data !== 'string') {
+    const parsedDetail = parseCompDetailData(tempDetail)
+    if (!parsedDetail) {
       console.warn(`Component detail has no usable data: ${item.id}`, tempDetail)
       return
     }
 
-    const group: any = await getComponentsData(tempDetail.data)
+    const group: any = await getComponentsData(parsedDetail as any)
     if (!group || (Array.isArray(group) && group.length === 0)) {
       console.warn(`Component data resolved empty: ${item.id}`)
       return
@@ -678,9 +710,13 @@ defineExpose({
 
 <style lang="less" scoped>
 .wrap {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+  min-height: 0;
   padding-top: 0.35rem;
+  box-sizing: border-box;
 }
 
 .search__wrap {
@@ -688,14 +724,21 @@ defineExpose({
 }
 
 .infinite-list {
-  height: 100%;
-  padding-bottom: 150px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 120px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
 }
 
 .infinite-list::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.infinite-list::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 6px;
 }
 
 .list {

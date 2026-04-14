@@ -1,11 +1,11 @@
-﻿/*
+/*
  * @Author: ShawnPhang
  * @Date: 2021-08-19 18:30:38
  * @Description: Vite闁板秶鐤嗛弬鍥︽
  * @LastEditors: ShawnPhang <site: book.palxp.com>
  * @LastEditTime: 2023-08-01 10:46:59
  */
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import viteCompression from 'vite-plugin-compression'
@@ -13,26 +13,43 @@ import ElementPlus from 'unplugin-element-plus/vite'
 
 const resolve = (...data: string[]) => path.resolve(__dirname, ...data)
 
+/**
+ * Chrome 在开发态对 304 + 磁盘缓存偶发 net::ERR_CACHE_READ_FAILURE，
+ * 导致动态 import('.vue') 失败。去掉条件请求头，让 Vite 始终返回 200 完整模块。
+ */
+function devDisableConditionalRequests(): Plugin {
+  return {
+    name: 'dev-disable-conditional-requests',
+    apply: 'serve',
+    enforce: 'pre',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        delete req.headers['if-none-match']
+        delete req.headers['if-modified-since']
+        next()
+      })
+    },
+  }
+}
+
 function manualChunks(id: string) {
   if (!id.includes('node_modules')) {
     return
   }
-  if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router') || id.includes('vue-i18n')) {
+  // Vue 与 Element Plus 同进 framework，避免单独 element-plus chunk 与 Vue 之间循环依赖导致
+  // 「Cannot access 'x' before initialization」（TDZ）。
+  if (
+    id.includes('vue') ||
+    id.includes('pinia') ||
+    id.includes('vue-router') ||
+    id.includes('vue-i18n') ||
+    id.includes('element-plus') ||
+    id.includes('@element-plus')
+  ) {
     return 'framework'
   }
-  if (id.includes('element-plus') || id.includes('@element-plus')) {
-    return 'element-plus'
-  }
-  if (
-    id.includes('moveable') ||
-    id.includes('selecto') ||
-    id.includes('@scena') ||
-    id.includes('@daybrush') ||
-    id.includes('cropperjs') ||
-    id.includes('psd.js')
-  ) {
-    return 'editor-core'
-  }
+  // 勿将 moveable/selecto/@scena 等单独打成 editor-core：生产环境易出现 chunk 顺序/循环依赖，
+  // 运行时表现为 Object.setPrototypeOf(..., undefined)。
   if (
     id.includes('html2canvas') ||
     id.includes('jspdf') ||
@@ -46,8 +63,9 @@ function manualChunks(id: string) {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
+    devDisableConditionalRequests(),
     vue(),
     viteCompression({
       verbose: true,
@@ -105,6 +123,10 @@ export default defineConfig({
   server: {
     hmr: { overlay: false },
     host: '127.0.0.1',
+    /** 避免 Chrome 对 304 + 磁盘缓存出现 net::ERR_CACHE_READ_FAILURE（开发态无需强缓存） */
+    ...(command === 'serve'
+      ? { headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } }
+      : {}),
   },
-})
+}))
 

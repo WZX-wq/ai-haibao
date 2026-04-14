@@ -1,8 +1,13 @@
-import { Response } from 'express'
 import axios from 'axios'
 import crypto from 'crypto'
 import { send } from '../utils/tools'
-import { ensureAccountSchema, getMysqlPool, isMysqlConfigured } from '../utils/mysql'
+import {
+  ensureAccountSchema,
+  getMergedRecentAccountRecords,
+  getMysqlPool,
+  getTodayDownloadUsage,
+  isMysqlConfigured,
+} from '../utils/mysql'
 
 type OAuthStateRecord = {
   redirectUri: string
@@ -25,9 +30,13 @@ function getBaseUrl(req: any) {
 }
 
 function getOAuthConfig() {
+  const baseUrl = process.env.OAUTH_BASE_URL || ''
   return {
     providerName: process.env.OAUTH_PROVIDER_NAME || 'generic-oauth2',
-    baseUrl: process.env.OAUTH_BASE_URL || '',
+    baseUrl,
+    /** 授权域与换 token 域不同时可单独配置（如部分 IdP 分域名） */
+    tokenBaseUrl: process.env.OAUTH_TOKEN_BASE_URL || baseUrl,
+    userinfoBaseUrl: process.env.OAUTH_USERINFO_BASE_URL || baseUrl,
     authorizePath: process.env.OAUTH_AUTHORIZE_PATH || '',
     tokenPath: process.env.OAUTH_TOKEN_PATH || '',
     userinfoPath: process.env.OAUTH_USERINFO_PATH || '',
@@ -36,6 +45,10 @@ function getOAuthConfig() {
     redirectUri: process.env.OAUTH_REDIRECT_URI || '',
     logoutUrl: process.env.OAUTH_LOGOUT_URL || '',
     scope: process.env.OAUTH_SCOPE || '',
+    /** json：application/json 换 token；form：application/x-www-form-urlencoded */
+    tokenRequestFormat: String(process.env.OAUTH_TOKEN_REQUEST_FORMAT || 'form').toLowerCase(),
+    /** 统一登录中心 authorize.html 等仅需 client_id/redirect_uri/state，勿带 response_type=1 */
+    omitAuthorizeResponseType: process.env.OAUTH_OMIT_RESPONSE_TYPE === '1',
   }
 }
 
@@ -54,6 +67,37 @@ function isOAuthConfigured() {
 function buildOAuthUrl(baseUrl: string, path: string) {
   if (!path) return baseUrl
   return `${String(baseUrl).replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`
+}
+
+/** 飞书开放平台直连（accounts/open.feishu.cn）与鲲穹 oauth2-api.md 流程不同，误配会导致整页飞书登录而非鲲穹 */
+function assertNotFeishuOpenPlatformDirect() {
+  if (process.env.OAUTH_ALLOW_FEISHU_DIRECT === '1') return
+  const c = getOAuthConfig()
+  const candidates = [c.baseUrl, c.tokenBaseUrl, c.userinfoBaseUrl].filter((x) => String(x || '').trim())
+  for (const raw of candidates) {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    let hostname = ''
+    try {
+      hostname = new URL(normalized).hostname.toLowerCase()
+    } catch {
+      continue
+    }
+    const isFeishuDirect =
+      hostname === 'open.feishu.cn' ||
+      hostname === 'accounts.feishu.cn' ||
+      hostname.endsWith('.feishu.cn') ||
+      hostname.includes('larksuite.com')
+    if (isFeishuDirect) {
+      throw new Error(
+        'OAUTH 指向飞书开放平台直连（如 open.feishu.cn / accounts.feishu.cn），因此会打开飞书登录页。' +
+          '鲲穹统一登录请按 deploy/oauth2-api.md 使用：OAUTH_BASE_URL=https://login.kunqiongai.com，' +
+          'OAUTH_AUTHORIZE_PATH=authorize.html，OAUTH_TOKEN_BASE_URL=https://login.kunqiongai.com，' +
+          'OAUTH_TOKEN_PATH=api/oauth/token，client_id/secret 填在鲲穹注册的应用（勿用飞书 cli_ 应用）。' +
+          '修改 .env 后执行 docker compose up -d --build 重建 api 容器。' +
+          '若确需直连飞书开放平台，请设 OAUTH_ALLOW_FEISHU_DIRECT=1。',
+      )
+    }
+  }
 }
 
 function pruneOAuthStates() {
@@ -95,37 +139,70 @@ function getSessionExpireDays() {
 }
 
 function buildPermissionSnapshot(record?: any) {
+  const isVip = !!record?.is_vip
   return {
-    is_vip: !!record?.is_vip,
+    is_vip: isVip,
     vip_level: Number(record?.vip_level || 0),
     vip_expire_time: record?.vip_expire_time || null,
     daily_limit_count: Number(record?.daily_limit_count || 10),
     max_file_size: Number(record?.max_file_size || 52428800),
     allow_batch: !!record?.allow_batch,
-    allow_no_watermark: !!record?.allow_no_watermark,
+    /** 无水印仅会员可用：非 VIP 一律关闭，避免脏数据绕过 */
+    allow_no_watermark: isVip && !!record?.allow_no_watermark,
     allow_ai_tools: record?.allow_ai_tools !== undefined ? !!record.allow_ai_tools : true,
     allow_template_manage: record?.allow_template_manage !== undefined ? !!record.allow_template_manage : true,
   }
 }
 
+/** 鲲穹统一登录等：{ code: 200, data: {...} } 或 code 0 */
+function unwrapEnvelope(raw: any): any {
+  if (!raw || typeof raw !== 'object') return raw
+  const inner = (raw as any).data
+  if (!inner || typeof inner !== 'object') return raw
+  const code = (raw as any).code
+  const ok =
+    code === 0 ||
+    code === '0' ||
+    code === 200 ||
+    code === '200'
+  return ok ? inner : raw
+}
+
+/**
+ * 与 oauth2-api.md 一致：换票响应 data.user 含 id、username、nickname、email、phone、avatar
+ */
 function normalizeRemoteUser(tokenPayload: any, userPayload: any): NormalizedRemoteUser {
-  const source = userPayload || tokenPayload?.user || tokenPayload || {}
+  let raw = userPayload || tokenPayload?.user || tokenPayload || {}
+  raw = unwrapEnvelope(raw)
+  const source = raw && typeof raw === 'object' ? raw : {}
   const providerUserId = String(
-    source.id ||
+    source.open_id ||
+    source.union_id ||
+    (source.id !== undefined && source.id !== null ? source.id : '') ||
     source.user_id ||
     source.sub ||
     source.openid ||
     source.uid ||
+    source.username ||
     '',
   )
   if (!providerUserId) {
-    throw new Error('OAuth 用户信息缺少唯一标识，请补充 OAUTH_USERINFO_PATH 或检查返回结构')
+    throw new Error(
+      'OAuth 用户信息缺少唯一标识：鲲穹换票接口应在 data 内返回 user.id 或 user.username，请对照 oauth2-api.md',
+    )
   }
 
   return {
     providerUserId,
-    displayName: String(source.name || source.nickname || source.username || source.preferred_username || source.email || '未命名用户'),
-    avatarUrl: String(source.avatar || source.avatar_url || source.picture || ''),
+    displayName: String(
+      source.nickname ||
+      source.name ||
+      source.username ||
+      source.preferred_username ||
+      source.email ||
+      '未命名用户',
+    ),
+    avatarUrl: String(source.avatar ?? source.avatar_url ?? source.picture ?? ''),
     email: String(source.email || ''),
     rawUser: source,
   }
@@ -134,39 +211,100 @@ function normalizeRemoteUser(tokenPayload: any, userPayload: any): NormalizedRem
 async function fetchRemoteUser(accessToken: string) {
   const config = getOAuthConfig()
   if (!config.userinfoPath) return null
-  const userInfoUrl = buildOAuthUrl(config.baseUrl, config.userinfoPath)
+  const userInfoUrl = buildOAuthUrl(config.userinfoBaseUrl, config.userinfoPath)
   const response = await axios.get(userInfoUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   })
-  return response.data
+  const data = response.data
+  if (data && typeof data === 'object' && data.data) {
+    const c = (data as any).code
+    if (c === 0 || c === '0' || c === 200 || c === '200') {
+      return data.data
+    }
+  }
+  return data
 }
 
+/**
+ * POST /api/oauth/token（鲲穹 oauth2-api.md）
+ * 成功：{ code: 200, message, data: { access_token, token_type, expires_in, user } }
+ */
 async function exchangeCodeForToken(code: string, redirectUri: string) {
   const config = getOAuthConfig()
-  const tokenUrl = buildOAuthUrl(config.baseUrl, config.tokenPath)
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    redirect_uri: redirectUri || config.redirectUri,
-  })
+  const tokenUrl = buildOAuthUrl(config.tokenBaseUrl, config.tokenPath)
+  const redirect = redirectUri || config.redirectUri
 
-  const response = await axios.post(tokenUrl, body.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  })
-  const payload = response.data || {}
-  if (payload?.data && typeof payload.data === 'object') {
+  let response: { data: any }
+  try {
+    if (config.tokenRequestFormat === 'json') {
+      response = await axios.post(
+        tokenUrl,
+        {
+          grant_type: 'authorization_code',
+          code,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: redirect,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      )
+    } else {
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: redirect,
+      })
+      response = await axios.post(tokenUrl, body.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      })
+    }
+  } catch (err) {
+    const e = err as { response?: { data?: unknown; status?: number } }
+    const d: any = e.response?.data
+    if (d && typeof d === 'object') {
+      const msg = d.message || d.msg
+      if (msg) throw new Error(String(msg))
+      if (d.code !== undefined && Number(d.code) !== 200) {
+        throw new Error(String(d.message || d.msg || `换取 Token 失败 (${d.code})`))
+      }
+    }
+    const status = e.response?.status
+    if (status === 401) {
+      throw new Error('OAuth 认证失败，请检查 OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET')
+    }
+    throw err instanceof Error ? err : new Error('换取 Token 请求失败')
+  }
+
+  const payload = response.data
+  if (payload == null || typeof payload !== 'object') {
+    throw new Error('Token 接口返回格式异常')
+  }
+
+  const hasBizCode = 'code' in payload && (payload as any).code !== undefined && (payload as any).code !== null
+  if (hasBizCode && Number((payload as any).code) !== 200) {
+    throw new Error(String((payload as any).message || (payload as any).msg || `换取 Token 失败 (${(payload as any).code})`))
+  }
+
+  if (payload.data && typeof payload.data === 'object') {
     return payload.data
   }
-  if (payload?.result && typeof payload.result === 'object') {
+  if (payload.result && typeof payload.result === 'object') {
     return payload.result
   }
-  return payload
+  if ((payload as any).access_token) {
+    return payload
+  }
+  throw new Error(String((payload as any).message || 'Token 接口未返回 data（缺少 access_token）'))
 }
 
 async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayload: any) {
@@ -315,6 +453,18 @@ async function resolveSession(req: any) {
   }
 }
 
+/** 供设计接口等非抛错场景解析登录态；失败返回 null */
+export async function tryResolveSession(req: any): Promise<{ userId: number } | null> {
+  try {
+    const sessionData = await resolveSession(req)
+    const uid = Number(sessionData.user.id)
+    if (!Number.isFinite(uid) || uid <= 0) return null
+    return { userId: uid }
+  } catch {
+    return null
+  }
+}
+
 async function requireAdmin(req: any) {
   const adminToken = process.env.ADMIN_AUTH_TOKEN || ''
   if (!adminToken) {
@@ -334,7 +484,7 @@ function buildQuickActions(baseUrl: string) {
   ]
 }
 
-export async function getOAuthBootstrap(req: any, res: Response) {
+export async function getOAuthBootstrap(req: any, res: any) {
   const config = getOAuthConfig()
   send.success(res, {
     provider_name: config.providerName,
@@ -351,22 +501,34 @@ export async function getOAuthBootstrap(req: any, res: Response) {
   })
 }
 
-export async function getLoginUrl(req: any, res: Response) {
+export async function getLoginUrl(req: any, res: any) {
   try {
     if (!isOAuthConfigured()) {
       throw new Error('OAuth2 参数未配置，请补充 OAUTH_BASE_URL / OAUTH_AUTHORIZE_PATH / OAUTH_TOKEN_PATH / OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET / OAUTH_REDIRECT_URI')
     }
+    assertNotFeishuOpenPlatformDirect()
     pruneOAuthStates()
     const config = getOAuthConfig()
     const state = createState()
-    const redirectUri = String(req.query.redirectUri || config.redirectUri)
+    // 鲲穹控制台按「固定回调」登记；须与换票时 redirect_uri 一致。优先用 .env 的 OAUTH_REDIRECT_URI，
+    // 勿轻信前端用 window.location.origin 传的值（用 IP:端口打开站点会导致与已登记 https 域名不一致 → 400）。
+    const configuredRedirect = String(config.redirectUri || '').trim()
+    const clientRedirect = String(req.query.redirectUri || '').trim()
+    const redirectUri = configuredRedirect || clientRedirect
+    if (!redirectUri) {
+      throw new Error(
+        'OAuth redirect_uri 未配置：请在 .env 设置 OAUTH_REDIRECT_URI（须与鲲穹应用回调完全一致），本地开发也可由前端传入 redirectUri',
+      )
+    }
     oauthStateStore.set(state, {
       redirectUri,
       createdAt: Date.now(),
     })
     const authorizeUrl = buildOAuthUrl(config.baseUrl, config.authorizePath)
     const url = new URL(authorizeUrl)
-    url.searchParams.set('response_type', 'code')
+    if (!config.omitAuthorizeResponseType) {
+      url.searchParams.set('response_type', 'code')
+    }
     url.searchParams.set('client_id', config.clientId)
     url.searchParams.set('redirect_uri', redirectUri)
     url.searchParams.set('state', state)
@@ -384,7 +546,7 @@ export async function getLoginUrl(req: any, res: Response) {
   }
 }
 
-export async function handleOAuthCallback(req: any, res: Response) {
+export async function handleOAuthCallback(req: any, res: any) {
   try {
     if (!isOAuthConfigured()) {
       throw new Error('OAuth2 参数未配置，暂时无法完成登录')
@@ -405,7 +567,7 @@ export async function handleOAuthCallback(req: any, res: Response) {
     oauthStateStore.delete(state)
 
     const tokenPayload = await exchangeCodeForToken(code, stateRecord.redirectUri)
-    const accessToken = String(tokenPayload.access_token || '')
+    const accessToken = String(tokenPayload.access_token || tokenPayload.user_access_token || '')
     if (!accessToken) {
       throw new Error('OAuth token 返回缺少 access_token')
     }
@@ -421,6 +583,7 @@ export async function handleOAuthCallback(req: any, res: Response) {
       },
     } as any)
 
+    const downloadsTodayUsed = await getTodayDownloadUsage(Number(sessionData.user.id))
     send.success(res, {
       local_token: sessionInfo.localToken,
       user_id: sessionData.user.id,
@@ -428,6 +591,7 @@ export async function handleOAuthCallback(req: any, res: Response) {
       expired_at: sessionInfo.expiredAt,
       user: sessionData.user,
       permissions: sessionData.permissions,
+      downloads_today_used: downloadsTodayUsed,
     })
   } catch (error) {
     console.error(error)
@@ -435,9 +599,11 @@ export async function handleOAuthCallback(req: any, res: Response) {
   }
 }
 
-export async function getCurrentUser(req: any, res: Response) {
+export async function getCurrentUser(req: any, res: any) {
   try {
     const sessionData = await resolveSession(req)
+    const uid = Number(sessionData.user.id)
+    const downloadsTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayDownloadUsage(uid) : 0
     send.success(res, {
       local_token: sessionData.token,
       user_id: sessionData.user.id,
@@ -445,16 +611,24 @@ export async function getCurrentUser(req: any, res: Response) {
       expired_at: sessionData.session.expired_at,
       user: sessionData.user,
       permissions: sessionData.permissions,
+      downloads_today_used: downloadsTodayUsed,
     })
   } catch (error) {
     send.error(res, (error as Error).message || '获取当前用户失败')
   }
 }
 
-export async function getAccountCenter(req: any, res: Response) {
+export async function getAccountCenter(req: any, res: any) {
   try {
     const sessionData = await resolveSession(req)
     const baseUrl = process.env.FRONTEND_PUBLIC_BASE_URL || process.env.APP_BASE_URL || getBaseUrl(req)
+    const uid = Number(sessionData.user.id)
+    const downloadsTodayUsed = Number.isFinite(uid) && uid > 0 ? await getTodayDownloadUsage(uid) : 0
+    const dailyLimit = Number(sessionData.permissions.daily_limit_count) || 0
+    const downloadsTodayRemaining =
+      dailyLimit > 0 ? Math.max(0, dailyLimit - downloadsTodayUsed) : null
+    const recentRecords =
+      Number.isFinite(uid) && uid > 0 ? await getMergedRecentAccountRecords(uid, 5) : []
     send.success(res, {
       account_overview: {
         user: sessionData.user,
@@ -469,6 +643,8 @@ export async function getAccountCenter(req: any, res: Response) {
       quota_card: {
         daily_limit_count: sessionData.permissions.daily_limit_count,
         max_file_size: sessionData.permissions.max_file_size,
+        downloads_today_used: downloadsTodayUsed,
+        downloads_today_remaining: downloadsTodayRemaining,
       },
       feature_permission_card: {
         allow_batch: sessionData.permissions.allow_batch,
@@ -477,14 +653,14 @@ export async function getAccountCenter(req: any, res: Response) {
         allow_template_manage: sessionData.permissions.allow_template_manage,
       },
       quick_actions: buildQuickActions(baseUrl),
-      recent_records: [],
+      recent_records: recentRecords,
     })
   } catch (error) {
     send.error(res, (error as Error).message || '获取账户中心失败')
   }
 }
 
-export async function logout(req: any, res: Response) {
+export async function logout(req: any, res: any) {
   try {
     const token = getBearerToken(req)
     if (!token) {
@@ -502,7 +678,7 @@ export async function logout(req: any, res: Response) {
   }
 }
 
-export async function adminListUsers(req: any, res: Response) {
+export async function adminListUsers(req: any, res: any) {
   try {
     await requireAdmin(req)
     const db = await getMysqlPool()
@@ -521,7 +697,7 @@ export async function adminListUsers(req: any, res: Response) {
   }
 }
 
-export async function adminUpdatePermissions(req: any, res: Response) {
+export async function adminUpdatePermissions(req: any, res: any) {
   try {
     await requireAdmin(req)
     const userId = Number(req.body.user_id || 0)
@@ -563,7 +739,7 @@ export async function adminUpdatePermissions(req: any, res: Response) {
   }
 }
 
-export async function adminListSessions(req: any, res: Response) {
+export async function adminListSessions(req: any, res: any) {
   try {
     await requireAdmin(req)
     const db = await getMysqlPool()
@@ -580,7 +756,7 @@ export async function adminListSessions(req: any, res: Response) {
   }
 }
 
-export async function adminRevokeSession(req: any, res: Response) {
+export async function adminRevokeSession(req: any, res: any) {
   try {
     await requireAdmin(req)
     const sessionId = Number(req.body.session_id || 0)

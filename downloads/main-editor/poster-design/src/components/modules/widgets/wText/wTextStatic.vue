@@ -23,7 +23,7 @@
       fontFamily: `'${params.fontClass.value}'`,
     }"
   >
-    <template v-if="params.textEffects">
+    <template v-if="Array.isArray(params.textEffects) && params.textEffects.length > 0">
       <div
         v-for="(ef, efi) in params.textEffects"
         :key="efi + 'effect'"
@@ -42,9 +42,12 @@
       ></div>
     </template>
     <div
+      v-show="!params.textEffects?.length"
       :style="{ fontFamily: `'${params.fontClass.value}'` }"
-      class="edit-text" spellcheck="false" 
-      v-html="params.text"></div>
+      class="edit-text"
+      spellcheck="false"
+      v-html="params.text"
+    ></div>
   </div>
 </template>
 

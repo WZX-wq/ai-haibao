@@ -226,4 +226,28 @@ defineExpose({
   font-size: 15px;
   color: #666666;
 }
+
+@media (max-width: 900px) {
+  .top-nav-wrap {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .v-tips {
+    width: 100%;
+    padding: 0;
+  }
+
+  .uploader {
+    width: calc(100% - 32px);
+  }
+
+  .uploader__box {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+    font-size: 14px;
+  }
+}
 </style>

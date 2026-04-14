@@ -19,7 +19,7 @@
               width: l.global.width + 'px',
               height: l.global.height + 'px',
               backgroundColor: l.global.backgroundGradient ? undefined : l.global.backgroundColor,
-              backgroundImage: l.global.backgroundImage ? `url(${l.global?.backgroundImage})` : l.global.backgroundGradient || undefined,
+              backgroundImage: l.global.backgroundImage ? posterBgUrl(l.global.backgroundImage) : l.global.backgroundGradient || undefined,
               backgroundSize: l.global.backgroundTransform?.x ? 'auto' : 'cover',
               backgroundPositionX: (l.global.backgroundTransform?.x || 0) + 'px',
               backgroundPositionY: (l.global.backgroundTransform?.y || 0) + 'px',
@@ -44,6 +44,7 @@
 import { ref, Ref, onMounted, nextTick, watch, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCanvasStore, useWidgetStore, useForceStore, useControlStore } from '@/store'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 import { ElMessage } from 'element-plus'
 const forceStore = useForceStore()
 const canvasStore = useCanvasStore()
@@ -57,6 +58,11 @@ const listRef: Ref<HTMLElement | null> = ref(null)
 const index = computed(() => canvasStore.dCurrentPage)
 const { dZoom, dPage } = storeToRefs(canvasStore)
 const { dWidgets, dLayouts } = storeToRefs(widgetStore)
+
+function posterBgUrl(src: string | undefined) {
+  const n = normalizeLoopbackMediaUrl(src)
+  return n ? `url(${n})` : undefined
+}
 
 watch(
   () => dZoom.value,

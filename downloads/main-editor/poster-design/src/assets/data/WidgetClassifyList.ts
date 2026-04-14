@@ -18,6 +18,12 @@ export type TWidgetClassifyData = {
 
 export default [
   {
+    name: 'AI海报',
+    icon: 'icon-zujian01',
+    show: false,
+    component: 'ai-poster-wrap',
+  },
+  {
     name: '模板',
     icon: 'icon-moban',
     show: false,

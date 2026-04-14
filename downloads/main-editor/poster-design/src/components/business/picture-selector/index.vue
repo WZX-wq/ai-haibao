@@ -36,6 +36,7 @@ import { ElTabPane, ElTabs, TabPaneName } from 'element-plus'
 import api from '@/api'
 import { TGetImageListResult } from '@/api/material'
 import { useControlStore } from '@/store'
+import useUserStore from '@/store/base/user'
 
 type TEmits = (event: 'select', data: TGetImageListResult) => void
 
@@ -50,6 +51,7 @@ type TState = {
 const emits = defineEmits<TEmits>()
 
 const controlStore = useControlStore()
+const userStore = useUserStore()
 
 const state = reactive<TState>({
   dialogVisible: false,
@@ -84,6 +86,11 @@ const load = async (init?: boolean) => {
     state.isDone = false
   }
   if (state.isDone || loading) {
+    return
+  }
+  if (!userStore.online) {
+    state.imgList = []
+    state.isDone = true
     return
   }
   loading = true

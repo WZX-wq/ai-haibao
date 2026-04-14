@@ -46,6 +46,7 @@ import useNotification from '@/common/methods/notification'
 import eventBus from '@/utils/plugins/eventBus'
 import { storeToRefs } from 'pinia'
 import { useControlStore, useCanvasStore, useWidgetStore } from '@/store'
+import useUserStore from '@/store/base/user'
 
 type TProps = {
   active?: number
@@ -68,6 +69,7 @@ const router = useRouter()
 
 const controlStore = useControlStore()
 const widgetStore = useWidgetStore()
+const userStore = useUserStore()
 
 const { dPage } = storeToRefs(useCanvasStore())
 const listRef = ref<HTMLElement | null>(null)
@@ -111,6 +113,11 @@ const load = (init?: boolean) => {
     state.isDone = false
   }
   if (state.isDone || loading) {
+    return
+  }
+  if (!userStore.online) {
+    state.imgList = []
+    state.isDone = true
     return
   }
   loading = true
@@ -299,7 +306,8 @@ const tabChange = (tabName: TabPaneName) => {
 
 const selectDesign = async (item: IGetTempListData) => {
   const { id } = item
-  router.push({ path: '/home', query: { id: String(id) } })
+  /** 与模板入口统一用 tempid，避免仅带 id 时保存/导出分支不一致；大整数用字符串避免精度问题 */
+  router.push({ path: '/home', query: { tempid: String(id) } })
 }
 
 const openPSD = () => {

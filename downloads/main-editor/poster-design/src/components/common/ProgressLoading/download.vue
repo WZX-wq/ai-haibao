@@ -13,7 +13,7 @@
         <iconClose v-show="percent >= 100" class="backstage" @click="cancel" width="20" />
       </div>
       <div class="text">{{ text }}</div>
-      <el-progress style="width: 100%" :text-inside="true" :percentage="percent" />
+      <el-progress v-show="percent < 100" class="progress-bar" :text-inside="true" :percentage="percent" />
       <div v-show="percent < 100" class="text btn" @click="cancel">{{ cancelText }}</div>
       <div class="text info">{{ msg }}</div>
       <div v-show="percent >= 100" class="success">
@@ -88,28 +88,37 @@ defineExpose({
   user-select: none;
   display: flex;
   justify-content: center;
+  align-items: center;
   flex-direction: column;
-  padding: 0 24%;
+  padding: 24px 16px;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   position: fixed;
   z-index: 9999;
   top: 0;
   left: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(15, 23, 42, 0.45);
 }
 .content {
   background: #ffffff;
-  border-radius: 8px;
-  padding: 2rem 4rem;
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  width: min(400px, calc(100vw - 32px));
+  max-width: 100%;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+}
+.progress-bar {
+  width: 100%;
 }
 .text {
-  margin: 2rem 0;
-  font-size: 20px;
-  font-weight: bold;
+  margin: 0.35rem 0 0.65rem;
+  font-size: 15px;
+  font-weight: 600;
   width: 100%;
   text-align: center;
-  color: #333333;
+  color: #1e293b;
+  line-height: 1.45;
 }
 .btn {
   font-weight: 400;
@@ -134,8 +143,17 @@ defineExpose({
 .success {
   display: flex;
   justify-content: center;
+  align-items: center;
+  margin-top: 0.5rem;
+  max-height: min(42vh, 280px);
   img {
-    width: 80%;
+    max-width: 100%;
+    max-height: min(42vh, 280px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
   }
 }
 </style>

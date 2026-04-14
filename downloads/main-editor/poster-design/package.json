@@ -10,8 +10,8 @@
     "serve:stop": "powershell -ExecutionPolicy Bypass -File scripts/serve-stop.ps1",
     "serve:status": "node scripts/dev-orchestrator.mjs --status",
     "dev": "cross-env NODE_ENV=development vite",
-    "build": "cross-env NODE_ENV=production && vite build",
-    "v-build": "cross-env NODE_ENV=production && vite build",
+    "build": "cross-env NODE_ENV=production vite build",
+    "v-build": "cross-env NODE_ENV=production vite build",
     "v-build-hard": "cross-env NODE_ENV=production vue-tsc --noEmit && vite build",
     "qa:full": "node scripts/full_page_qa.js"
   },

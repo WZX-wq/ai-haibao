@@ -7,20 +7,19 @@
  */
 
 
-import { customAlphabet } from 'nanoid/non-secure'
 import { TWidgetStore, TdWidgetData } from '..'
 import useCanvasStore from '../../canvas'
 import useWidgetStore from '../../widget'
 import { decodeTextIfNeeded, repairKnownMojibake } from '@/utils/decodeText'
-const nanoid = customAlphabet('1234567890abcdef', 12)
+import { assignStableLayerUuids } from './widget'
 
 // TODO: 选择模板
 export function setTemplate(store: TWidgetStore, allWidgets: TdWidgetData[]) {
-  // const historyStore = useHistoryStore()
   const canvasStore = useCanvasStore()
   const widgetStore = useWidgetStore()
+  assignStableLayerUuids(allWidgets)
+  store.dWidgets = []
   allWidgets.forEach((item) => {
-    Number(item.uuid) < 0 && (item.uuid = nanoid()) // 重设id
     item.text && (item.text = decodeTextIfNeeded(item.text))
     item.name && (item.name = repairKnownMojibake(item.name))
     if (item.fontClass?.alias) {

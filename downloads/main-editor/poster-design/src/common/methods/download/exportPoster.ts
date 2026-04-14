@@ -47,10 +47,17 @@ async function renderPosterCanvas(canvasId: string) {
 
   try {
     await waitForImages(cloned)
+    const pw = Math.max(1, source.offsetWidth)
+    const ph = Math.max(1, source.offsetHeight)
+    const MAX_EDGE = 8192
+    let scale = 1
+    if (Math.max(pw, ph) * scale > MAX_EDGE) {
+      scale = MAX_EDGE / Math.max(pw, ph)
+    }
     const canvas = await html2canvas(cloned, {
       backgroundColor: null,
       useCORS: true,
-      scale: window.devicePixelRatio > 1 ? 2 : 1,
+      scale,
       width: source.offsetWidth,
       height: source.offsetHeight,
       windowWidth: source.offsetWidth,
@@ -117,4 +124,43 @@ export async function exportPoster(fileName: string, format: TExportFormat, canv
 
   const blob = await canvasToBlob(canvas, 'image/png')
   saveBlob(blob, `${fileName}.png`)
+}
+
+/** 服务端返回的 PNG Blob → JPEG（白底），用于「下载模板」多格式 */
+export async function pngBlobToJpegBlob(pngBlob: Blob, quality = 0.92): Promise<Blob> {
+  const bmp = await createImageBitmap(pngBlob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bmp.width
+  canvas.height = bmp.height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('failed to create canvas context')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(bmp, 0, 0)
+  bmp.close()
+  return await canvasToBlob(canvas, 'image/jpeg', quality)
+}
+
+/** 服务端返回的 PNG Blob → 单页 PDF */
+export async function savePngBlobAsPdf(pngBlob: Blob, fileNameWithoutExt: string): Promise<void> {
+  const objectUrl = URL.createObjectURL(pngBlob)
+  try {
+    const img = new Image()
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('pdf: image load failed'))
+      img.src = objectUrl
+    })
+    const w = img.naturalWidth
+    const h = img.naturalHeight
+    const pdf = new jsPDF({
+      orientation: w >= h ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [w, h],
+    })
+    pdf.addImage(objectUrl, 'PNG', 0, 0, w, h)
+    pdf.save(`${fileNameWithoutExt}.pdf`)
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }

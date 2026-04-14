@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+dist
+**/dist
+# 本机/运行时上传与截图，compose 已挂卷；勿打入 build context
+service/static
+.git
+**/runlogs
+**/output/playwright
+**/*.log
+.env
+**/.env
+.DS_Store

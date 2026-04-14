@@ -4,6 +4,8 @@ import type { TdWidgetData } from '@/store/design/widget'
 export type SizePreset = { key: string; name: string; width: number; height: number }
 
 export function getSizePresets(): SizePreset[]
+export function dedupePosterTitleSlogan(title: string, slogan: string): { title: string; slogan: string }
+export function stripInternalPromptEcho(text: string): string
 export const layoutFamilies: readonly string[]
 export function normalizeLayoutFamily(raw: string): string
 export function buildPosterLayout(params: {

@@ -126,15 +126,14 @@ def make_image_layer(name: str, img_url: str, width: int, height: int, left: int
 
 
 def simple_hero_svg(title: str, subtitle: str, primary: str, accent: str, bg: str) -> str:
+    """仅背景装饰，不包含文案；文案全部由 w-text 图层渲染，避免与画布文字叠两层。"""
+    _ = title, subtitle
     svg = f"""
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 764 345">
       <rect width="764" height="345" rx="40" fill="{bg}"/>
       <rect x="36" y="34" width="692" height="277" rx="32" fill="{accent}" opacity="0.18"/>
       <circle cx="620" cy="96" r="60" fill="{primary}" opacity="0.18"/>
       <circle cx="132" cy="262" r="44" fill="{primary}" opacity="0.12"/>
-      <text x="56" y="88" font-size="20" fill="{primary}" font-family="Arial">{subtitle}</text>
-      <text x="56" y="180" font-size="56" font-weight="800" fill="{primary}" font-family="Arial">{title}</text>
-      <text x="56" y="234" font-size="24" fill="#3f3f46" font-family="Arial">点击后可拆分文字与主图继续编辑</text>
     </svg>
     """.strip()
     return data_url(svg)
@@ -160,12 +159,14 @@ def build_text_detail(item_id: int, title: str, sample: str, color: str, bg: str
 
 def build_comp_detail(item_id: int, title: str, eyebrow: str, headline: str, subtitle: str, primary: str, accent: str, bg: str):
     hero = simple_hero_svg(headline, subtitle, primary, accent, bg)
+    # 大标题占位高度约 fontSize*1.8，须与副标题 top 错开，避免重叠
     layers = [
         make_image_layer("图片", hero, 764, 345, 0, 0),
         make_text_layer(eyebrow, primary, 22, left=36, top=34, width=340, text_align="left", font_weight=400, letter_spacing=2),
-        make_text_layer(headline, primary, 62, left=36, top=90, width=500, text_align="left"),
-        make_text_layer(subtitle, "#3f3f46ff", 24, left=36, top=176, width=520, text_align="left", font_weight=400),
-        make_text_layer("立即编辑", "#ffffffff", 28, left=36, top=272, width=220, background_color=primary, text_align="center"),
+        make_text_layer(headline, primary, 62, left=36, top=88, width=500, text_align="left"),
+        make_text_layer(subtitle, "#3f3f46ff", 24, left=36, top=204, width=520, text_align="left", font_weight=400),
+        make_text_layer("点击后可拆分文字与主图继续编辑", "#3f3f46ff", 20, left=36, top=248, width=640, text_align="left", font_weight=400),
+        make_text_layer("立即编辑", "#ffffffff", 28, left=36, top=292, width=220, background_color=primary, text_align="center"),
     ]
     return {
         "id": item_id,

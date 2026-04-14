@@ -81,7 +81,13 @@ type TFetchMethod = keyof Pick<
 
 const normalizeAxiosPayload = (payload: any) => {
   if (!payload) return payload
-  const data = payload?.data ?? payload
+  const isAxiosResponse =
+    !!payload &&
+    typeof payload === 'object' &&
+    ('config' in payload) &&
+    ('headers' in payload) &&
+    ('status' in payload)
+  const data = isAxiosResponse ? payload?.data : (payload?.response?.data ?? payload)
 
   if (data?.code === 401) {
     console.log('鐧诲綍澶辨晥')
@@ -110,6 +116,10 @@ const isBusinessPayload = (payload: any) => {
     'stat',
     'result',
     'data',
+    'list',
+    'page',
+    'pageSize',
+    'total',
     'provider_name',
     'oauth_ready',
     'mysql_ready',

@@ -17,7 +17,7 @@
       }"
     >
       <div
-        id="out-page"
+        :id="embedPreview ? `out-page-${embedKey}` : 'out-page'"
         class="out-page"
         :style="{
           padding: padding ?? dPresetPadding + 'px',
@@ -40,7 +40,9 @@
               transform: 'scale(' + dZoom / 100 + ')',
               transformOrigin: (dZoom >= 100 ? 'center' : 'left') + ' top',
               backgroundColor: dPage.backgroundGradient ? undefined : dPage.backgroundColor,
-              backgroundImage: dPage.backgroundImage ? `url(${dPage?.backgroundImage})` : dPage.backgroundGradient || undefined,
+              backgroundImage: dPage.backgroundImage
+                ? `url(${normalizeLoopbackMediaUrl(String(dPage.backgroundImage))})`
+                : dPage.backgroundGradient || undefined,
               backgroundSize: dPage.backgroundTransform?.x ? 'auto' : 'cover',
               backgroundPositionX: (dPage.backgroundTransform?.x || 0) + 'px',
               backgroundPositionY: (dPage.backgroundTransform?.y || 0) + 'px',
@@ -88,6 +90,7 @@ import resizePage from './comps/resize.vue'
 import watermark from './comps/pageWatermark.vue'
 import { TdWidgetData } from '@/store/design/widget'
 import { useRoute } from 'vue-router'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 const route = useRoute()
 
 // 页面设计组件
@@ -208,7 +211,7 @@ async function dropOver(e: MouseEvent) {
   const imgEl = target?.firstElementChild?.firstElementChild as HTMLImageElement
   if (eventTarget.getAttribute('putIn')) {
     _dropIn = uuid
-    const imgUrl = data.value.thumb || data.value.url
+    const imgUrl = normalizeLoopbackMediaUrl(String(data.value.thumb || data.value.url || ''))
     !_srcCache && (_srcCache = imgEl.src)
     imgEl.src = imgUrl
   } else {

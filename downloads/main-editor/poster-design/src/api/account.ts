@@ -49,6 +49,8 @@ export type CurrentSession = {
   expired_at: string
   user: AccountUser
   permissions: AccountPermissions
+  /** 今日已成功计次的下载次数（MySQL 未配置时为 0） */
+  downloads_today_used?: number
 }
 
 export type AccountCenterResult = {
@@ -65,6 +67,9 @@ export type AccountCenterResult = {
   quota_card: {
     daily_limit_count: number
     max_file_size: number
+    downloads_today_used?: number
+    /** 有上限时为剩余次数；不限次（daily_limit_count<=0）时为 null */
+    downloads_today_remaining?: number | null
   }
   feature_permission_card: {
     allow_batch: boolean
@@ -82,3 +87,8 @@ export const callbackLogin = (params: Type.Object = {}) => fetch<CurrentSession>
 export const getCurrentUser = () => fetch<CurrentSession>('auth/me', {}, 'get')
 export const getAccountCenter = () => fetch<AccountCenterResult>('auth/account-center', {}, 'get')
 export const logout = () => fetch<boolean>('auth/logout', {}, 'post')
+
+/** 下载前扣减当日配额（MySQL 未配置时服务端跳过；需已登录且带 Token） */
+export type ConsumeDownloadQuotaResult = { skipped?: boolean; used?: number; limit?: number; code?: number; msg?: string }
+export const consumeDownloadQuota = () =>
+  fetch<ConsumeDownloadQuotaResult>('usage/download/consume', {}, 'post')

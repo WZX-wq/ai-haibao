@@ -9,6 +9,7 @@
 import express from 'express'
 import bodyParser from 'body-parser'
 import fs from 'fs'
+import path from 'path'
 import router from './control/router'
 import { filePath, servicePort } from './configs'
 import handleTimeout from './utils/timeout'
@@ -35,7 +36,20 @@ loadEnvFile()
 
 const port = process.env.PORT || servicePort
 const app = express()
-const rootFaviconPath = `${process.cwd()}/../public/favicon.svg`
+function resolveExistingFile(candidates: string[]) {
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p
+  }
+  return ''
+}
+const rootFaviconPng = resolveExistingFile([
+  path.join(process.cwd(), 'public', 'favicon.png'),
+  path.join(process.cwd(), '..', 'public', 'favicon.png'),
+])
+const rootFaviconSvg = resolveExistingFile([
+  path.join(process.cwd(), 'public', 'favicon.svg'),
+  path.join(process.cwd(), '..', 'public', 'favicon.svg'),
+])
 
 // 创建目录
 const createFolder = (folder: string) => {
@@ -51,7 +65,10 @@ app.all('*', (req: any, res: any, next: any) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Headers', 'X-Access-Token,Content-Type,Authorization,Content-Length,Content-Size')
   res.header('Access-Control-Allow-Methods', '*')
-  res.header('Content-Type', 'application/json;charset=utf-8')
+  const p = String(req.path || '')
+  if (!p.includes('/screenshots') && !p.includes('/printscreen')) {
+    res.header('Content-Type', 'application/json;charset=utf-8')
+  }
   if (req.method === 'OPTIONS') {
     res.sendStatus(200)
     return
@@ -64,9 +81,14 @@ if (fs.existsSync(process.cwd() + `/src/mock/assets`)) {
   app.use('/store', setUploadContentType, express.static(process.cwd() + `/src/mock/assets`))
 }
 app.get('/favicon.ico', (req: any, res: any) => {
-  if (fs.existsSync(rootFaviconPath)) {
+  if (rootFaviconPng) {
+    res.setHeader('Content-Type', 'image/png')
+    res.sendFile(rootFaviconPng)
+    return
+  }
+  if (rootFaviconSvg) {
     res.setHeader('Content-Type', 'image/svg+xml')
-    res.sendFile(rootFaviconPath)
+    res.sendFile(rootFaviconSvg)
     return
   }
   res.sendStatus(204)

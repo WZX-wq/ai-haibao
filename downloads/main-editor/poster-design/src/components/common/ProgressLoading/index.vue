@@ -2,7 +2,7 @@
   <div v-if="percent" class="mask">
     <div class="content">
       <div class="text">{{ text }}</div>
-      <el-progress style="width: 100%" :text-inside="true" :percentage="percent" />
+      <el-progress class="progress-bar" :text-inside="true" :percentage="percent" />
       <div class="text btn" @click="cancel">{{ cancelText }}</div>
       <div class="text info">{{ msg }}</div>
     </div>
@@ -62,28 +62,37 @@ defineExpose({
 .mask {
   display: flex;
   justify-content: center;
+  align-items: center;
   flex-direction: column;
-  padding: 0 24%;
+  padding: 24px 16px;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   position: fixed;
   z-index: 99999;
   top: 0;
   left: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(15, 23, 42, 0.45);
 }
 .content {
   background: #ffffff;
-  border-radius: 8px;
-  padding: 2rem 4rem;
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  width: min(400px, calc(100vw - 32px));
+  max-width: 100%;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+}
+.progress-bar {
+  width: 100%;
 }
 .text {
-  margin: 2rem 0;
-  font-size: 20px;
-  font-weight: bold;
+  margin: 0.35rem 0 0.65rem;
+  font-size: 15px;
+  font-weight: 600;
   width: 100%;
   text-align: center;
-  color: #333333;
+  color: #1e293b;
+  line-height: 1.45;
 }
 .btn {
   font-weight: 400;

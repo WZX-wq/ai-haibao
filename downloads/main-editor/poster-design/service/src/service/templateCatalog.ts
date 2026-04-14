@@ -9,6 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import axiosClient from 'axios'
+import { getClientSiteRootUrl, getClientStaticBaseUrl } from '../utils/clientPublicUrl'
 
 type TemplateListItem = {
   id: number
@@ -111,8 +112,6 @@ function allowRemoteTemplateHeroes() {
   return String(process.env.TEMPLATE_HERO_REMOTE || 'cache') // cache | direct | false
 }
 
-const STATIC_BASE_URL = String(process.env.SERVICE_STATIC_BASE_URL || 'http://127.0.0.1:7001/static/').replace(/\/?$/, '/')
-const SERVICE_BASE_URL = STATIC_BASE_URL.replace(/\/static\/?$/, '/').replace(/\/?$/, '/')
 const HERO_CACHE_DIR = path.join(process.cwd(), 'static', 'template-hero')
 const heroDownloadQueue = new Map<string, Promise<string>>()
 
@@ -145,7 +144,7 @@ function getCachedHeroUrlIfExists(remoteUrl: string) {
   const exts = ['jpg', 'png', 'webp']
   for (const ext of exts) {
     const p = `${base}.${ext}`
-    if (fs.existsSync(p)) return `${STATIC_BASE_URL}template-hero/${key}.${ext}`
+    if (fs.existsSync(p)) return `${getClientStaticBaseUrl()}template-hero/${key}.${ext}`
   }
   return ''
 }
@@ -161,7 +160,7 @@ async function downloadHeroToCache(remoteUrl: string) {
     const { base, key } = getHeroCachePath(remoteUrl)
     const target = `${base}.${ext}`
     fs.writeFileSync(target, Buffer.from(res.data))
-    return `${STATIC_BASE_URL}template-hero/${key}.${ext}`
+    return `${getClientStaticBaseUrl()}template-hero/${key}.${ext}`
   })().finally(() => {
     heroDownloadQueue.delete(remoteUrl)
   })
@@ -192,7 +191,9 @@ function makeTemplateCoverScreenshotUrl(seed: TemplateSeed) {
     type: 'file',
     index: '0',
   })
-  return `${SERVICE_BASE_URL}api/screenshots?${params.toString()}`
+  const root = getClientSiteRootUrl()
+  const path = `api/screenshots?${params.toString()}`
+  return root.endsWith('/') ? `${root}${path}` : `${root}/${path}`
 }
 
 const categories: TemplateCategory[] = [
@@ -1299,6 +1300,14 @@ export function getTemplateSuggestionByIndustry(industry: string) {
     '节日': [405, 105, 205, 305],
     '健身': [406, 106, 206, 306],
     '餐饮': [407, 107, 207, 307],
+    '美妆': [401, 101, 201, 301],
+    '母婴': [403, 103, 203, 303],
+    '地产': [402, 102, 202, 302],
+    '金融': [402, 102, 202, 302],
+    '科技互联网': [403, 103, 203, 303],
+    '旅游': [403, 103, 203, 208, 303],
+    '汽车': [401, 101, 201, 301],
+    '政务公益': [402, 102, 202, 302],
     '小红书': [408, 308, 101, 201],
     '小红书封面': [408, 308, 101, 201],
   }
@@ -1318,6 +1327,14 @@ export function getTemplateCandidatesByIndustry(industry: string, limit = 3) {
     '节日': [405, 105, 205, 305],
     '健身': [406, 106, 206, 306],
     '餐饮': [407, 107, 207, 307],
+    '美妆': [401, 101, 201, 301],
+    '母婴': [403, 103, 203, 303],
+    '地产': [402, 102, 202, 302],
+    '金融': [402, 102, 202, 302],
+    '科技互联网': [403, 103, 203, 303],
+    '旅游': [403, 103, 203, 208, 303],
+    '汽车': [401, 101, 201, 301],
+    '政务公益': [402, 102, 202, 302],
     '小红书': [408, 308, 101, 201],
     '小红书封面': [408, 308, 101, 201],
   }

@@ -18,12 +18,7 @@ export default [
   },
   {
     path: '/create',
-    redirect: { name: 'AiPoster' },
-  },
-  {
-    path: '/ai-poster',
-    name: 'AiPoster',
-    component: () => import(/* webpackChunkName: 'ai-poster' */ '@/views/AiPoster.vue'),
+    redirect: { name: 'Home' },
   },
   {
     path: '/login',

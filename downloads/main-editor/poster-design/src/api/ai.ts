@@ -1,5 +1,6 @@
 import axiosFetch from '@/utils/axios'
-import _config from '@/config'
+import _config, { LocalStorageKey } from '@/config'
+import { useUserStore } from '@/store/index'
 
 export type TCommonUploadCb = (up: number, dp: number) => void
 
@@ -13,6 +14,10 @@ export type PosterGenerateInput = {
   qrUrl: string
   sourceImageUrl?: string
   baseImageUrl?: string
+  /** 默认 true；传 false 时不生成 AI 主图（仅背景+叠字） */
+  generateHeroImage?: boolean
+  /** 默认 true；传 false 时不调用 AI 背景图（画布用配色渐变） */
+  generateBackgroundImage?: boolean
 }
 
 export type PosterPalette = {
@@ -129,21 +134,25 @@ export type CutoutResult = {
   providerMeta: AiProviderMeta
 }
 
-async function requestAi<T>(url: string, params: PosterGenerateInput, timeout = 240000): Promise<T> {
+export async function requestAi<T>(url: string, params: PosterGenerateInput, timeout = 240000): Promise<T> {
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), timeout)
   const finalUrl = url.startsWith('http') ? url : `${_config.API_URL}/${url}`.replace(/([^:]\/)\/+/g, '$1')
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(LocalStorageKey.tokenKey) || '' : ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = token
 
   try {
     const response = await window.fetch(finalUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(params),
       signal: controller.signal,
     })
     const payload = await response.json()
+    if (response.status === 401 || payload?.code === 401) {
+      useUserStore().changeOnline(false)
+    }
     if (!response.ok) {
       throw new Error(payload?.msg || payload?.message || `Request failed with status ${response.status}`)
     }

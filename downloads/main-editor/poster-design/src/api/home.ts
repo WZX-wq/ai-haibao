@@ -51,6 +51,8 @@ export type TGetTempDetail = {
 }
 
 export type TTempDetail = {
+  /** 与列表一致的主分类（服务端从合并目录补齐，用于左侧模板栏同步） */
+  cate?: number
   /** 分类 */
   category: number
   /** 封面 */
@@ -88,8 +90,12 @@ type TgetCategoriesResult = TCommResResult<TGetCategoriesData>
 export const getCategories = (params: TGetCategoriesParams) => fetch<TgetCategoriesResult[]>('design/cate', params, 'get')
 
 
-// 保存模板
-export const saveTemp = (params: Type.Object = {}) => fetch('design/edit', params, 'post')
+// 保存模板（extra 可传 axios 配置，如 signal / timeout）
+export const saveTemp = (
+  params: Type.Object = {},
+  exheaders: Record<string, any> = {},
+  extra: Record<string, any> = {},
+) => fetch('design/edit', params, 'post', exheaders, extra)
 // export const delTemp = (params: Type.Object = {}) => fetch('/api/template/temp_del', params)
 
 type TGetCompListParam = {

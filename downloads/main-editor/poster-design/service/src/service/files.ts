@@ -5,16 +5,17 @@
  * @LastEditors: ShawnPhang <https://m.palxp.cn>
  * @LastEditTime: 2024-08-12 18:52:18
  */
-import { Request, Response } from 'express'
+import { Request } from 'express'
+import { tryResolveSession } from './account'
+import { isMysqlConfigured } from '../utils/mysql'
 
 const multiparty = require('multiparty')
 const { filePath } = require('../configs.ts')
 const { checkCreateFolder, randomCode, copyFile, send } = require('../utils/tools.ts')
-
-const FileUrl = 'http://127.0.0.1:7001/static/'
+const { getClientStaticBaseUrl } = require('../utils/clientPublicUrl.ts')
 
 // api/file/upload 上传接口
-export async function upload(req: Request, res: Response) {
+export async function upload(req: Request, res: any) {
   const form = new multiparty.Form()
 
   form.parse(req, async function (err: any, fields: any, files: any) {
@@ -30,11 +31,20 @@ export async function upload(req: Request, res: Response) {
       return
     }
 
+    let folder = Array.isArray(fields?.folder) ? fields.folder[0] : (fields?.folder || '')
+    if (isMysqlConfigured()) {
+      const session = await tryResolveSession(req)
+      if (!session) {
+        res.status(401).json({ code: 401, msg: '未登录' })
+        return
+      }
+      folder = `user/${session.userId}`
+    }
+
     const headers = file.headers || {}
     const originalFilename = file.originalFilename || ''
     const fileType = (headers['content-type'] || '').split('/')[1] || 'png'
     const suffix = originalFilename.split('.').pop() || fileType
-    const folder = Array.isArray(fields?.folder) ? fields.folder[0] : (fields?.folder || '')
     const nameField = Array.isArray(fields?.name) ? fields.name[0] : fields?.name
     const name = nameField || `${randomCode(12)}.${suffix}`
     const folderPath = `${filePath}${folder ? `${folder}/` : ''}`
@@ -44,7 +54,7 @@ export async function upload(req: Request, res: Response) {
     const targetPath = `${folderPath}${name}`
     copyFile(file.path, targetPath)
       .then(() => {
-        const url = `${FileUrl}${folder ? folder + '/' : ''}${name}`
+        const url = `${getClientStaticBaseUrl()}${folder ? folder + '/' : ''}${name}`
         send.success(res, {
           key: `${folder}/${name}`,
           url,

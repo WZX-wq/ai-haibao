@@ -34,6 +34,8 @@ type TUserStoreState = {
   user: TAuthUser
   localToken: string | null
   permissions: TPermissionSnapshot
+  /** 今日已消耗下载次数；null 表示尚未从服务端同步 */
+  downloadsTodayUsed: number | null
   manager: string
   tempEditing: boolean
 }
@@ -42,6 +44,7 @@ type TUserAction = {
   changeOnline: (state: boolean) => void
   changeUser: (userName: string) => void
   setAuthSession: (payload: { token: string; user: TAuthUser; permissions: TPermissionSnapshot }) => void
+  setDownloadsTodayUsed: (used: number | null) => void
   clearAuthSession: () => void
   managerEdit: (status: boolean) => void
 }
@@ -84,6 +87,7 @@ const useUserStore = defineStore<'userStore', TUserStoreState, {}, TUserAction>(
     user: storedUser,
     localToken: storedToken,
     permissions: storedPermissions,
+    downloadsTodayUsed: null as number | null,
     manager: '',
     tempEditing: false,
   }),
@@ -97,10 +101,14 @@ const useUserStore = defineStore<'userStore', TUserStoreState, {}, TUserAction>(
       localStorage.setItem('username', name)
       localStorage.setItem(LocalStorageKey.authUserKey, JSON.stringify(this.user))
     },
+    setDownloadsTodayUsed(used: number | null) {
+      this.downloadsTodayUsed = used
+    },
     setAuthSession(payload) {
       this.localToken = payload.token
       this.user = payload.user
       this.permissions = payload.permissions
+      this.downloadsTodayUsed = null
       this.online = true
       localStorage.setItem(LocalStorageKey.tokenKey, payload.token)
       localStorage.setItem(LocalStorageKey.authUserKey, JSON.stringify(payload.user))
@@ -114,6 +122,7 @@ const useUserStore = defineStore<'userStore', TUserStoreState, {}, TUserAction>(
       this.online = false
       this.user = { id: null, name: null, avatar: '', email: '', provider: '' }
       this.permissions = { ...defaultPermissions }
+      this.downloadsTodayUsed = null
       localStorage.removeItem(LocalStorageKey.tokenKey)
       localStorage.removeItem(LocalStorageKey.authUserKey)
       localStorage.removeItem(LocalStorageKey.authPermissionsKey)

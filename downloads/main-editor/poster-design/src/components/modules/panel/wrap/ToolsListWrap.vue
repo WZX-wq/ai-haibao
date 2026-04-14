@@ -1,14 +1,5 @@
-﻿<template>
+<template>
   <div class="wrap">
-    <div class="header">{{ ui.aiHeader }}</div>
-    <div class="item" @click="openAiPosterAssistant">
-      <i class="icon sd-AI_zhineng" />
-      <div class="text">
-        <span>{{ ui.aiPosterTitle }}</span>
-        <span class="desc">{{ ui.aiPosterDesc }}</span>
-      </div>
-    </div>
-
     <div class="header">{{ ui.componentHeader }}</div>
     <div class="item" @click="addQrcode">
       <i class="icon sd-w-qrcode" />
@@ -32,17 +23,13 @@
 
 <script lang="ts" setup>
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import imageCutout from '@/components/business/image-cutout'
 import { wQrcodeSetting } from '../../widgets/wQrcode/wQrcodeSetting'
 import { useControlStore, useCanvasStore, useWidgetStore } from '@/store'
 
 const ui = {
-  aiHeader: '\u0041\u0049',
-  aiPosterTitle: '\u0041\u0049 \u6d77\u62a5\u52a9\u624b',
-  aiPosterDesc:
-    '\u8f93\u5165\u4e3b\u9898\u3001\u884c\u4e1a\u3001\u5c3a\u5bf8\u548c\u6587\u6848\uff0c\u81ea\u52a8\u751f\u6210\u53ef\u7ee7\u7eed\u7f16\u8f91\u7684\u6d77\u62a5\u8349\u7a3f\u3002',
   componentHeader: '\u7ec4\u4ef6',
   qrcodeTitle: '\u4e8c\u7ef4\u7801',
   qrcodeDesc: '\u5728\u6d77\u62a5\u4e2d\u63d2\u5165\u53ef\u81ea\u5b9a\u4e49\u6837\u5f0f\u7684\u4e8c\u7ef4\u7801\u3002',
@@ -54,7 +41,6 @@ const ui = {
 
 const controlStore = useControlStore()
 const route = useRoute()
-const router = useRouter()
 const imageCutoutRef = ref<typeof imageCutout | null>(null)
 const widgetStore = useWidgetStore()
 const { dPage } = storeToRefs(useCanvasStore())
@@ -83,14 +69,6 @@ function openImageCutout() {
   imageCutoutRef.value?.open()
 }
 
-function openAiPosterAssistant() {
-  router.push({
-    name: 'AiPoster',
-    query: {
-      returnTo: route.fullPath,
-    },
-  })
-}
 </script>
 
 <style lang="less" scoped>

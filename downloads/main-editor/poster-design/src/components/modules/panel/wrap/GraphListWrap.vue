@@ -13,7 +13,7 @@
       <template v-slot="{ index }">
         <div class="list-wrap">
           <div v-for="(item, i) in state.showList[index]" :key="i + 'sl'" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" lazy loading="lazy" />
+            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" lazy />
           </div>
         </div>
       </template>
@@ -23,7 +23,7 @@
       <classHeader :is-back="true" @back="back">{{ state.currentCategory.name }}</classHeader>
       <el-space fill wrap :fillRatio="30" direction="horizontal" class="list">
         <div v-for="(item, i) in state.list" :key="i + 'i'" class="list__item" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-          <el-image class="list__img" :src="item.thumb" fit="contain" lazy loading="lazy" />
+          <el-image class="list__img" :src="item.thumb" fit="contain" lazy />
         </div>
       </el-space>
       <div v-show="state.loading" class="loading"><i class="el-icon-loading" /> 加载中...</div>
@@ -157,6 +157,7 @@ const load = async (init: boolean = false) => {
 
   state.loading = true
   pageOptions.page += 1
+  const requestedPage = pageOptions.page
 
   try {
     const list = await api.material.getList({
@@ -177,10 +178,11 @@ const load = async (init: boolean = false) => {
   } catch (error) {
     console.error('Failed to load material list', error)
     if (isAlive) {
+      pageOptions.page = Math.max(0, requestedPage - 1)
       if (init) {
         state.list = []
       }
-      state.loadDone = true
+      state.loadDone = false
     }
   } finally {
     if (isAlive) {
