@@ -1,2 +1,32 @@
+# robots.txt for 鲲穹设计 (design.palxp.cn)
+
+# 允许所有搜索引擎爬取
 User-agent: *
-Disallow: /
+Allow: /
+
+# 禁止爬取的路径
+Disallow: /api/
+Disallow: /admin/
+Disallow: /*.json$
+Disallow: /*?*utm_source=
+Disallow: /*?*utm_medium=
+Disallow: /*?*utm_campaign=
+
+# 特定搜索引擎规则
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 0
+
+# Sitemap 位置
+Sitemap: https://design.palxp.cn/sitemap.xml
+
+# 主机信息（百度专用）
+Host: design.palxp.cn

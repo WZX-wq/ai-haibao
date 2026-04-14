@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  
+  <!-- 首页 -->
+  <url>
+    <loc>https://design.palxp.cn/</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://design.palxp.cn/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://design.palxp.cn/en/" />
+  </url>
+  
+  <!-- 欢迎页 -->
+  <url>
+    <loc>https://design.palxp.cn/welcome</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- 主页/模板中心 -->
+  <url>
+    <loc>https://design.palxp.cn/home</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- AI 海报生成 -->
+  <url>
+    <loc>https://design.palxp.cn/ai-poster</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- 模板分类页面 -->
+  <url>
+    <loc>https://design.palxp.cn/templates</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- 帮助中心 -->
+  <url>
+    <loc>https://design.palxp.cn/help</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <!-- 关于我们 -->
+  <url>
+    <loc>https://design.palxp.cn/about</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <!-- 价格页面 -->
+  <url>
+    <loc>https://design.palxp.cn/pricing</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- 教程中心 -->
+  <url>
+    <loc>https://design.palxp.cn/tutorials</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- 博客 -->
+  <url>
+    <loc>https://design.palxp.cn/blog</loc>
+    <lastmod>2026-04-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>
