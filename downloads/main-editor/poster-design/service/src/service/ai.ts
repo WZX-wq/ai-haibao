@@ -8,7 +8,6 @@ import { filePath } from '../configs'
 import { checkCreateFolder, copyFile, randomCode, send } from '../utils/tools'
 import { getTemplateCandidatesByIndustry, getTemplateSuggestionByIndustry } from './templateCatalog'
 import { getClientStaticBaseUrl } from '../utils/clientPublicUrl'
-import { detectSensitiveHits, summarizeHitPolicy, writeSensitiveAudit } from '../utils/sensitiveWords'
 
 type PosterGenerateInput = {
   theme: string
@@ -65,37 +64,10 @@ type RelayoutResult = {
   providerMeta: AiProviderMeta
 }
 
-function rejectSensitiveInput(req: any, res: any, payload: unknown) {
-  const hits = detectSensitiveHits(payload)
-  if (!hits.length) return false
-  const policy = summarizeHitPolicy(hits)
-  const majorHits = policy.shouldBlock ? policy.blocked : hits
-  const keywords = Array.from(new Set(majorHits.map((item) => item.keyword))).slice(0, 3)
-  writeSensitiveAudit({
-    route: String(req?.path || ''),
-    userId: req?.userDesignUserId ?? null,
-    ip: String(req?.headers?.['x-forwarded-for'] || req?.ip || ''),
-    userAgent: String(req?.headers?.['user-agent'] || ''),
-    hits,
-  })
-  if (policy.shouldBlock) {
-    res.status(422).json({
-      code: 422,
-      msg: `检测到疑似敏感词（${keywords.join('、')}），请调整文案后重试`,
-    })
-    return true
-  }
-  res.status(409).json({
-    code: 409,
-    msg: `检测到可能风险词（${keywords.join('、')}），请人工复核后再试`,
-  })
-  return true
-}
-
 const BAILIAN_CHAT_TIMEOUT = 20000
 const BAILIAN_IMAGE_TIMEOUT = 18000
-const BAILIAN_TASK_POLL_INTERVAL = 1500
-const BAILIAN_TASK_MAX_POLLS = 20
+const BAILIAN_TASK_POLL_INTERVAL = 2000
+const BAILIAN_TASK_MAX_POLLS = 6
 const BAILIAN_RETRY_TIMES = 2
 const DEFAULT_BAILIAN_IMAGE_COOLDOWN_MS = 2000
 let bailianImageQueue: Promise<unknown> = Promise.resolve()
@@ -339,99 +311,18 @@ async function generateHeroImageInternal(input: PosterGenerateInput, palette: Po
 async function generateBackgroundInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) { try { return await bailianBackgroundProvider(input, size) } catch (error) { const status = Number((error as any)?.response?.status || 0); if (status === 400) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('background', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `背景模型无法直接处理当前素材，已自动切换到真实文生图路径：${(error as Error).message}` }) } } if (!allowPosterFallback()) throw new Error(buildStrictProviderError('背景生成', error)); return mockImageProvider(input, palette, 'background', 'background') } }
 async function replaceImageInternal(input: PosterGenerateInput, palette: PosterPalette, size: SizePreset) { try { return await bailianImageEditProvider(input, size) } catch (error) { const status = Number((error as any)?.response?.status || 0); if (status === 400) { const rerouted = await bailianHeroProvider(input, size); return { result: rerouted.result, meta: getProviderMeta('imageEdit', { provider: rerouted.meta.provider, model: rerouted.meta.model, message: `换图模型无法直接处理当前素材，已自动切换到真实文生图路径：${(error as Error).message}` }) } } if (!allowPosterFallback()) throw new Error(buildStrictProviderError('换图', error)); return mockImageProvider(input, palette, 'hero', 'imageEdit') } }
 function getPythonExecutable() { return getEnv('AI_CUTOUT_PYTHON', 'python') }
-function getRembgModelName() { return getEnv('AI_CUTOUT_REMBG_MODEL', 'u2netp') }
-function getCutoutWorkerTimeoutMs() {
-  const raw = Number(getEnv('AI_CUTOUT_WORKER_TIMEOUT_MS', '12000'))
-  return Number.isFinite(raw) && raw > 0 ? raw : 45000
-}
-function getCutoutRemoteTimeoutMs() {
-  const raw = Number(getEnv('AI_CUTOUT_REMOTE_TIMEOUT_MS', '30000'))
-  return Number.isFinite(raw) && raw > 0 ? raw : 30000
-}
-function getRembgCooldownMs() {
-  const raw = Number(getEnv('AI_CUTOUT_REMBG_COOLDOWN_MS', '600000'))
-  return Number.isFinite(raw) && raw >= 0 ? raw : 600000
-}
-let rembgCircuitOpenUntil = 0
-function isRembgCircuitOpen() {
-  return Date.now() < rembgCircuitOpenUntil
-}
-function openRembgCircuit() {
-  rembgCircuitOpenUntil = Date.now() + getRembgCooldownMs()
-}
-function runCutoutWorker(args: string[]) {
-  return new Promise<any>((resolve, reject) => {
-    const scriptPath = path.join(process.cwd(), 'scripts', 'cutout_worker.py')
-    const child = spawn(getPythonExecutable(), [scriptPath, ...args], { cwd: process.cwd(), windowsHide: true })
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    const timeoutMs = getCutoutWorkerTimeoutMs()
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      try {
-        child.kill()
-      } catch {
-        /* ignore */
-      }
-      reject(new Error(`cutout worker timeout after ${timeoutMs}ms`))
-    }, timeoutMs)
-    child.stdout.on('data', (chunk) => { stdout += String(chunk) })
-    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
-    child.on('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.on('close', (code) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0) return reject(new Error(stderr || stdout || `cutout worker exited with code ${code}`))
-      try {
-        resolve(stdout ? JSON.parse(stdout) : {})
-      } catch {
-        reject(new Error(`invalid cutout worker response: ${stdout || stderr}`))
-      }
-    })
-  })
-}
+function getRembgModelName() { return getEnv('AI_CUTOUT_REMBG_MODEL', 'u2net') }
+function runCutoutWorker(args: string[]) { return new Promise<any>((resolve, reject) => { const scriptPath = path.join(process.cwd(), 'scripts', 'cutout_worker.py'); const child = spawn(getPythonExecutable(), [scriptPath, ...args], { cwd: process.cwd(), windowsHide: true }); let stdout = ''; let stderr = ''; child.stdout.on('data', (chunk) => { stdout += String(chunk) }); child.stderr.on('data', (chunk) => { stderr += String(chunk) }); child.on('error', reject); child.on('close', (code) => { if (code !== 0) return reject(new Error(stderr || stdout || `cutout worker exited with code ${code}`)); try { resolve(stdout ? JSON.parse(stdout) : {}) } catch { reject(new Error(`invalid cutout worker response: ${stdout || stderr}`)) } }) }) }
 async function inspectLocalImage(imagePath: string) { return runCutoutWorker(['inspect', imagePath]) }
 async function mergeMaskToTransparent(rawPath: string, maskPath: string, outputPath: string) { return runCutoutWorker(['merge-mask', rawPath, maskPath, outputPath]) }
 async function runRembgCutout(inputPath: string, outputPath: string) { return runCutoutWorker(['rembg', inputPath, outputPath, getRembgModelName()]) }
-async function uploadLocalFileToPublicUrl(filePathname: string, fileName: string) { const FormDataCtor = (global as any).FormData; const BlobCtor = (global as any).Blob; const form: any = new FormDataCtor(); form.append('file', new BlobCtor([fs.readFileSync(filePathname)]), fileName); const response = await axiosClient.post('https://tmpfiles.org/api/v1/upload', form, { timeout: getCutoutRemoteTimeoutMs(), maxBodyLength: Infinity, maxContentLength: Infinity }); const tempUrl = response?.data?.data?.url || ''; if (!tempUrl) throw new Error('temporary public upload failed'); return String(tempUrl).replace('http://', 'https://').replace('tmpfiles.org/', 'tmpfiles.org/dl/') }
-async function requestBailianCutout(model: string, imageUrl: string) { const response: any = await axiosClient({ method: 'post', url: `${getApiBaseUrl()}/services/aigc/image2image/image-synthesis`, data: { model, input: { image_url: imageUrl }, parameters: { return_form: 'transparent' } }, headers: { Authorization: `Bearer ${getBailianApiKey()}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable', 'X-DashScope-OssResourceResolve': 'enable' }, timeout: getCutoutRemoteTimeoutMs() }); const taskId = String(response.data?.output?.task_id || '').trim(); if (!taskId) throw new Error('missing cutout task id'); return pollBailianTask(taskId) }
+async function uploadLocalFileToPublicUrl(filePathname: string, fileName: string) { const FormDataCtor = (global as any).FormData; const BlobCtor = (global as any).Blob; const form: any = new FormDataCtor(); form.append('file', new BlobCtor([fs.readFileSync(filePathname)]), fileName); const response = await axiosClient.post('https://tmpfiles.org/api/v1/upload', form, { timeout: 120000, maxBodyLength: Infinity, maxContentLength: Infinity }); const tempUrl = response?.data?.data?.url || ''; if (!tempUrl) throw new Error('temporary public upload failed'); return String(tempUrl).replace('http://', 'https://').replace('tmpfiles.org/', 'tmpfiles.org/dl/') }
+async function requestBailianCutout(model: string, imageUrl: string) { const response: any = await axiosClient({ method: 'post', url: `${getApiBaseUrl()}/services/aigc/image2image/image-synthesis`, data: { model, input: { image_url: imageUrl }, parameters: { return_form: 'transparent' } }, headers: { Authorization: `Bearer ${getBailianApiKey()}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable', 'X-DashScope-OssResourceResolve': 'enable' }, timeout: 120000 }); const taskId = String(response.data?.output?.task_id || '').trim(); if (!taskId) throw new Error('missing cutout task id'); return pollBailianTask(taskId) }
 function extractCutoutUrl(response: any) { const output = response?.output || {}; const results = Array.isArray(output.results) ? output.results[0] : output.results || output.result || {}; return results?.transparent_image_url || results?.output_image_url || results?.output_image_url_list?.[0] || results?.image_url || results?.url || output?.transparent_image_url || output?.output_image_url || output?.image_url || output?.url || '' }
 async function bailianCutoutProvider(rawUrl: string, localPath: string, fileName: string) { const taskResult = await requestBailianCutout(getProviderModel('cutout'), await uploadLocalFileToPublicUrl(localPath, fileName)); const remoteUrl = extractCutoutUrl(taskResult); if (!remoteUrl) throw new Error('cutout result missing image url'); const remoteAsset = await saveRemoteImageToLocalAsset(remoteUrl, 'cutout'); const imageInfo = await inspectLocalImage(remoteAsset.assetPath); let resultUrl = remoteAsset.assetUrl; if (String(imageInfo.mode || '').toUpperCase() === 'L') { const mergedFileName = `${path.basename(fileName, path.extname(fileName))}_aliyun_cutout.png`; const mergedPath = path.join(filePath, 'cutout', mergedFileName); await mergeMaskToTransparent(localPath, remoteAsset.assetPath, mergedPath); resultUrl = `${getClientStaticBaseUrl()}cutout/${mergedFileName}` } return { result: { rawUrl, resultUrl }, meta: getProviderMeta('cutout', { provider: 'aliyun-human-cutout', model: getProviderModel('cutout'), message: 'Aliyun human cutout completed and returned a transparent PNG.' }) } as ProviderResult<{ rawUrl: string; resultUrl: string }> }
-async function rembgCutoutProvider(rawUrl: string, localPath: string, fileName: string) {
-  if (isRembgCircuitOpen()) {
-    throw new Error('rembg temporarily disabled after recent failures')
-  }
-  const outputFileName = `${path.basename(fileName, path.extname(fileName))}_rembg.png`
-  const outputPath = path.join(filePath, 'cutout', outputFileName)
-  try {
-    await runRembgCutout(localPath, outputPath)
-  } catch (error) {
-    openRembgCircuit()
-    throw error
-  }
-  return {
-    result: { rawUrl, resultUrl: `${getClientStaticBaseUrl()}cutout/${outputFileName}` },
-    meta: getProviderMeta('cutout', { provider: 'rembg', model: getRembgModelName(), message: 'Universal cutout completed with local rembg model.' }),
-  } as ProviderResult<{ rawUrl: string; resultUrl: string }>
-}
+async function rembgCutoutProvider(rawUrl: string, localPath: string, fileName: string) { const outputFileName = `${path.basename(fileName, path.extname(fileName))}_rembg.png`; const outputPath = path.join(filePath, 'cutout', outputFileName); await runRembgCutout(localPath, outputPath); return { result: { rawUrl, resultUrl: `${getClientStaticBaseUrl()}cutout/${outputFileName}` }, meta: getProviderMeta('cutout', { provider: 'rembg', model: getRembgModelName(), message: 'Universal cutout completed with local rembg model.' }) } as ProviderResult<{ rawUrl: string; resultUrl: string }> }
 async function mockCutoutProvider(rawUrl: string) { return { result: { rawUrl, resultUrl: rawUrl }, meta: getProviderMeta('cutout', { provider: 'mock', model: 'mock-cutout', isMockFallback: true, message: '智能抠图当前仍为演示模式，已保留原图用于后续编辑。' }) } as ProviderResult<{ rawUrl: string; resultUrl: string }> }
-function getCutoutProviderChain() {
-  const chain = getEnv('AI_CUTOUT_PROVIDER', 'rembg,aliyun-human-cutout,mock').split(',').map((item) => item.trim()).filter(Boolean)
-  const hasMock = chain.includes('mock')
-  const hasAliyun = chain.includes('aliyun-human-cutout')
-  if (hasMock && hasAliyun && chain.indexOf('mock') < chain.indexOf('aliyun-human-cutout')) {
-    return chain.filter((item) => item !== 'mock' && item !== 'aliyun-human-cutout').concat(['aliyun-human-cutout', 'mock'])
-  }
-  return chain
-}
+function getCutoutProviderChain() { return getEnv('AI_CUTOUT_PROVIDER', 'rembg,aliyun-human-cutout,mock').split(',').map((item) => item.trim()).filter(Boolean) }
 function sanitizeCutoutFailure(error: unknown) {
   const message = String((error as Error)?.message || error || 'unknown error')
     .replace(/\s+/g, ' ')
@@ -584,14 +475,13 @@ async function generatePosterDraftInternal(input: PosterGenerateInput): Promise<
     providerMeta: { copy: copyResult.meta, palette: paletteResult.meta, background: backgroundResult.meta, image: heroResult.meta },
   }
 }
-export async function generatePosterDraft(req: any, res: any) { try { if (rejectSensitiveInput(req, res, req.body || {})) return; send.success(res, await generatePosterDraftInternal(normalizeInput(req.body || {}))) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate poster failed') } }
-export async function generateCopy(req: any, res: any) { try { if (rejectSensitiveInput(req, res, req.body || {})) return; const result = await generateCopyInternal(normalizeInput(req.body || {})); send.success(res, { title: result.result.title, slogan: result.result.slogan, body: result.result.body, cta: result.result.cta, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate copy failed') } }
-export async function generatePalette(req: any, res: any) { try { if (rejectSensitiveInput(req, res, req.body || {})) return; const result = await generatePaletteInternal(normalizeInput(req.body || {})); send.success(res, { palette: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate palette failed') } }
-export async function generateBackgroundImage(req: any, res: any) { try { if (rejectSensitiveInput(req, res, req.body || {})) return; const input = normalizeInput(req.body || {}); const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu; const result = await generateBackgroundInternal(input, (await generatePaletteInternal(input)).result, size); send.success(res, { background: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate background failed') } }
-export async function replacePosterImage(req: any, res: any) { try { if (rejectSensitiveInput(req, res, req.body || {})) return; const input = normalizeInput(req.body || {}); const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu; const result = await replaceImageInternal(input, (await generatePaletteInternal(input)).result, size); send.success(res, { hero: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'replace image failed') } }
+export async function generatePosterDraft(req: any, res: any) { try { send.success(res, await generatePosterDraftInternal(normalizeInput(req.body || {}))) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate poster failed') } }
+export async function generateCopy(req: any, res: any) { try { const result = await generateCopyInternal(normalizeInput(req.body || {})); send.success(res, { title: result.result.title, slogan: result.result.slogan, body: result.result.body, cta: result.result.cta, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate copy failed') } }
+export async function generatePalette(req: any, res: any) { try { const result = await generatePaletteInternal(normalizeInput(req.body || {})); send.success(res, { palette: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate palette failed') } }
+export async function generateBackgroundImage(req: any, res: any) { try { const input = normalizeInput(req.body || {}); const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu; const result = await generateBackgroundInternal(input, (await generatePaletteInternal(input)).result, size); send.success(res, { background: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'generate background failed') } }
+export async function replacePosterImage(req: any, res: any) { try { const input = normalizeInput(req.body || {}); const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu; const result = await replaceImageInternal(input, (await generatePaletteInternal(input)).result, size); send.success(res, { hero: result.result, providerMeta: result.meta }) } catch (error) { console.error(error); send.error(res, (error as Error).message || 'replace image failed') } }
 export async function relayoutPoster(req: any, res: any) {
   try {
-    if (rejectSensitiveInput(req, res, req.body || {})) return
     const input = normalizeInput(req.body || {})
     const candidates = getTemplateCandidatesByIndustry(input.industry, 3)
     const { plan, meta } = await relayoutDesignPlanInternal(input, candidates)
@@ -601,5 +491,5 @@ export async function relayoutPoster(req: any, res: any) {
     send.error(res, (error as Error).message || 'relayout failed')
   }
 }
-export async function cutoutImage(req: any, res: any) { const form = new multiparty.Form(); form.parse(req, async (err: Error | null, _fields: any, files: any) => { if (err) return send.error(res, 'cutout upload failed'); const file = files?.file?.[0]; if (!file) return send.error(res, 'file not found'); const folder = 'cutout'; const folderPath = `${filePath}${folder}/`; const suffix = (file.originalFilename || 'cutout.png').split('.').pop() || 'png'; const fileName = `${randomCode(12)}.${suffix}`; const targetPath = `${folderPath}${fileName}`; checkCreateFolder(folderPath); try { await copyFile(file.path, targetPath); const rawUrl = `${getClientStaticBaseUrl()}${folder}/${fileName}`; let cutout: ProviderResult<{ rawUrl: string; resultUrl: string }> | null = null; const failures: string[] = []; for (const provider of getCutoutProviderChain()) { const beginAt = Date.now(); try { if (provider === 'rembg') cutout = await rembgCutoutProvider(rawUrl, targetPath, fileName); else if (provider === 'aliyun-human-cutout') cutout = await bailianCutoutProvider(rawUrl, targetPath, fileName); else if (provider === 'mock') cutout = await mockCutoutProvider(rawUrl); if (cutout) { cutout.meta.message = `${cutout.meta.message}（耗时 ${Date.now() - beginAt}ms）`; break } } catch (error) { const cost = Date.now() - beginAt; failures.push(`${provider}(${cost}ms): ${sanitizeCutoutFailure(error)}`) } } if (!cutout) cutout = await mockCutoutProvider(rawUrl); if (cutout.meta.isMockFallback && failures.length) cutout.meta.message = `真实抠图暂时不可用，已切换为演示模式：${failures.join('；')}`; send.success(res, { rawUrl: cutout.result.rawUrl, resultUrl: cutout.result.resultUrl, providerMeta: cutout.meta }) } catch (error) { console.error(error); send.error(res, 'cutout failed') } }) }
+export async function cutoutImage(req: any, res: any) { const form = new multiparty.Form(); form.parse(req, async (err: Error | null, _fields: any, files: any) => { if (err) return send.error(res, 'cutout upload failed'); const file = files?.file?.[0]; if (!file) return send.error(res, 'file not found'); const folder = 'cutout'; const folderPath = `${filePath}${folder}/`; const suffix = (file.originalFilename || 'cutout.png').split('.').pop() || 'png'; const fileName = `${randomCode(12)}.${suffix}`; const targetPath = `${folderPath}${fileName}`; checkCreateFolder(folderPath); try { await copyFile(file.path, targetPath); const rawUrl = `${getClientStaticBaseUrl()}${folder}/${fileName}`; let cutout: ProviderResult<{ rawUrl: string; resultUrl: string }> | null = null; const failures: string[] = []; for (const provider of getCutoutProviderChain()) { try { if (provider === 'rembg') cutout = await rembgCutoutProvider(rawUrl, targetPath, fileName); else if (provider === 'aliyun-human-cutout') cutout = await bailianCutoutProvider(rawUrl, targetPath, fileName); else if (provider === 'mock') cutout = await mockCutoutProvider(rawUrl); if (cutout) break } catch (error) { failures.push(`${provider}: ${sanitizeCutoutFailure(error)}`) } } if (!cutout) cutout = await mockCutoutProvider(rawUrl); if (cutout.meta.isMockFallback && failures.length) cutout.meta.message = `真实抠图暂时不可用，已切换为演示模式：${failures.join('；')}`; send.success(res, { rawUrl: cutout.result.rawUrl, resultUrl: cutout.result.resultUrl, providerMeta: cutout.meta }) } catch (error) { console.error(error); send.error(res, 'cutout failed') } }) }
 export default { generatePosterDraft, generateCopy, generatePalette, generateBackgroundImage, replacePosterImage, relayoutPoster, cutoutImage }

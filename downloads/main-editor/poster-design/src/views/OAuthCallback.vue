@@ -32,15 +32,6 @@ const errorMessage = ref('')
 const titleText = computed(() => (errorMessage.value ? '登录失败' : '正在完成登录'))
 const statusText = computed(() => errorMessage.value || '正在与服务器交换令牌并创建会话，请稍候。')
 
-function toFriendlyCallbackError(raw: unknown) {
-  const text = String(raw || '').toLowerCase()
-  if (!text) return '登录没有完成，请重新登录'
-  if (text.includes('授权') || text.includes('cancel') || text.includes('denied')) return '你已取消授权，请重新登录'
-  if (text.includes('state') || text.includes('callback') || text.includes('参数')) return '登录校验失败，请重新登录'
-  if (text.includes('network') || text.includes('timeout') || text.includes('err_connection_refused')) return '网络异常，请稍后重试'
-  return '登录没有完成，请重新登录'
-}
-
 function queryString(v: unknown): string {
   if (v === undefined || v === null) return ''
   if (Array.isArray(v)) return String(v[0] ?? '')
@@ -104,7 +95,7 @@ onMounted(async () => {
   try {
     await finishLogin()
   } catch (error: any) {
-    errorMessage.value = toFriendlyCallbackError(error?.message)
+    errorMessage.value = String(error?.message || '登录失败')
     setTimeout(() => {
       router.replace({ path: '/login', query: { message: errorMessage.value } })
     }, 1200)

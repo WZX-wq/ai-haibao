@@ -99,9 +99,7 @@ function getSavedTemplatePath(id: number | string) {
   return mockPath('templates', `${id}.json`)
 }
 
-// 截图文件由服务写入 process.cwd()/static，并由 main.ts 以 /static 挂载；
-// 不要用 __dirname 推导，运行形态（ts-node / 构建后）会导致目录偏移，找不到真实截图文件。
-const templateStaticDir = () => path.resolve(process.cwd(), 'static')
+const templateStaticDir = () => path.resolve(__dirname, '../../static')
 
 /** 匹配 ${id}-screenshot-vp-WxH.png 或旧版 ${id}-screenshot-vp.png */
 function findViewportScreenshotBasename(id: number | string): string | null {
@@ -312,18 +310,16 @@ export async function getDetail(req: any, res: any) {
   if (type === 1) {
     if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
       const session = await tryResolveSession(req)
+      if (!session) {
+        send.error(res, 'template not found')
+        return
+      }
       await ensureUserDesignsSchema()
       const db = await getMysqlPool()
-      const [rows] = session
-        ? await db.query(
-            'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 1 LIMIT 1',
-            [String(id), session.userId],
-          )
-        : await db.query(
-            // 截图服务会在无登录态的浏览器页读取详情；这里允许按 id 只读，避免封面截成空白。
-            'SELECT * FROM user_designs WHERE id = ? AND design_type = 1 LIMIT 1',
-            [String(id)],
-          )
+      const [rows] = await db.query(
+        'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 1 LIMIT 1',
+        [String(id), session.userId],
+      )
       const row = Array.isArray(rows) ? (rows as Record<string, any>[])[0] : null
       if (!row) {
         send.error(res, 'template not found')
@@ -347,18 +343,16 @@ export async function getDetail(req: any, res: any) {
 
   if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
     const session = await tryResolveSession(req)
+    if (!session) {
+      send.error(res, 'template not found')
+      return
+    }
     await ensureUserDesignsSchema()
     const db = await getMysqlPool()
-    const [rows] = session
-      ? await db.query(
-          'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 0 LIMIT 1',
-          [String(id), session.userId],
-        )
-      : await db.query(
-          // 截图服务会在无登录态的浏览器页读取详情；这里允许按 id 只读，避免封面截成空白。
-          'SELECT * FROM user_designs WHERE id = ? AND design_type = 0 LIMIT 1',
-          [String(id)],
-        )
+    const [rows] = await db.query(
+      'SELECT * FROM user_designs WHERE id = ? AND user_id = ? AND design_type = 0 LIMIT 1',
+      [String(id), session.userId],
+    )
     const row = Array.isArray(rows) ? (rows as Record<string, any>[])[0] : null
     if (!row) {
       send.error(res, 'template not found')
@@ -453,9 +447,8 @@ export async function getMyDesigns(req: any, res: any) {
     height: row.height,
     cate: row.cate,
     state: row.state,
-    // 优先匹配真实截图文件名（含尺寸后缀），避免尺寸变化后列表封面 404 显示空白。
-    cover: getTemplateScreenshotUrl(row.id, new Date(row.updated_at || Date.now()).getTime()) || listCoverUrl(row.id, row.width, row.height),
-    isDelect: false,
+    cover: listCoverUrl(row.id, row.width, row.height),
+    isDelect: true,
     fail: false,
     top: 0,
     left: 0,

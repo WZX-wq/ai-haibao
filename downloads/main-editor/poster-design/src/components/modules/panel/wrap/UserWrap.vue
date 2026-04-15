@@ -172,7 +172,7 @@ const loadDesign = (init: boolean = false) => {
 
       const normalizedList = list.map((x) => ({
         ...x,
-        cover: `${x.cover}${String(x.cover || '').includes('?') ? '&' : '?'}r=${Date.now()}`,
+        cover: `${x.cover}?r=${Math.random()}`,
       }))
       const merged = mergeUniqueItems(state.designList, normalizedList)
       state.designList = merged.list

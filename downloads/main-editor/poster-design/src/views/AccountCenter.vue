@@ -19,7 +19,7 @@
   <!-- 已登录：侧栏 + 主区（对齐 account-center-optimized.html） -->
   <div v-else class="ac-page">
     <aside class="ac-sidebar" aria-label="账户导航">
-     
+      <router-link to="/welcome" class="ac-sidebar-logo">鲲穹设计</router-link>
       <div class="ac-sidebar-avatar" :title="displayUser.name || '用户'">
         <img v-if="displayUser.avatar" :src="displayUser.avatar" alt="" />
         <span v-else>{{ userInitial }}</span>
@@ -68,74 +68,94 @@
       </div>
 
       <main class="ac-content">
-        <div id="ac-section-stats" :class="['ac-stats-row', { 'ac-stats-row--vip': isVipUser }]">
-          <!-- 今日额度 -->
+        <div id="ac-section-stats" class="ac-stats-row">
+          <!-- 今日额度（会员不展示配额数字） -->
           <div class="ac-stat-card ac-stat-card--quota">
             <div class="ac-stat-card__tags">
               <span class="ac-stat-tag ac-stat-tag--orange">{{ vipBadgeText }}</span>
-              <span v-if="quotaSubTag" class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
+              <span v-if="!isVipUser" class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
             </div>
             <div class="ac-stat-card__head">
-              <span class="ac-stat-card__title">今日额度</span>
+              <span class="ac-stat-card__title">{{ isVipUser ? '会员权益' : '今日额度' }}</span>
             </div>
             <div class="ac-stat-card__body">
-              <div class="ac-ring-wrap">
-                <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
-                  <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
-                  <circle
-                    class="ac-ring-fill ac-ring-fill--orange"
-                    cx="40"
-                    cy="40"
-                    :r="ringR"
-                    :stroke-dasharray="String(ringC)"
-                    :stroke-dashoffset="String(downloadRingOffset)"
-                  />
-                </svg>
-                <div class="ac-ring-text">
-                  <span class="ac-ring-num">{{ quotaRingCenter }}</span>
-                  <span class="ac-ring-label">{{ quotaRingLabel }}</span>
+              <template v-if="!isVipUser">
+                <div class="ac-ring-wrap">
+                  <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                    <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
+                    <circle
+                      class="ac-ring-fill ac-ring-fill--orange"
+                      cx="40"
+                      cy="40"
+                      :r="ringR"
+                      :stroke-dasharray="String(ringC)"
+                      :stroke-dashoffset="String(downloadRingOffset)"
+                    />
+                  </svg>
+                  <div class="ac-ring-text">
+                    <span class="ac-ring-num">{{ quotaRingCenter }}</span>
+                    <span class="ac-ring-label">已使用</span>
+                  </div>
                 </div>
-              </div>
-              <div class="ac-stat-info">
-                <div class="ac-stat-big">{{ downloadsUsedText }}</div>
-                <div class="ac-stat-desc">{{ downloadQuotaDesc }}</div>
-              </div>
+                <div class="ac-stat-info">
+                  <div class="ac-stat-big">{{ downloadsUsedText }}</div>
+                  <div class="ac-stat-desc">今日已用额度</div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="ac-stat-info">
+                  <div class="ac-stat-big">无限制</div>
+                  <div class="ac-stat-desc">会员账号不显示配额</div>
+                </div>
+              </template>
             </div>
             <button type="button" class="ac-stat-card__btn" @click="go('/home?tempid=303')">使用</button>
           </div>
 
-          <!-- AI 工具额度 -->
+          <!-- AI额度限制 -->
           <div class="ac-stat-card ac-stat-card--upload">
+            <div class="ac-stat-card__tags">
+              <span class="ac-stat-tag ac-stat-tag--orange">{{ vipBadgeText }}</span>
+              <span v-if="!isVipUser" class="ac-stat-tag ac-stat-tag--green">{{ quotaSubTag }}</span>
+            </div>
             <div class="ac-stat-card__head">
-              <span class="ac-stat-card__title">AI 工具额度</span>
+              <span class="ac-stat-card__title">AI额度限制</span>
               <div class="ac-stat-card__ico">
                 <el-icon :size="18"><MagicStick /></el-icon>
               </div>
             </div>
-            <div class="ac-stat-card__body ac-stat-card__body--push">
-              <div class="ac-ring-wrap">
-                <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
-                  <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
-                  <circle
-                    class="ac-ring-fill ac-ring-fill--blue"
-                    cx="40"
-                    cy="40"
-                    :r="ringR"
-                    :stroke-dasharray="String(ringC)"
-                    :stroke-dashoffset="String(ringC * 0.12)"
-                  />
-                </svg>
-                <div class="ac-ring-text">
-                  <span class="ac-ring-num">∞</span>
-                  <span class="ac-ring-label">会员</span>
+            <div class="ac-stat-card__body">
+              <template v-if="!isVipUser">
+                <div class="ac-ring-wrap">
+                  <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                    <circle class="ac-ring-bg" cx="40" cy="40" :r="ringR" />
+                    <circle
+                      class="ac-ring-fill ac-ring-fill--light"
+                      cx="40"
+                      cy="40"
+                      :r="ringR"
+                      :stroke-dasharray="String(ringC)"
+                      :stroke-dashoffset="String(downloadRingOffset)"
+                    />
+                  </svg>
+                  <div class="ac-ring-text">
+                    <span class="ac-ring-num">{{ quotaRingCenter }}</span>
+                    <span class="ac-ring-label">已使用</span>
+                  </div>
                 </div>
-              </div>
-              <div class="ac-stat-info">
-                <div class="ac-stat-big">{{ aiQuotaUsedText }}</div>
-                <div class="ac-stat-desc">{{ aiQuotaDesc }}</div>
-              </div>
+                <div class="ac-stat-info">
+                  <div class="ac-stat-big">{{ downloadsUsedText }}</div>
+                  <div class="ac-stat-desc">今日 AI 额度</div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="ac-stat-info">
+                  <div class="ac-stat-big">无限制</div>
+                  <div class="ac-stat-desc">会员账号不显示配额</div>
+                </div>
+              </template>
             </div>
-            <button type="button" class="ac-stat-card__btn" @click="go('/ai-poster')">去使用</button>
+            <button type="button" class="ac-stat-card__btn" @click="go('/home')">去使用</button>
           </div>
 
           <!-- 会员有效期 -->
@@ -318,7 +338,7 @@ const ringR = 32
 const ringC = 2 * Math.PI * ringR
 
 const defaultQuickActions: QuickAction[] = [
-  { label: 'AI 生成海报', path: '/ai-poster' },
+  { label: 'AI 生成海报', path: '/home' },
   { label: '模板库', path: '/home?tempid=303' },
   { label: '我的作品', path: '/home?tempid=303' },
   { label: '进入编辑器', path: '/home?tempid=303' },
@@ -340,13 +360,10 @@ const effectivePermissions = computed<AccountPermissions>(() => {
       vip_level: center.value.vip_status?.vip_level ?? userStore.permissions.vip_level,
       vip_expire_time: center.value.vip_status?.vip_expire_time ?? userStore.permissions.vip_expire_time,
       daily_limit_count: center.value.quota_card?.daily_limit_count ?? userStore.permissions.daily_limit_count,
-      daily_download_limit: center.value.quota_card?.daily_download_limit ?? userStore.permissions.daily_download_limit ?? userStore.permissions.daily_limit_count,
-      daily_ai_limit: center.value.quota_card?.daily_ai_limit ?? userStore.permissions.daily_ai_limit ?? 5,
       max_file_size: center.value.quota_card?.max_file_size ?? userStore.permissions.max_file_size,
       allow_batch: center.value.feature_permission_card.allow_batch,
       allow_no_watermark: center.value.feature_permission_card.allow_no_watermark,
       allow_ai_tools: center.value.feature_permission_card.allow_ai_tools,
-      allow_download: center.value.feature_permission_card.allow_download ?? userStore.permissions.allow_download ?? true,
       allow_template_manage: center.value.feature_permission_card.allow_template_manage,
     }
   }
@@ -355,20 +372,17 @@ const effectivePermissions = computed<AccountPermissions>(() => {
     vip_level: userStore.permissions.vip_level,
     vip_expire_time: userStore.permissions.vip_expire_time,
     daily_limit_count: userStore.permissions.daily_limit_count,
-    daily_download_limit: userStore.permissions.daily_download_limit ?? userStore.permissions.daily_limit_count,
-    daily_ai_limit: userStore.permissions.daily_ai_limit ?? 5,
     max_file_size: userStore.permissions.max_file_size,
     allow_batch: userStore.permissions.allow_batch,
     allow_no_watermark: userStore.permissions.allow_no_watermark,
     allow_ai_tools: userStore.permissions.allow_ai_tools,
-    allow_download: userStore.permissions.allow_download ?? true,
     allow_template_manage: userStore.permissions.allow_template_manage,
   }
 })
 
 const userInitial = computed(() => (displayUser.value.name || '用').slice(0, 1))
-const isVipUser = computed(() => !!effectivePermissions.value.is_vip)
 const vipBadgeText = computed(() => (effectivePermissions.value.is_vip ? '会员' : '免费版'))
+const isVipUser = computed(() => !!effectivePermissions.value.is_vip)
 const vipLevelText = computed(() => String(effectivePermissions.value.vip_level ?? 0))
 const sessionStatusText = computed(
   () => mapSessionStatusToZh(center.value?.account_overview?.session_status) || '在线',
@@ -386,35 +400,6 @@ const downloadsUsed = computed(() => {
 })
 
 const dailyLimit = computed(() => Number(effectivePermissions.value.daily_limit_count ?? 0))
-const downloadDailyLimit = computed(() =>
-  Number(
-    center.value?.quota_card?.daily_download_limit ??
-      effectivePermissions.value.daily_download_limit ??
-      effectivePermissions.value.daily_limit_count ??
-      0,
-  ),
-)
-const aiDailyLimit = computed(() =>
-  Number(
-    center.value?.quota_card?.daily_ai_limit ??
-      effectivePermissions.value.daily_ai_limit ??
-      5,
-  ),
-)
-const aiTodayUsed = computed(() => Number(center.value?.quota_card?.ai_today_used ?? 0))
-const aiQuotaUsedText = computed(() => {
-  if (isVipUser.value) return '不限额'
-  const limit = aiDailyLimit.value
-  const used = aiTodayUsed.value
-  if (limit <= 0) return `${used}（不限次）`
-  return `${used} / ${limit}`
-})
-const aiQuotaDesc = computed(() => {
-  if (isVipUser.value) return '会员 AI 工具不限次数'
-  const limit = aiDailyLimit.value
-  if (limit <= 0) return '今日 AI 额度不限次'
-  return `今日 AI 已用额度（每日 ${limit} 次）`
-})
 
 const downloadPercent = computed(() => {
   const limit = dailyLimit.value
@@ -430,22 +415,18 @@ const downloadRingOffset = computed(() => {
 })
 
 const quotaRingCenter = computed(() => {
-  if (isVipUser.value) return '∞'
   const limit = dailyLimit.value
   const used = downloadsUsed.value
   if (limit <= 0) return String(used)
   return `${used}/${limit}`
 })
-const quotaRingLabel = computed(() => (isVipUser.value ? '会员' : '已使用'))
 
 const downloadsUsedText = computed(() => {
-  if (isVipUser.value) return '不限额'
   const limit = dailyLimit.value
   const used = downloadsUsed.value
   if (limit <= 0) return `${used}（不限次）`
   return `${used} / ${limit}`
 })
-const downloadQuotaDesc = computed(() => (isVipUser.value ? '会员专享下载与导出无限次' : '今日已用额度'))
 
 const vipExpireCardTitle = computed(() => (effectivePermissions.value.is_vip ? '会员有效期' : '会员状态'))
 
@@ -481,7 +462,7 @@ const vipDaysLeftTag = computed(() => {
   return `剩余${n}天`
 })
 
-const expiryRingLabel = computed(() => (effectivePermissions.value.is_vip ? '会员' : '未开通'))
+const expiryRingLabel = computed(() => (effectivePermissions.value.is_vip ? '倒计时' : '未开通'))
 
 const expiryRingOffset = computed(() => {
   if (!effectivePermissions.value.is_vip) return ringC * 0.75
@@ -507,21 +488,13 @@ const recentRecords = computed(() => center.value?.recent_records?.slice(0, 5) |
 
 const permissionRows = computed(() => {
   const p = effectivePermissions.value
-  const aiLimit = aiDailyLimit.value
-  const downloadLimit = downloadDailyLimit.value
+  const limit = dailyLimit.value
   const aiDesc = p.allow_ai_tools
-    ? isVipUser.value
-      ? '已开启 · 会员不限额'
-      : aiLimit > 0
-        ? `已开启 · 每日 ${aiLimit} 次`
-        : '已开启'
-    : '未开启'
-  const downloadDesc = (p.allow_download ?? true)
-    ? isVipUser.value
-      ? '已开启 · 会员不限额'
-      : downloadLimit > 0
-        ? `已开启 · 每日 ${downloadLimit} 次`
-        : '已开启'
+    ? p.is_vip
+      ? '已开启 · 会员无限制'
+      : limit > 0
+      ? `已开启 · 每日 ${limit} 次`
+      : '已开启'
     : '未开启'
   return [
     {
@@ -529,12 +502,6 @@ const permissionRows = computed(() => {
       label: 'AI 工具',
       desc: aiDesc,
       on: !!p.allow_ai_tools,
-    },
-    {
-      key: 'download',
-      label: '下载功能',
-      desc: downloadDesc,
-      on: p.allow_download !== false,
     },
     {
       key: 'wm',
@@ -595,16 +562,25 @@ function normalizeRecordText(record: any) {
   return '已同步一条新记录'
 }
 
+function resolvePath(path: string) {
+  const raw = String(path || '')
+  if (!raw) return '/home'
+  if (raw === '/ai-poster') return '/home'
+  if (raw.startsWith('/ai-poster?')) return `/home${raw.slice('/ai-poster'.length)}`
+  return raw
+}
+
 function go(path: string) {
-  router.push(path)
+  router.push(resolvePath(path))
 }
 
 function openPath(path: string) {
-  if (/^https?:\/\//.test(path)) {
-    window.location.assign(path)
+  const target = resolvePath(path)
+  if (/^https?:\/\//.test(target)) {
+    window.location.assign(target)
     return
   }
-  router.push(path)
+  router.push(target)
 }
 
 function toastInfo(msg: string) {
@@ -918,52 +894,6 @@ onMounted(loadCenter)
   margin-bottom: 16px;
 }
 
-.ac-stats-row--vip .ac-stat-card__body {
-  display: grid;
-  grid-template-columns: 80px 1fr;
-  align-items: start;
-  column-gap: 16px;
-  min-height: 92px;
-}
-
-.ac-stats-row--vip .ac-stat-card__head {
-  min-height: 28px;
-}
-
-.ac-stats-row--vip .ac-stat-card {
-  display: grid;
-  grid-template-rows: 28px 96px 28px;
-  align-content: stretch;
-}
-
-.ac-stats-row--vip .ac-stat-card__btn {
-  align-self: end;
-}
-
-.ac-stats-row--vip .ac-ring-wrap {
-  margin-top: 0;
-  align-self: start;
-}
-
-.ac-stats-row--vip .ac-stat-big {
-  font-size: 42px;
-  letter-spacing: 0.5px;
-  min-height: 42px;
-}
-
-.ac-stats-row--vip .ac-stat-desc {
-  font-size: 13px;
-  opacity: 0.88;
-}
-
-.ac-stats-row--vip .ac-ring-num {
-  font-size: 26px;
-}
-
-.ac-stats-row--vip .ac-ring-label {
-  font-size: 11px;
-}
-
 .ac-stat-card {
   border-radius: var(--ac-radius);
   padding: 20px;
@@ -1081,10 +1011,6 @@ onMounted(loadCenter)
   stroke: #ff9500;
 }
 
-.ac-ring-fill--blue {
-  stroke: #7ed7ff;
-}
-
 .ac-ring-fill--light {
   stroke: rgba(255, 255, 255, 0.95);
 }
@@ -1105,7 +1031,7 @@ onMounted(loadCenter)
 }
 
 .ac-ring-num--sm {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -1163,7 +1089,7 @@ onMounted(loadCenter)
 }
 
 .ac-expiry-days {
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 700;
   line-height: 1;
 }
@@ -1605,136 +1531,6 @@ onMounted(loadCenter)
   .ac-quick-entry {
     flex-direction: row;
     justify-content: center;
-  }
-}
-
-@media (max-width: 640px) {
-  .ac-page-header {
-    padding: 14px 14px 0;
-    gap: 10px;
-  }
-
-  .ac-page-header__left h1 {
-    font-size: 20px;
-  }
-
-  .ac-page-header__left p {
-    font-size: 12px;
-  }
-
-  .ac-page-header__right {
-    width: 100%;
-    gap: 10px;
-  }
-
-  .ac-pills {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .ac-header-btns {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-
-  .ac-btn {
-    width: 100%;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-
-  .ac-content {
-    padding: 14px 14px 28px;
-  }
-
-  .ac-stat-card {
-    padding: 14px;
-  }
-
-  .ac-stat-card__body,
-  .ac-stat-card__body--push {
-    gap: 10px;
-  }
-
-  .ac-stat-info {
-    min-width: 0;
-  }
-
-  .ac-stat-big {
-    font-size: 20px;
-  }
-
-  .ac-stat-card__btn {
-    width: 100%;
-  }
-
-  .ac-info-card {
-    padding: 14px;
-  }
-
-  .ac-info-card__head {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .ac-info-link {
-    margin-left: 0;
-  }
-
-  .ac-perm-item {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .ac-perm-item__left {
-    min-width: 0;
-  }
-
-  .ac-quick-entry {
-    width: 100%;
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 480px) {
-  .ac-sidebar {
-    padding: 14px 10px;
-  }
-
-  .ac-sidebar-avatar {
-    width: 56px;
-    height: 56px;
-    font-size: 22px;
-  }
-
-  .ac-sidebar-username {
-    font-size: 15px;
-    margin-bottom: 10px;
-  }
-
-  .ac-sidebar-nav a {
-    padding: 8px 10px;
-    gap: 8px;
-    font-size: 13px;
-  }
-
-  .ac-header-btns {
-    grid-template-columns: 1fr;
-  }
-
-  .ac-ring-wrap {
-    transform: scale(0.92);
-    transform-origin: left center;
-  }
-
-  .ac-expiry-days {
-    font-size: 22px;
-  }
-
-  .ac-login-card {
-    padding: 22px 16px;
   }
 }
 </style>

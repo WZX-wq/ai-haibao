@@ -22,15 +22,17 @@ async function getUsagePermissionSnapshot(userId: number): Promise<{
   allowAiTools: boolean
   dailyDownloadLimit: number
   dailyAiLimit: number
+  isVip: boolean
 }> {
   const db = await getMysqlPool()
   const [rows]: any = await db.query(
-    `SELECT allow_download, allow_ai_tools, daily_download_limit, daily_ai_limit, daily_limit_count
+    `SELECT allow_download, allow_ai_tools, daily_download_limit, daily_ai_limit, daily_limit_count, is_vip
        FROM account_permission_snapshots
       WHERE user_id = ? LIMIT 1`,
     [userId],
   )
   const row = rows?.[0] || {}
+  const isVip = !!row.is_vip
   const legacyDaily = Number(row.daily_limit_count)
   const dailyDownloadLimit = Number.isFinite(Number(row.daily_download_limit))
     ? Number(row.daily_download_limit)
@@ -38,12 +40,14 @@ async function getUsagePermissionSnapshot(userId: number): Promise<{
   const dailyAiLimit = Number.isFinite(Number(row.daily_ai_limit))
     ? Number(row.daily_ai_limit)
     : 5
-  const finalAiLimit = dailyAiLimit > 0 ? Math.min(dailyAiLimit, 5) : 5
+  // 约定：>0 为每日次数；0 为不限额（VIP 另行处理）
+  const finalAiLimit = dailyAiLimit > 0 ? Math.min(dailyAiLimit, 1000) : 0
   return {
     allowDownload: row.allow_download !== undefined ? !!row.allow_download : true,
     allowAiTools: row.allow_ai_tools !== undefined ? !!row.allow_ai_tools : true,
-    dailyDownloadLimit,
-    dailyAiLimit: finalAiLimit,
+    dailyDownloadLimit: isVip ? -1 : dailyDownloadLimit, // VIP用户返回-1表示无限制
+    dailyAiLimit: isVip ? -1 : finalAiLimit, // VIP用户返回-1表示无限制
+    isVip,
   }
 }
 
@@ -110,6 +114,11 @@ export async function consumeDownloadQuotaByUserId(userId: number): Promise<{ us
     throw new UsageQuotaError(403, 403, '当前账号无下载权限，请联系管理员开通。')
   }
   const limit = permissions.dailyDownloadLimit
+  // VIP用户无限制（limit为-1）
+  if (limit < 0) {
+    await insertUserActivityLog(userId, 'download', '下载/导出作品（VIP无限制）')
+    return { used: 0, limit: -1 }
+  }
   const db = await getMysqlPool()
   const conn = await db.getConnection()
   try {
@@ -147,6 +156,13 @@ export async function consumeAiQuotaByUserId(userId: number): Promise<{ used: nu
     throw new UsageQuotaError(403, 403, '当前账号无 AI 功能权限，请联系管理员开通。')
   }
   const limit = permissions.dailyAiLimit
+
+  // VIP用户无限制（limit为-1）
+  if (limit < 0) {
+    await insertUserActivityLog(userId, 'ai', 'AI 功能调用（VIP无限制）')
+    return { used: 0, limit: -1 }
+  }
+
   const db = await getMysqlPool()
   const conn = await db.getConnection()
   try {

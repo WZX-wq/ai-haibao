@@ -120,14 +120,6 @@ function isRequestCanceledError(e: unknown) {
   return err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || err.message === 'canceled'
 }
 
-function toFriendlyQuotaMessage(raw: unknown) {
-  const text = String(raw || '').toLowerCase()
-  if (!text) return '今日下载次数已用完或下载权限未开通'
-  if (text.includes('429') || text.includes('已用完') || text.includes('limit')) return '今日下载次数已用完，请明天再试'
-  if (text.includes('401') || text.includes('403') || text.includes('权限')) return '当前账号暂无下载权限，请联系管理员开通'
-  return '暂时无法下载，请稍后重试'
-}
-
 /** 中止导出：释放 loading、打断保存与下载 XHR、清空进度条（取消按钮与 v-model 同步都会走到） */
 function abortActiveDownload() {
   exportGeneration++
@@ -235,50 +227,9 @@ type TSaveTempOpts = {
 async function saveTemp(opts?: TSaveTempOpts) {
   const rawId = route.query.tempid ?? route.query.id
   const designId = rawId != null && String(rawId).trim() !== '' ? String(rawId) : ''
+  if (!designId) return
 
   const { tempType: type } = route.query
-  const numericType = Number(type || 0)
-
-  // AI 生成后可能是全新画布（无 tempid/id）：这里自动创建“我的作品”，避免点击保存无响应
-  if (!designId) {
-    if (numericType === 1) {
-      useNotification('暂时无法保存', '当前组件缺少模板编号，请先从模板/组件入口创建后再保存。', { type: 'warning' })
-      return
-    }
-    try {
-      const payload = buildDraftPayload(numericType)
-      const createRes: any = await api.home.saveTemp({
-        title: payload.title,
-        width: payload.width,
-        height: payload.height,
-        data: payload.data,
-      })
-      clearLocalDraft()
-      if (createRes?.stat != 0) {
-        useNotification('保存成功', '作品已保存到我的设计。', { type: 'success' })
-      }
-      if (createRes?.id != null) {
-        const next = { ...route.query, id: String(createRes.id) } as Record<string, string | string[] | undefined>
-        delete next.tempid
-        await router.replace({ path: route.path, query: next, replace: true })
-      }
-      return
-    } catch (error: any) {
-      const message = String(error?.message || '')
-      const isNetworkError = message.includes('Network Error') || message.includes('ERR_CONNECTION_REFUSED')
-      if (isNetworkError) {
-        saveLocalDraft(buildDraftPayload(numericType))
-      }
-      useNotification(
-        '保存失败',
-        isNetworkError
-          ? '当前网络连接异常，内容已经自动保存在本机草稿里，请稍后再试。'
-          : '当前暂时无法保存，请稍后再试。',
-        { type: 'error' },
-      )
-      return
-    }
-  }
 
   const signal = opts?.signal
   const axiosExtra = signal
@@ -286,6 +237,7 @@ async function saveTemp(opts?: TSaveTempOpts) {
     : {}
 
   let res = null as any
+  const numericType = Number(type || 0)
   const compCateForSave =
     numericType === 1
       ? String(
@@ -301,10 +253,8 @@ async function saveTemp(opts?: TSaveTempOpts) {
       if (dWidgets.value[0]?.type === 'w-group') {
         const group = dWidgets.value.shift()
         if (!group) return
-        if (group.record) {
-          group.record.width = 0
-          group.record.height = 0
-        }
+        group.record.width = 0
+        group.record.height = 0
         dWidgets.value.push(group)
       }
 
@@ -416,7 +366,7 @@ async function download(format: string = 'png') {
   try {
     const quotaRes: any = await api.account.consumeDownloadQuota()
     if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.code === 'number' && quotaRes.code !== 200) {
-      useNotification('无法导出', toFriendlyQuotaMessage(quotaRes.msg), { type: 'warning' })
+      useNotification('无法导出', String(quotaRes.msg || '今日下载次数已用完或权限不足'), { type: 'warning' })
       return
     }
     if (quotaRes && typeof quotaRes === 'object' && typeof quotaRes.used === 'number') {
@@ -740,7 +690,7 @@ async function load(cb: () => void) {
   }
 
   try {
-    const detail = (await api.home[apiName]({ id: Number(id || tempId), type: Number(type) })) as Record<string, unknown>
+    const detail = (await api.home[apiName]({ id: id || tempId, type })) as Record<string, unknown>
     const { data: content, title, state: templateState, width, height } = detail
     if (!content) {
       initBoard()
@@ -749,11 +699,7 @@ async function load(cb: () => void) {
     }
     state.stateBollean = !!templateState
     state.title = String(title ?? '')
-    const normalizedType = Array.isArray(type) ? type[0] : type
-    const safeType = normalizedType == null ? undefined : normalizedType
-    const safeWidth = width == null ? undefined : Number(width)
-    const safeHeight = height == null ? undefined : Number(height)
-    applyLoadedData(String(content), safeType, safeWidth, safeHeight)
+    applyLoadedData(content, type, width, height)
     const resolvedCate = detail.cate ?? detail.category
     const rawCate = route.query.cate
     const cateFromQuery =

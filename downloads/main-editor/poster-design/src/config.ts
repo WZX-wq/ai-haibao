@@ -37,8 +37,8 @@ export default {
   API_URL: envApiUrl || (viteDev ? devDefaultApi : ''),
   SCREEN_URL: screenBaseUrl,
   IMG_URL: envImgUrl || (screenBaseUrl ? `${screenBaseUrl.replace(/\/$/, '')}/static/` : '/static/'),
-  ICONFONT_URL: '//at.alicdn.com/t/font_2717063_ypy8vprc3b.css?display=swap',
-  ICONFONT_EXTRA: '//at.alicdn.com/t/c/font_3228074_xojoer6zhp.css',
+  ICONFONT_URL: 'https://at.alicdn.com/t/font_2717063_ypy8vprc3b.css?display=swap',
+  ICONFONT_EXTRA: 'https://at.alicdn.com/t/c/font_3228074_xojoer6zhp.css',
   QINIUYUN_PLUGIN: 'https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/qiniu-js/2.5.5/qiniu.min.js',
   supportSubFont: false,
 }

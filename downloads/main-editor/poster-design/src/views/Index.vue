@@ -1,6 +1,6 @@
 <template>
   <div id="page-design-index" ref="pageDesignIndex" class="page-design-bg-color">
-    <!-- 顶部导航 - PC和移动端都显示 -->
+    <!-- 顶部导航 -->
     <div class="top-nav">
       <div class="top-nav-wrap">
         <div class="top-left">
@@ -57,7 +57,7 @@
     </div>
 
     <div class="page-design-index-wrap">
-      <!-- 组件面板 - PC和移动端都显示 -->
+      <!-- 组件面板 -->
       <widget-panel ref="ref2" :class="{ 'mobile-panel-open': state.mobilePanelOpen }"></widget-panel>
       
       <!-- 画布区域 -->
@@ -66,6 +66,7 @@
         <div class="shelter-bg transparent-bg" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
         <template #bottom> <multipleBoards /> </template>
       </design-board>
+      
     </div>
     
     <!-- 移动端面板切换按钮 -->
@@ -77,13 +78,13 @@
     <!-- 移动端遮罩层 -->
     <div v-if="state.isMobile && state.mobilePanelOpen" class="mobile-panel-overlay" @click="closeMobilePanel"></div>
     
-    <!-- 辅助线 - PC和移动端都显示 -->
+    <!-- 辅助线 -->
     <line-guides :show="state.showLineGuides" />
     
-    <!-- 缩放控制 - PC和移动端都显示 -->
+    <!-- 缩放控制 -->
     <zoom-control ref="zoomControlRef" />
     
-    <!-- 顶部编辑工具栏 - PC和移动端都显示 -->
+    <!-- 顶部编辑工具栏 -->
     <TopEditToolbar />
     
     <right-click-menu />
@@ -246,7 +247,7 @@ function handleHistory(data: 'undo' | 'redo') {
 
 function goWelcome() {
   if (dHistoryStack.value.changes.length > 0) {
-    const shouldLeave = window.confirm('当前有未保存修改，确定返回首页吗？')
+    const shouldLeave = window.confirm('当前有未保存修改，确认返回首页吗？')
     if (!shouldLeave) return
   }
   router.push('/welcome')
@@ -259,7 +260,7 @@ function changeLineGuides() {
 function downloadCancel() {
   state.downloadPercent = 0
   state.downloadImage = ''
-  /** isContinue 为 true 时交给 v-model + HeaderOptions watch 只 abort 一次；已为 false 时 watch 不会触发，需直接中止以免 loading 卡死 */
+  /** isContinue 为 true 时通过 v-model 触发中断；否则直接调用中断，避免 loading 卡住。 */
   if (state.isContinue) {
     state.isContinue = false
   } else {
@@ -350,10 +351,7 @@ defineExpose({
 @import '@/assets/styles/responsive.less';
 
 // ============================================
-// PC端样式保护 - 最高优先级，确保完全不受影响
-// ============================================
 @media (min-width: 1024px) {
-  // 强制恢复PC端原始样式
   #page-design-index {
     min-width: 1180px !important;
     
@@ -381,7 +379,6 @@ defineExpose({
     }
   }
   
-  // 确保画布区域正常
   .page-design-wrap {
     flex: 1 !important;
     min-height: 0 !important;
@@ -391,15 +388,12 @@ defineExpose({
     display: block !important;
   }
   
-  // 隐藏移动端专用元素
   .mobile-panel-toggle,
   .mobile-panel-overlay {
     display: none !important;
   }
 }
 
-// ============================================
-// 移动端样式 - 只在小屏幕生效
 // ============================================
 .top-nav {
   :deep(.el-divider--vertical) {
@@ -447,7 +441,6 @@ defineExpose({
   
   .top-nav {
     :deep(.top-nav-wrap) {
-      // 第一行左侧：返回 + 撤回恢复 + 更多
       .top-left {
         display: flex;
         align-items: center;
@@ -468,7 +461,6 @@ defineExpose({
           flex-shrink: 0;
         }
         
-        // 隐藏分隔线和PC端文件按钮
         .el-divider--vertical {
           display: none;
         }
@@ -534,7 +526,6 @@ defineExpose({
           }
         }
         
-        // 移动端更多按钮
         .mobile-more-dropdown {
           display: flex;
           flex-shrink: 0;
@@ -570,42 +561,40 @@ defineExpose({
         }
       }
       
-      // HeaderOptions组件 - 包含下载按钮和标题
-      // 需要特殊处理让下载按钮在第一行，标题在第二行
       > div:has(.top-icon-wrap) {
-        display: contents; // 让子元素直接参与父级flex布局
+        display: contents; // 让子元素直接参与父级 flex 布局
       }
       
-      // 第一行右侧：下载按钮和头像
-      .top-icon-wrap {
-        display: contents; // 让头像和下载按钮都直接参与父级flex布局
+      .account-entry {
+        order: 0 !important;
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        min-height: 32px;
+        flex-shrink: 0;
         
-        // 头像 - 最左边（order: 0）
-        .account-entry {
-          order: 0 !important;
-          width: 32px;
-          height: 32px;
-          min-width: 32px;
-          min-height: 32px;
-          flex-shrink: 0;
-          margin-left: 0 !important;
+        &__avatar {
+          width: 28px;
+          height: 28px;
           
-          &__avatar {
-            width: 28px;
-            height: 28px;
-            
-            img {
-              width: 100%;
-              height: 100%;
-            }
-          }
-          
-          &__login-text {
-            font-size: 11px;
+          img {
+            width: 100%;
+            height: 100%;
           }
         }
         
-        // 其他不常用按钮隐藏
+        &__login-text {
+          font-size: 11px;
+        }
+      }
+      
+      .top-icon-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        order: 2;
+        
         > :not(.header-download-btn):not(.account-entry) {
           display: none;
         }
@@ -625,11 +614,9 @@ defineExpose({
           padding: 0 12px;
           font-size: 11px;
           font-weight: 600;
-          order: 2; // 下载按钮在右侧
         }
       }
       
-      // 第二行：标题（独占一行）
       .top-title {
         width: 100%;
         padding: 0;
@@ -662,7 +649,6 @@ defineExpose({
     }
   }
   
-  // 移动端下拉菜单样式
   :deep(.mobile-dropdown-menu) {
     min-width: 160px;
     
@@ -698,7 +684,6 @@ defineExpose({
     }
   }
   
-  // 移动端画布适配 - 整体居中显示
   .page-design-wrap {
     width: 100% !important;
     min-width: 0 !important;
@@ -735,7 +720,6 @@ defineExpose({
     }
   }
   
-  // 移动端底部工具栏布局
   :deep(.artboards) {
     position: fixed !important;
     bottom: calc(16px + env(safe-area-inset-bottom)) !important;
@@ -759,7 +743,6 @@ defineExpose({
     }
   }
   
-  // 移动端缩放控制位置调整 - 右侧
   :deep(#zoom-control) {
     position: fixed !important;
     right: 16px !important;
@@ -784,7 +767,6 @@ defineExpose({
     }
   }
   
-  // 移动端组件面板适配
   :deep(#widget-panel) {
     position: fixed;
     left: 0;
@@ -800,7 +782,6 @@ defineExpose({
     }
   }
   
-  // 移动端面板切换按钮
   .mobile-panel-toggle {
     position: fixed;
     left: 16px;
@@ -838,7 +819,6 @@ defineExpose({
     }
   }
   
-  // 移动端遮罩层
   .mobile-panel-overlay {
     position: fixed;
     top: 0;
