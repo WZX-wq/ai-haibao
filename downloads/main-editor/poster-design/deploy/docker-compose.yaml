@@ -11,6 +11,9 @@ services:
         REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.m.daocloud.io}
         # Debian apt 源主机名（仅用 http）；可在 .env 设 APT_MIRROR_HOST
         APT_MIRROR_HOST: ${APT_MIRROR_HOST:-mirrors.aliyun.com}
+        # rembg 模型下载代理前缀（解决 GitHub 直连慢/不通）
+        # 可在 .env 配 REMBG_MODEL_MIRROR，例如：https://ghproxy.net/ 或 https://mirror.ghproxy.com/
+        REMBG_MODEL_MIRROR: ${REMBG_MODEL_MIRROR:-https://ghproxy.net/}
     env_file:
       - .env
     environment:
@@ -19,8 +22,13 @@ services:
       FILE_STORAGE_PATH: /app/static/
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_PAGE_BASE_URL: http://web
+      # Persist rembg model cache to avoid repeated downloads
+      XDG_CACHE_HOME: /app/.cache
+      U2NET_HOME: /app/.cache/u2net
+      AI_CUTOUT_PYTHON: python3
     volumes:
       - poster_api_static:/app/static
+      - poster_api_cache:/app/.cache
     restart: unless-stopped
     networks:
       - poster_net
@@ -44,6 +52,7 @@ services:
 
 volumes:
   poster_api_static:
+  poster_api_cache:
 
 networks:
   poster_net:

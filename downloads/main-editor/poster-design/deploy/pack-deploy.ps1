@@ -27,10 +27,15 @@ try {
     '/XD', '.idea',
     '/XD', '.vscode',
     '/XD', 'coverage',
+    # deploy 目录下的本地构建产物/缓存，体积大且不应进部署源码包（Docker 构建会自行生成）
+    '/XD', 'deploy\dist-web',
+    '/XD', 'deploy\service-dist',
     '/XD', 'service\node_modules',
     '/XD', 'service\dist',
     '/XD', 'service\static',
-    '/XF', 'poster-design-docker-deploy.zip'
+    '/XF', 'poster-design-docker-deploy.zip',
+    '/XF', 'poster-design-docker-deploy-with-env-latest.zip',
+    '/XF', 'poster-design-docker-deploy-with-env-*.zip'
   )
 
   & robocopy @robocopyArgs

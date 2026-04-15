@@ -8,6 +8,7 @@ ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 # 关键：勿在 npm install 时下载 Puppeteer 自带 Chromium（可达数百 MB，常导致构建 30～60+ 分钟）。
 # 运行阶段已用 apt 安装的 /usr/bin/chromium（见下方 PUPPETEER_EXECUTABLE_PATH）。
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
+ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY service/package.json service/package-lock.json ./
 RUN npm ci --registry=https://registry.npmmirror.com --no-audit --no-fund
@@ -32,6 +33,9 @@ RUN set -eux; \
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     chromium \
+    python3 \
+    python3-pip \
+    wget \
     ca-certificates \
     fonts-liberation \
     libasound2 \
@@ -55,6 +59,33 @@ RUN apt-get update \
     libxrandr2 \
   && rm -rf /var/lib/apt/lists/*
 
+# Local cutout runtime: rembg + onnxruntime (CPU)
+# 强制 pip 使用国内镜像源，并提高超时/重试，避免部署时卡在下载
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+RUN python3 -m pip install --break-system-packages \
+    -i http://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    --default-timeout=120 \
+    --retries 10 \
+    rembg onnxruntime pillow
+
+# 预置 rembg 模型（避免运行时从 GitHub 下载卡住）
+# rembg 默认会把 u2net 模型放在 /root/.u2net；这里将其链接到可持久化的缓存目录（由 compose 挂载卷）
+ENV XDG_CACHE_HOME=/app/.cache
+ENV U2NET_HOME=/app/.cache/u2net
+ARG REMBG_MODEL_MIRROR=https://ghproxy.com/
+RUN set -eux; \
+  mkdir -p "${U2NET_HOME}"; \
+  ln -sfn "${U2NET_HOME}" /root/.u2net; \
+  if [ ! -f "${U2NET_HOME}/u2net.onnx" ]; then \
+    wget -O "${U2NET_HOME}/u2net.onnx" "${REMBG_MODEL_MIRROR}https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"; \
+  fi; \
+  if [ ! -f "${U2NET_HOME}/u2netp.onnx" ]; then \
+    wget -O "${U2NET_HOME}/u2netp.onnx" "${REMBG_MODEL_MIRROR}https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"; \
+  fi; \
+  python3 -c "from rembg import new_session; new_session('u2net'); new_session('u2netp'); print('rembg model warm ok')"
+
 ENV NODE_ENV=production
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
@@ -63,6 +94,7 @@ WORKDIR /app
 COPY --from=builder /build/dist ./dist
 COPY --from=builder /build/node_modules ./node_modules
 COPY service/package.json ./
+COPY service/scripts ./scripts
 COPY service/src/mock ./src/mock
 COPY public ./public
 

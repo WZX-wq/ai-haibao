@@ -22,6 +22,34 @@ ERROR: Failed to set up Chromium xxx! Set "PUPPETEER_SKIP_DOWNLOAD" env variable
 
 `npm run dev`
 
+### 本地抠图模型（rembg）配置
+
+如果你希望抠图优先走本地模型（而不是云端服务），当前项目已支持，按下面步骤执行：
+
+1. 在 `service/.env` 中保持以下配置：
+
+```env
+AI_CUTOUT_PROVIDER=rembg,mock
+AI_CUTOUT_REMBG_MODEL=u2net
+AI_CUTOUT_PYTHON=python
+```
+
+2. 安装 Python 依赖（建议 Python 3.10+）：
+
+```bash
+pip install rembg onnxruntime pillow
+```
+
+3. 首次调用抠图接口时，`rembg` 会自动下载模型到本机缓存目录（只下载一次）。
+
+4. 快速自检（项目根目录）：
+
+```bash
+python scripts/cutout_worker.py rembg static/test/input.png static/test/output.png u2net
+```
+
+如果命令执行成功并输出图片，说明本地抠图模型配置生效。
+
 ### 打包
 
 `npm run build`

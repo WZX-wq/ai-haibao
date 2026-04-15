@@ -66,8 +66,14 @@ type RelayoutResult = {
 
 const BAILIAN_CHAT_TIMEOUT = 20000
 const BAILIAN_IMAGE_TIMEOUT = 18000
-const BAILIAN_TASK_POLL_INTERVAL = 2000
-const BAILIAN_TASK_MAX_POLLS = 6
+function getEnv(name: string, fallback = '') { return String(process.env[name] || fallback || '').trim() }
+function getEnvNumber(name: string, fallback: number) {
+  const raw = Number(getEnv(name, String(fallback)))
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback
+}
+
+const BAILIAN_TASK_POLL_INTERVAL = getEnvNumber('AI_BAILIAN_TASK_POLL_INTERVAL_MS', 2000)
+const BAILIAN_TASK_MAX_POLLS = getEnvNumber('AI_BAILIAN_TASK_MAX_POLLS', 30)
 const BAILIAN_RETRY_TIMES = 2
 const DEFAULT_BAILIAN_IMAGE_COOLDOWN_MS = 2000
 let bailianImageQueue: Promise<unknown> = Promise.resolve()
@@ -92,7 +98,6 @@ const paletteByIndustry: Record<string, PosterPalette> = {
   餐饮: { background: '#FFFBEB', surface: '#FFFFFF', primary: '#D97706', secondary: '#FDE68A', text: '#422006', muted: '#92400E', swatches: ['#FFFBEB', '#FDE68A', '#F59E0B', '#422006'] },
 }
 
-function getEnv(name: string, fallback = '') { return String(process.env[name] || fallback || '').trim() }
 function getBailianOrigin() { return getEnv('AI_BAILIAN_BASE_URL', 'https://dashscope.aliyuncs.com').replace(/\/$/, '').replace(/\/compatible-mode\/v1$/, '').replace(/\/api\/v1$/, '') }
 function getCompatibleBaseUrl() { return `${getBailianOrigin()}/compatible-mode/v1` }
 function getApiBaseUrl() { return `${getBailianOrigin()}/api/v1` }

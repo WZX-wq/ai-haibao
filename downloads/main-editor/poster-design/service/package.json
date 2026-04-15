@@ -24,7 +24,7 @@
     "images": "^3.2.4",
     "multiparty": "^4.2.3",
     "mysql2": "^3.21.1",
-    "puppeteer": "^10.4.0"
+    "puppeteer": "^24.13.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

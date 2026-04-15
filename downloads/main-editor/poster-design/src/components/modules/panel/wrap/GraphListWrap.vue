@@ -42,6 +42,7 @@ import DragHelper from '@/common/hooks/dragHelper'
 import { TGetListData } from '@/api/material'
 import { useControlStore, useCanvasStore, useWidgetStore } from '@/store'
 import { storeToRefs } from 'pinia'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   active?: boolean
@@ -96,6 +97,15 @@ const state = reactive<TState>({
 })
 const pageOptions = { page: 0, pageSize: 20 }
 
+function normalizeMaterialMedia(item: TGetListData): TGetListData {
+  const next = { ...item }
+  next.thumb = normalizeLoopbackMediaUrl(next.thumb || '')
+  next.url = normalizeLoopbackMediaUrl(next.url || '')
+  next.thumbUrl = normalizeLoopbackMediaUrl(next.thumbUrl || '')
+  next.imgUrl = normalizeLoopbackMediaUrl(next.imgUrl || '')
+  return next
+}
+
 onBeforeUnmount(() => {
   isAlive = false
 })
@@ -112,7 +122,7 @@ onMounted(async () => {
       for (const iterator of state.types) {
         try {
           const { list = [] } = await api.material.getList({ cate: iterator.cate })
-          nextShowList.push(list.slice(0, previewLimit))
+          nextShowList.push(list.map((item) => normalizeMaterialMedia(item)).slice(0, previewLimit))
         } catch (error) {
           console.error(`Failed to load material category: ${iterator.cate}`, error)
           nextShowList.push([])
@@ -165,7 +175,7 @@ const load = async (init: boolean = false) => {
       search: state.searchKeyword,
       ...pageOptions,
     })
-    const nextList = list?.list || []
+    const nextList = (list?.list || []).map((item) => normalizeMaterialMedia(item))
     if (!isAlive) return
     if (init) {
       state.list = nextList
