@@ -576,37 +576,34 @@ defineExpose({
         display: contents; // 让子元素直接参与父级flex布局
       }
       
-      // 头像 - 最左边（order: 0）
-      .account-entry {
-        order: 0 !important;
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        min-height: 32px;
-        flex-shrink: 0;
+      // 第一行右侧：下载按钮和头像
+      .top-icon-wrap {
+        display: contents; // 让头像和下载按钮都直接参与父级flex布局
         
-        &__avatar {
-          width: 28px;
-          height: 28px;
+        // 头像 - 最左边（order: 0）
+        .account-entry {
+          order: 0 !important;
+          width: 32px;
+          height: 32px;
+          min-width: 32px;
+          min-height: 32px;
+          flex-shrink: 0;
+          margin-left: 0 !important;
           
-          img {
-            width: 100%;
-            height: 100%;
+          &__avatar {
+            width: 28px;
+            height: 28px;
+            
+            img {
+              width: 100%;
+              height: 100%;
+            }
+          }
+          
+          &__login-text {
+            font-size: 11px;
           }
         }
-        
-        &__login-text {
-          font-size: 11px;
-        }
-      }
-      
-      // 第一行右侧：下载按钮
-      .top-icon-wrap {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex-shrink: 0;
-        order: 2;
         
         // 其他不常用按钮隐藏
         > :not(.header-download-btn):not(.account-entry) {
@@ -628,6 +625,7 @@ defineExpose({
           padding: 0 12px;
           font-size: 11px;
           font-weight: 600;
+          order: 2; // 下载按钮在右侧
         }
       }
       
