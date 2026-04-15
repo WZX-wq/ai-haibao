@@ -29,6 +29,13 @@ const locale = computed(() => {
 
 <style lang="less">
 #app-view {
-  min-width: 1180px;
+  min-width: 0;
+}
+
+html.is-editor-route,
+body.is-editor-route {
+  #app-view {
+    min-width: 1180px;
+  }
 }
 </style>

@@ -1503,6 +1503,7 @@ onMounted(loadCenter)
     justify-content: center;
     padding: 20px 16px;
     gap: 12px;
+    top: auto;
 
     .ac-sidebar-logo {
       width: 100%;
@@ -1531,6 +1532,180 @@ onMounted(loadCenter)
   .ac-quick-entry {
     flex-direction: row;
     justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .ac-page {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .ac-main-wrap {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .ac-sidebar {
+    padding: 14px 12px;
+    gap: 10px;
+
+    .ac-sidebar-logo {
+      margin-bottom: 4px;
+      font-size: 16px;
+    }
+
+    .ac-sidebar-avatar {
+      width: 56px;
+      height: 56px;
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+
+    .ac-sidebar-username {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .ac-sidebar-upgrade {
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 14px;
+    }
+
+    .ac-sidebar-nav {
+      margin-top: 4px;
+      gap: 8px;
+
+      a {
+        padding: 8px 12px;
+      }
+    }
+  }
+
+  .ac-page-header {
+    padding: 14px 14px 0;
+    gap: 10px;
+  }
+
+  .ac-page-header__left h1 {
+    font-size: 20px;
+  }
+
+  .ac-page-header__left p {
+    font-size: 12px;
+  }
+
+  .ac-page-header__right,
+  .ac-pills,
+  .ac-header-btns {
+    width: 100%;
+  }
+
+  .ac-header-btns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ac-btn {
+    width: 100%;
+    padding: 9px 10px;
+  }
+
+  .ac-content {
+    padding: 14px 14px 24px;
+    overflow-x: hidden;
+  }
+
+  .ac-stats-row,
+  .ac-info-row {
+    gap: 12px;
+  }
+
+  .ac-stat-card {
+    min-height: 160px;
+    padding: 16px;
+  }
+
+  .ac-stat-card__tags {
+    position: static;
+    max-width: none;
+    justify-content: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .ac-stat-card__title {
+    font-size: 13px;
+  }
+
+  .ac-ring-wrap {
+    transform: scale(0.92);
+    transform-origin: left top;
+  }
+
+  .ac-stat-big {
+    font-size: 30px;
+  }
+
+  .ac-stat-desc {
+    font-size: 12px;
+  }
+
+  .ac-info-card__head {
+    padding: 14px 14px;
+    gap: 8px;
+  }
+
+  .ac-info-card__body {
+    padding: 14px;
+  }
+
+  .ac-quick-entries {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ac-sidebar {
+    .ac-sidebar-upgrade {
+      font-size: 13px;
+    }
+  }
+
+  .ac-header-btns {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+  }
+
+  .ac-stat-card {
+    min-height: 148px;
+    padding: 14px;
+  }
+
+  .ac-stat-card__btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ac-ring-wrap {
+    transform: scale(0.86);
+  }
+
+  .ac-stat-big {
+    font-size: 26px;
+  }
+
+  .ac-info-item__label {
+    font-size: 13px;
+  }
+
+  .ac-info-item__val {
+    font-size: 12px;
   }
 }
 </style>

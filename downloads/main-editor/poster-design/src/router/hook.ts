@@ -35,6 +35,8 @@ export default (router: Router) => {
 
     nextTick(() => {
       const isEditor = to.name === 'Home'
+      document.documentElement.classList.toggle('is-editor-route', isEditor)
+      document.body.classList.toggle('is-editor-route', isEditor)
       if (isEditor) {
         document.body.style.overflow = 'hidden'
         document.documentElement.style.overflow = ''

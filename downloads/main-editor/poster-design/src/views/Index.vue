@@ -447,7 +447,7 @@ defineExpose({
         gap: 6px;
         flex: 1;
         min-width: 0;
-        order: 1;
+        order: 2;
         
         .name {
           display: none; // 移动端隐藏品牌名称，节省空间
@@ -565,35 +565,14 @@ defineExpose({
         display: contents; // 让子元素直接参与父级 flex 布局
       }
       
-      .account-entry {
-        order: 0 !important;
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        min-height: 32px;
-        flex-shrink: 0;
-        
-        &__avatar {
-          width: 28px;
-          height: 28px;
-          
-          img {
-            width: 100%;
-            height: 100%;
-          }
-        }
-        
-        &__login-text {
-          font-size: 11px;
-        }
-      }
-      
       .top-icon-wrap {
         display: flex;
         align-items: center;
         gap: 6px;
         flex-shrink: 0;
-        order: 2;
+        order: 1;
+        margin-left: 0;
+        margin-right: auto;
         
         > :not(.header-download-btn):not(.account-entry) {
           display: none;
@@ -615,6 +594,15 @@ defineExpose({
           font-size: 11px;
           font-weight: 600;
         }
+      }
+
+      /* 移动端：头像固定在顶部栏最左侧 */
+      :deep(.account-entry) {
+        order: -1 !important;
+        margin-left: 0 !important;
+        margin-right: 6px !important;
+        flex-shrink: 0;
+        align-self: center;
       }
       
       .top-title {
