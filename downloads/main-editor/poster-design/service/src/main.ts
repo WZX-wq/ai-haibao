@@ -36,6 +36,9 @@ loadEnvFile()
 
 const port = process.env.PORT || servicePort
 const app = express()
+const STATIC_CACHE_SECONDS = 7 * 24 * 60 * 60
+const STATIC_CACHE_CONTROL = `public, max-age=${STATIC_CACHE_SECONDS}, stale-while-revalidate=86400`
+const staticRoot = path.join(process.cwd(), 'static')
 function resolveExistingFile(candidates: string[]) {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p
@@ -61,6 +64,10 @@ const createFolder = (folder: string) => {
 }
 createFolder(filePath)
 
+function applyStaticCacheHeaders(res: any) {
+  res.setHeader('Cache-Control', STATIC_CACHE_CONTROL)
+}
+
 app.all('*', (req: any, res: any, next: any) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Headers', 'X-Access-Token,Content-Type,Authorization,Content-Length,Content-Size')
@@ -76,7 +83,16 @@ app.all('*', (req: any, res: any, next: any) => {
   next()
 })
 
-app.use('/static', setUploadContentType, express.static(process.cwd() + `/static/`))
+app.use(
+  '/static',
+  setUploadContentType,
+  express.static(staticRoot, {
+    etag: true,
+    lastModified: true,
+    maxAge: STATIC_CACHE_SECONDS * 1000,
+    setHeaders: (res: any) => applyStaticCacheHeaders(res),
+  }),
+)
 if (fs.existsSync(process.cwd() + `/src/mock/assets`)) {
   app.use('/store', setUploadContentType, express.static(process.cwd() + `/src/mock/assets`))
 }
@@ -119,6 +135,10 @@ const getContentType = function (path: any) {
       return 'image/gif'
     case 'svg':
       return 'image/svg+xml'
+    case 'webp':
+      return 'image/webp'
+    case 'avif':
+      return 'image/avif'
     default:
       return null
   }
@@ -129,5 +149,6 @@ function setUploadContentType(req: any, res: any, next: any) {
   if (contentType) {
     res.setHeader('Content-Type', contentType)
   }
+  applyStaticCacheHeaders(res)
   next()
 }

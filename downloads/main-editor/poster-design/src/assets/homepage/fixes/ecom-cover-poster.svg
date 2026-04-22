@@ -1,0 +1,26 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="coverBg" x1="88" y1="72" x2="794" y2="1130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A58FF"/>
+      <stop offset="0.5" stop-color="#7A36FF"/>
+      <stop offset="1" stop-color="#181B56"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#coverBg)"/>
+  <circle cx="740" cy="184" r="170" fill="#C8B7FF" fill-opacity="0.22"/>
+  <circle cx="162" cy="1020" r="190" fill="#4AE7FF" fill-opacity="0.16"/>
+  <rect x="78" y="90" width="170" height="52" rx="26" fill="white" fill-opacity="0.16"/>
+  <text x="124" y="124" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">AI电商</text>
+  <text x="76" y="252" fill="white" font-size="108" font-family="Arial, Helvetica, sans-serif" font-weight="900">新品促销</text>
+  <text x="76" y="366" fill="#ECE9FF" font-size="108" font-family="Arial, Helvetica, sans-serif" font-weight="900">海报模板</text>
+  <text x="80" y="442" fill="#DCE1FF" font-size="34" font-family="Arial, Helvetica, sans-serif">活动上新、满减折扣、会员专享一键套版</text>
+  <rect x="84" y="560" width="732" height="556" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="138" y="620" width="624" height="438" rx="34" fill="white"/>
+  <rect x="182" y="670" width="248" height="150" rx="28" fill="#6A4CFF"/>
+  <rect x="468" y="670" width="248" height="150" rx="28" fill="#FF6A4D"/>
+  <rect x="182" y="854" width="534" height="150" rx="28" fill="#F5F1FF"/>
+  <text x="220" y="758" fill="white" font-size="44" font-family="Arial, Helvetica, sans-serif" font-weight="800">618 SALE</text>
+  <text x="512" y="758" fill="white" font-size="44" font-family="Arial, Helvetica, sans-serif" font-weight="800">NEW DROP</text>
+  <text x="220" y="930" fill="#4838CC" font-size="72" font-family="Arial, Helvetica, sans-serif" font-weight="900">多场景电商模板</text>
+  <text x="220" y="990" fill="#7468A9" font-size="30" font-family="Arial, Helvetica, sans-serif">商品活动页、优惠信息页、直播预热页统一风格</text>
+</svg>

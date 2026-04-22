@@ -1,0 +1,22 @@
+{
+    "name": "鲲穹海报 - AI海报设计工具",
+    "short_name": "鲲穹海报",
+    "description": "专业的AI海报设计工具，支持在线制作、智能生成、模板编辑",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#2563eb",
+    "icons": [
+        {
+            "src": "/favicon.png",
+            "sizes": "any",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}

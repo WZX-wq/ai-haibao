@@ -1,0 +1,13 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="a" x1="84" y1="74" x2="790" y2="1120" gradientUnits="userSpaceOnUse"><stop stop-color="#4A6CFF"/><stop offset="1" stop-color="#111D5A"/></linearGradient></defs>
+  <rect width="900" height="1200" rx="56" fill="url(#a)"/>
+  <rect x="82" y="92" width="156" height="50" rx="25" fill="#DDE5FF"/><text x="126" y="126" fill="#3854DB" font-size="28" font-family="Arial" font-weight="700">实习招聘</text>
+  <text x="78" y="252" fill="white" font-size="102" font-family="Arial" font-weight="900">INTERN</text>
+  <text x="78" y="354" fill="#DCE4FF" font-size="102" font-family="Arial" font-weight="900">PLAN</text>
+  <text x="82" y="426" fill="#D8E2FF" font-size="34" font-family="Arial">大厂实习 / 转正机会 / 导师带教</text>
+  <rect x="84" y="564" width="732" height="552" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="142" y="626" width="616" height="436" rx="34" fill="#F6F8FF"/>
+  <text x="184" y="756" fill="#2441C7" font-size="82" font-family="Arial" font-weight="900">实习生招募中</text>
+  <text x="184" y="824" fill="#5B73BF" font-size="32" font-family="Arial">运营 / 设计 / 开发多个方向开放申请</text>
+  <rect x="184" y="884" width="226" height="58" rx="29" fill="#4A6CFF"/><text x="242" y="922" fill="white" font-size="28" font-family="Arial" font-weight="800">立即投递</text>
+</svg>

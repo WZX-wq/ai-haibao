@@ -25,7 +25,10 @@ export const saveScreenshot = async (
     height = Number(height).toFixed(0)
 
     const puppeteerArgs = {
-      old: ['--no-first-run', '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${width},${height}`, '--single-process', '--disable-gpu', '--no-zygote', '--disable-dev-shm-usage'],
+      // Newer Chrome builds on Windows can crash during screenshot capture when
+      // forced into single-process/no-zygote mode. Keep the launch args minimal
+      // so dev screenshot generation stays stable.
+      old: ['--no-first-run', '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${width},${height}`, '--disable-dev-shm-usage'],
       new: ['--no-first-run', '--no-sandbox', '--disable-setuid-sandbox', `--window-size=${width},${height}`],
     }
 

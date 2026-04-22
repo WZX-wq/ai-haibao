@@ -1,0 +1,30 @@
+<svg width="900" height="1500" viewBox="0 0 900 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg5" x1="94" y1="72" x2="780" y2="1426" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2C2D7B"/>
+      <stop offset="0.45" stop-color="#111B52"/>
+      <stop offset="1" stop-color="#090C23"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="156" y1="638" x2="702" y2="1290" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1500" rx="56" fill="url(#bg5)"/>
+  <circle cx="714" cy="216" r="174" fill="#FF6A80" fill-opacity="0.24"/>
+  <rect x="86" y="96" width="172" height="54" rx="27" fill="#FFFFFF" fill-opacity="0.18"/>
+  <text x="128" y="132" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">直播预告</text>
+  <text x="80" y="270" fill="white" font-size="98" font-family="Arial, Helvetica, sans-serif" font-weight="900">高能直播</text>
+  <text x="80" y="370" fill="white" font-size="98" font-family="Arial, Helvetica, sans-serif" font-weight="900">预热视频</text>
+  <text x="84" y="446" fill="#D5DEFF" font-size="34" font-family="Arial, Helvetica, sans-serif">直播预热图、预约封面、倒计时图一套搞定</text>
+  <rect x="104" y="602" width="692" height="794" rx="42" fill="url(#glass)" stroke="white" stroke-opacity="0.14"/>
+  <rect x="150" y="648" width="600" height="706" rx="34" fill="#101739"/>
+  <circle cx="450" cy="844" r="160" fill="#FF4E73"/>
+  <circle cx="450" cy="844" r="110" fill="#11183D"/>
+  <polygon points="420,776 420,912 526,844" fill="white"/>
+  <text x="178" y="1072" fill="white" font-size="90" font-family="Arial, Helvetica, sans-serif" font-weight="900">LIVE NOW</text>
+  <text x="178" y="1142" fill="#D6DFFF" font-size="30" font-family="Arial, Helvetica, sans-serif">预约海报 / 直播封面 / 限时上新预告</text>
+  <rect x="178" y="1186" width="220" height="60" rx="30" fill="#FF4E73"/>
+  <text x="228" y="1226" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即生成</text>
+  <text x="86" y="1430" fill="#D5DEFF" font-size="26" font-family="Arial, Helvetica, sans-serif">适合直播预热、预约提醒、直播脚本封面、活动倒计时</text>
+</svg>

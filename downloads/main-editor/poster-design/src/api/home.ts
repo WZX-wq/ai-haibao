@@ -147,7 +147,11 @@ export type TSaveWorksResult = {
 }
 
 // 保存作品
-export const saveWorks = (params: TSaveWorksParams) => fetch<TSaveWorksResult>('design/save', params, 'post')
+export const saveWorks = (
+  params: TSaveWorksParams,
+  exheaders: Record<string, any> = {},
+  extra: Record<string, any> = {},
+) => fetch<TSaveWorksResult>('design/save', params, 'post', exheaders, extra)
 
 // 保存个人模板
 export const saveMyTemp = (params: Type.Object = {}) => fetch('design/user/temp', params, 'post')

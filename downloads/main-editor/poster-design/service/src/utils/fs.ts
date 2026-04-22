@@ -10,6 +10,7 @@ import path from 'path'
 import imageSize from 'image-size'
 import { filePath as StaticPath } from '../configs'
 import { getClientStaticBaseUrl } from './clientPublicUrl'
+import { findExistingImageThumbnail, isGeneratedImageThumb } from './imageThumbnail'
 
 export function copyFile(sourceFile: string, destinationFile: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -48,6 +49,9 @@ export function filesReader(directoryPath: string) {
         if (file === '.DS_Store' || file.startsWith('.')) {
           return
         }
+        if (isGeneratedImageThumb(file)) {
+          return
+        }
         const filePath = path.join(directoryPath, file)
         const absolutePath = path.join(StaticPath, filePath)
         if (!fs.statSync(absolutePath).isFile()) {
@@ -63,12 +67,14 @@ export function filesReader(directoryPath: string) {
           /* ignore */
         }
         const key = `${dirUrl}/${file}`
+        const thumbAbs = findExistingImageThumbnail(absolutePath)
         const fileInfo = {
           id: file,
           key,
           width,
           height,
           url: `${getClientStaticBaseUrl()}${key}`,
+          thumb: thumbAbs ? `${getClientStaticBaseUrl()}${dirUrl}/${path.basename(thumbAbs)}` : undefined,
         }
         filesArray.push(fileInfo)
       })

@@ -1,0 +1,33 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ecomBg" x1="78" y1="70" x2="804" y2="1128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF7A18"/>
+      <stop offset="0.45" stop-color="#FF4D4F"/>
+      <stop offset="1" stop-color="#7D1738"/>
+    </linearGradient>
+    <linearGradient id="cardWarm" x1="164" y1="630" x2="718" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD36B"/>
+      <stop offset="1" stop-color="#FF9A3D"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#ecomBg)"/>
+  <circle cx="732" cy="168" r="170" fill="#FFD79D" fill-opacity="0.2"/>
+  <circle cx="164" cy="1032" r="180" fill="#FFF4D1" fill-opacity="0.16"/>
+  <rect x="74" y="84" width="164" height="52" rx="26" fill="white" fill-opacity="0.18"/>
+  <text x="116" y="118" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">电商促销</text>
+  <text x="74" y="244" fill="white" font-size="110" font-family="Arial, Helvetica, sans-serif" font-weight="900">满199</text>
+  <text x="74" y="360" fill="#FFE7A8" font-size="110" font-family="Arial, Helvetica, sans-serif" font-weight="900">减100</text>
+  <text x="78" y="434" fill="#FFECD8" font-size="34" font-family="Arial, Helvetica, sans-serif">限时叠加优惠，爆款商品到手更低</text>
+  <rect x="78" y="548" width="744" height="580" rx="42" fill="white" fill-opacity="0.12"/>
+  <rect x="140" y="614" width="620" height="454" rx="36" fill="url(#cardWarm)"/>
+  <rect x="186" y="664" width="176" height="54" rx="27" fill="#8F1F37"/>
+  <text x="232" y="700" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">LIMITED</text>
+  <text x="186" y="834" fill="#7C1738" font-size="84" font-family="Arial, Helvetica, sans-serif" font-weight="900">DOUBLE</text>
+  <text x="186" y="922" fill="#7C1738" font-size="84" font-family="Arial, Helvetica, sans-serif" font-weight="900">DISCOUNT</text>
+  <text x="186" y="992" fill="#8A2D3E" font-size="30" font-family="Arial, Helvetica, sans-serif">券后叠满减，首页活动位强转化海报</text>
+  <circle cx="648" cy="836" r="104" fill="#FFF5D2"/>
+  <text x="580" y="812" fill="#FF5A3D" font-size="52" font-family="Arial, Helvetica, sans-serif" font-weight="900">SAVE</text>
+  <text x="596" y="884" fill="#FF5A3D" font-size="80" font-family="Arial, Helvetica, sans-serif" font-weight="900">100</text>
+  <rect x="188" y="1040" width="232" height="58" rx="29" fill="white"/>
+  <text x="244" y="1078" fill="#D9424E" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即抢购</text>
+</svg>

@@ -30,9 +30,10 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, nextTick, ref, onMounted } from 'vue'
+import { reactive, nextTick, ref, onMounted, watch } from 'vue'
 import { ElTabPane, ElTabs, TabPaneName } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import html2canvas from 'html2canvas'
 
 import uploader from '@/components/common/Uploader'
 import api from '@/api'
@@ -44,6 +45,8 @@ import imgWaterFall from './components/imgWaterFall.vue'
 import { IGetTempListData } from '@/api/home'
 import useNotification from '@/common/methods/notification'
 import eventBus from '@/utils/plugins/eventBus'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
+import _config from '@/config'
 import { storeToRefs } from 'pinia'
 import { useControlStore, useCanvasStore, useWidgetStore } from '@/store'
 import useUserStore from '@/store/base/user'
@@ -65,6 +68,7 @@ type TState = {
 const props = defineProps<TProps>()
 void props
 
+const route = useRoute()
 const router = useRouter()
 
 const controlStore = useControlStore()
@@ -90,6 +94,285 @@ let page = 0
 let listPage = 0
 let photoLoadNotified = false
 let designLoadNotified = false
+const designPreviewHydratingIds = new Set<string>()
+const designThumbCaptureIds = new Set<string>()
+const DESIGN_THUMB_CACHE_PREFIX = 'xp_design_thumb:v2:'
+
+function withVersionParam(url: string, version?: string | number) {
+  const src = String(url || '').trim()
+  if (!src) return src
+  if (version === undefined || version === null || String(version).trim() === '') {
+    return src
+  }
+  return `${src}${src.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(version))}`
+}
+
+function buildDesignScreenshotThumb(
+  id: string | number,
+  opts?: { force?: number; bust?: boolean; width?: number; height?: number },
+) {
+  const base = String(_config.SCREEN_URL || _config.API_URL || '').replace(/\/$/, '')
+  if (!base) return ''
+  const width = Math.max(1, Math.round(Number(opts?.width) || 1242))
+  const height = Math.max(1, Math.round(Number(opts?.height) || 1660))
+  const force = opts?.force ?? 0
+  const bust = opts?.bust ? `&_cv=${Date.now()}` : ''
+  return `${base}/api/screenshots?id=${encodeURIComponent(String(id))}&width=${width}&height=${height}&type=file&index=0&force=${force}${bust}`
+}
+
+function getDesignThumbCacheKey(id: string | number) {
+  return `${DESIGN_THUMB_CACHE_PREFIX}${String(id)}`
+}
+
+function readCachedDesignThumb(id: string | number) {
+  try {
+    return localStorage.getItem(getDesignThumbCacheKey(id)) || ''
+  } catch {
+    return ''
+  }
+}
+
+function writeCachedDesignThumb(id: string | number, value: string) {
+  if (!value) return
+  try {
+    localStorage.setItem(getDesignThumbCacheKey(id), value)
+  } catch {
+    /* ignore quota/storage errors */
+  }
+}
+
+function clearCachedDesignThumb(id: string | number) {
+  try {
+    localStorage.removeItem(getDesignThumbCacheKey(id))
+  } catch {
+    /* ignore quota/storage errors */
+  }
+}
+
+function isScreenshotPreview(value?: string) {
+  const src = String(value || '').trim()
+  return src.includes('/api/screenshots?') || src.includes('-screenshot-vp-')
+}
+
+function normalizeDesignPreview(
+  item: IGetTempListData & Record<string, any>,
+  opts?: { preferFreshScreenshot?: boolean },
+) {
+  const version = item.updated_at || item.updated_time || item.coverUpdatedAt || item.modified_at
+  const rawPreview = String(item.thumb || item.cover || item.url || '').trim()
+  const cachedPreview = readCachedDesignThumb(item.id)
+  const useFreshScreenshot = opts?.preferFreshScreenshot === true || !rawPreview
+  const fallbackPreview = buildDesignScreenshotThumb(item.id, {
+    width: item.width,
+    height: item.height,
+    force: useFreshScreenshot ? 1 : 0,
+    bust: useFreshScreenshot,
+  })
+  const basePreview =
+    cachedPreview
+      ? cachedPreview
+      : useFreshScreenshot || isScreenshotPreview(rawPreview)
+        ? fallbackPreview || rawPreview
+        : rawPreview || fallbackPreview
+  const preview = normalizeLoopbackMediaUrl(withVersionParam(basePreview, version))
+  return {
+    ...item,
+    thumb: preview,
+    cover: preview,
+    url: preview || normalizeLoopbackMediaUrl(String(item.url || '').trim()) || fallbackPreview,
+  }
+}
+
+function shouldHydrateDesignPreview(item: IGetTempListData & Record<string, any>) {
+  const rawPreview = String(item.thumb || item.cover || item.url || '').trim()
+  const width = Number(item.width) || 0
+  const height = Number(item.height) || 0
+  return !rawPreview || width <= 0 || height <= 0
+}
+
+async function hydrateDesignPreviewRows(items: Array<IGetTempListData & Record<string, any>>) {
+  const candidates = items.filter((item) => {
+    const key = String(item.id || '').trim()
+    if (!key || !shouldHydrateDesignPreview(item)) return false
+    if (designPreviewHydratingIds.has(key)) return false
+    designPreviewHydratingIds.add(key)
+    return true
+  })
+
+  if (candidates.length <= 0) return
+
+  const results = await Promise.allSettled(
+    candidates.map(async (item) => {
+      const detail = (await api.home.getWorks({ id: item.id })) as Record<string, any>
+      return {
+        id: item.id,
+        detail,
+      }
+    }),
+  )
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidate = candidates[i]
+    const key = String(candidate.id || '').trim()
+    designPreviewHydratingIds.delete(key)
+
+    const result = results[i]
+    if (result.status !== 'fulfilled') continue
+
+    const detail = result.value.detail || {}
+    const idx = state.designList.findIndex((x) => String(x.id) === String(candidate.id))
+    if (idx < 0) continue
+
+    const merged = normalizeDesignPreview({
+      ...state.designList[idx],
+      width: Number(state.designList[idx].width) || Number(detail.width) || state.designList[idx].width,
+      height: Number(state.designList[idx].height) || Number(detail.height) || state.designList[idx].height,
+      cover: String(state.designList[idx].cover || detail.cover || '').trim(),
+      thumb: String((state.designList[idx] as Record<string, any>).thumb || detail.thumb || detail.cover || '').trim(),
+      url: String(state.designList[idx].url || detail.cover || detail.url || '').trim(),
+      updated_time: (state.designList[idx] as Record<string, any>).updated_time || detail.updated_time,
+      updated_at: (state.designList[idx] as Record<string, any>).updated_at || detail.updated_at,
+      modified_at: (state.designList[idx] as Record<string, any>).modified_at || detail.modified_at,
+    } as IGetTempListData & Record<string, any>, {
+      preferFreshScreenshot: true,
+    })
+
+    state.designList.splice(idx, 1, merged)
+  }
+}
+
+async function captureDesignThumbFromCanvas(id: string | number) {
+  const key = String(id || '').trim()
+  if (!key || designThumbCaptureIds.has(key)) return
+  const source = document.getElementById('page-design-canvas') as HTMLElement | null
+  if (!source) return
+
+  designThumbCaptureIds.add(key)
+  try {
+    await nextTick()
+    const clone = source.cloneNode(true) as HTMLElement
+    clone.setAttribute('id', `design-thumb-clone-${key}`)
+    clone.style.position = 'fixed'
+    clone.style.left = '-20000px'
+    clone.style.top = '0'
+    clone.style.width = `${source.offsetWidth || source.clientWidth || Number.parseFloat(source.style.width || '0') || 1242}px`
+    clone.style.height = `${source.offsetHeight || source.clientHeight || Number.parseFloat(source.style.height || '0') || 1660}px`
+    clone.style.transform = 'none'
+    clone.style.transformOrigin = 'left top'
+    clone.style.opacity = '1'
+    clone.style.pointerEvents = 'none'
+    document.body.appendChild(clone)
+
+    const canvas = await html2canvas(clone, {
+      useCORS: true,
+      scale: 0.36,
+      backgroundColor: '#ffffff',
+    })
+    clone.remove()
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
+    if (!dataUrl) return
+    writeCachedDesignThumb(key, dataUrl)
+
+    const idx = state.designList.findIndex((item) => String(item.id) === key)
+    if (idx >= 0) {
+      const next = normalizeDesignPreview({
+        ...state.designList[idx],
+        thumb: dataUrl,
+        cover: dataUrl,
+        url: dataUrl,
+      } as IGetTempListData & Record<string, any>)
+      state.designList.splice(idx, 1, next)
+    }
+  } catch {
+    /* ignore capture failures */
+  } finally {
+    const clone = document.getElementById(`design-thumb-clone-${key}`)
+    clone?.remove()
+    designThumbCaptureIds.delete(key)
+  }
+}
+
+function upsertDesignListItem(item: IGetTempListData & Record<string, any>) {
+  const nextId = String(item.id || '').trim()
+  if (!nextId) return
+  const currentIndex = state.designList.findIndex((x) => String(x.id) === nextId)
+  if (currentIndex >= 0) {
+    state.designList.splice(currentIndex, 1, item)
+    return
+  }
+  state.designList = [item, ...state.designList]
+}
+
+async function refreshSavedDesignPreview(payload?: { id?: string | number; coverUpdatedAt?: string | number }) {
+  const designId = String(payload?.id || route.query.id || '').trim()
+  if (!designId) {
+    loadDesign(true)
+    return
+  }
+
+  clearCachedDesignThumb(designId)
+  const freshVersion = payload?.coverUpdatedAt || Date.now()
+
+  const currentIndex = state.designList.findIndex((x) => String(x.id) === designId)
+  if (currentIndex >= 0) {
+    const currentItem = state.designList[currentIndex] as IGetTempListData & Record<string, any>
+    const optimisticItem = normalizeDesignPreview(
+      {
+        ...currentItem,
+        thumb: buildDesignScreenshotThumb(designId, {
+          width: currentItem.width,
+          height: currentItem.height,
+          force: 1,
+          bust: true,
+        }),
+        cover: buildDesignScreenshotThumb(designId, {
+          width: currentItem.width,
+          height: currentItem.height,
+          force: 1,
+          bust: true,
+        }),
+        coverUpdatedAt: freshVersion,
+        updated_at: freshVersion,
+        updated_time: freshVersion,
+        modified_at: freshVersion,
+      },
+      { preferFreshScreenshot: true },
+    )
+    state.designList.splice(currentIndex, 1, optimisticItem)
+  }
+
+  try {
+    const detail = (await api.home.getWorks({ id: designId })) as Record<string, any>
+    const currentItem = state.designList.find((x) => String(x.id) === designId) as (IGetTempListData & Record<string, any>) | undefined
+    const merged = normalizeDesignPreview(
+      {
+        ...(currentItem || {}),
+        ...(detail || {}),
+        id: detail.id ?? currentItem?.id ?? designId,
+        width: Number(detail.width) || Number(currentItem?.width) || 1242,
+        height: Number(detail.height) || Number(currentItem?.height) || 1660,
+        cover: String(detail.cover || currentItem?.cover || '').trim(),
+        thumb: String(detail.thumb || currentItem?.thumb || detail.cover || '').trim(),
+        url: String(detail.url || currentItem?.url || detail.cover || '').trim(),
+        coverUpdatedAt: freshVersion,
+        updated_at: detail.updated_at || currentItem?.updated_at || freshVersion,
+        updated_time: detail.updated_time || currentItem?.updated_time || freshVersion,
+        modified_at: detail.modified_at || currentItem?.modified_at || freshVersion,
+      } as IGetTempListData & Record<string, any>,
+      { preferFreshScreenshot: true },
+    )
+    upsertDesignListItem(merged)
+  } catch {
+    loadDesign(true)
+    return
+  }
+
+  await nextTick()
+  window.setTimeout(() => {
+    void captureDesignThumbFromCanvas(designId)
+  }, 180)
+}
 
 function mergeUniqueItems<T extends { id: string | number }>(current: T[], incoming: T[]) {
   const seen = new Set(current.map((item) => item.id))
@@ -170,15 +453,13 @@ const loadDesign = (init: boolean = false) => {
         return
       }
 
-      const normalizedList = list.map((x) => ({
-        ...x,
-        cover: `${x.cover}?r=${Math.random()}`,
-      }))
+      const normalizedList = list.map((x) => normalizeDesignPreview(x as IGetTempListData & Record<string, any>))
       const merged = mergeUniqueItems(state.designList, normalizedList)
       state.designList = merged.list
       if (merged.appendedCount <= 0) {
         state.isDone = true
       }
+      void hydrateDesignPreviewRows(normalizedList)
     })
     .catch(() => {
       state.isDone = true
@@ -204,9 +485,13 @@ function checkHeight(el: HTMLElement, loadFn: Function) {
 }
 
 onMounted(() => {
-  load(true)
   nextTick(() => {
-    state.tabActiveName = 'pics'
+    state.tabActiveName = route.query.userTab === 'design' ? 'design' : 'pics'
+    if (state.tabActiveName === 'design') {
+      loadDesign(true)
+      return
+    }
+    load(true)
   })
 })
 
@@ -304,10 +589,40 @@ const tabChange = (tabName: TabPaneName) => {
   }
 }
 
+watch(
+  () => route.query.userTab,
+  (tab) => {
+    const nextTab = tab === 'design' ? 'design' : 'pics'
+    if (state.tabActiveName === nextTab) return
+    state.tabActiveName = nextTab
+    if (nextTab === 'design') {
+      loadDesign(true)
+    }
+  },
+)
+
+watch(
+  () => [route.query.id, route.query.userTab, state.designList.length] as const,
+  ([id, userTab]) => {
+    const designId = String(id || '').trim()
+    if (!designId || userTab !== 'design') return
+    window.setTimeout(() => {
+      void captureDesignThumbFromCanvas(designId)
+    }, 220)
+  },
+  { flush: 'post' },
+)
+
 const selectDesign = async (item: IGetTempListData) => {
   const { id } = item
-  /** 与模板入口统一用 tempid，避免仅带 id 时保存/导出分支不一致；大整数用字符串避免精度问题 */
-  router.push({ path: '/home', query: { tempid: String(id) } })
+  router.push({
+    path: '/home',
+    query: {
+      id: String(id),
+      section: 'mine',
+      userTab: 'design',
+    },
+  })
 }
 
 const openPSD = () => {
@@ -317,6 +632,11 @@ const openPSD = () => {
 eventBus.on('refreshUserImages', () => {
   state.imgList = []
   load(true)
+})
+
+eventBus.on('refreshUserDesigns', (payload) => {
+  state.tabActiveName = 'design'
+  void refreshSavedDesignPreview(payload)
 })
 
 defineExpose({

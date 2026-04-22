@@ -412,6 +412,22 @@ function getlayers() {
 function getChilds(uuid: string) {
   return dWidgets.value.filter((item) => item.parent === uuid)
 }
+
+function resetViewport() {
+  if (props.embedPreview) return
+  const scrollContainer = root_ref.value
+  if (!scrollContainer) return
+  const nextLeft = Math.max(0, (scrollContainer.scrollWidth - scrollContainer.clientWidth) / 2)
+  scrollContainer.scrollTo({
+    left: nextLeft,
+    top: 0,
+    behavior: 'auto',
+  })
+}
+
+defineExpose({
+  resetViewport,
+})
 // getIsActive(uuid) {
 //   if (this.dSelectWidgets.length > 0) {
 //     let widget = this.dSelectWidgets.find((item) => item.uuid === uuid)

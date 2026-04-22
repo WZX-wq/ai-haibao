@@ -1,0 +1,23 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sale618" x1="92" y1="78" x2="786" y2="1116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C4DFF"/>
+      <stop offset="0.5" stop-color="#7D3BFF"/>
+      <stop offset="1" stop-color="#1A1954"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#sale618)"/>
+  <rect x="84" y="92" width="154" height="50" rx="25" fill="#FFFFFF" fill-opacity="0.16"/>
+  <text x="126" y="126" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">618狂欢</text>
+  <text x="78" y="260" fill="white" font-size="124" font-family="Arial, Helvetica, sans-serif" font-weight="900">50%</text>
+  <text x="78" y="364" fill="#E6DBFF" font-size="92" font-family="Arial, Helvetica, sans-serif" font-weight="900">OFF</text>
+  <text x="80" y="438" fill="#D9DEFF" font-size="34" font-family="Arial, Helvetica, sans-serif">全场 5 折起，爆款直降，限时疯抢</text>
+  <circle cx="692" cy="294" r="132" fill="#FFB955" fill-opacity="0.88"/>
+  <text x="630" y="314" fill="#7A36FF" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">618</text>
+  <rect x="82" y="574" width="736" height="556" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="142" y="636" width="616" height="432" rx="34" fill="#F5F1FF"/>
+  <text x="182" y="762" fill="#5E41E6" font-size="80" font-family="Arial, Helvetica, sans-serif" font-weight="900">年度狂欢购</text>
+  <text x="182" y="836" fill="#7D6BB0" font-size="32" font-family="Arial, Helvetica, sans-serif">抢爆款 / 拼低价 / 享大促</text>
+  <rect x="182" y="892" width="214" height="58" rx="29" fill="#6A4CFF"/>
+  <text x="236" y="930" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即抢购</text>
+</svg>

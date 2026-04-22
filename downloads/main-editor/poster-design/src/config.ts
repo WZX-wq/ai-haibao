@@ -30,9 +30,9 @@ export default {
   isDev,
   BASE_URL,
   VERSION: version,
-  APP_NAME: '鲲穹设计',
+  APP_NAME: '鲲穹海报',
   /** 画布默认水印文案（与品牌名分离） */
-  WATERMARK_DEFAULT_TEXT: '鲲穹设计',
+  WATERMARK_DEFAULT_TEXT: '鲲穹海报',
   COPYRIGHT: 'ShawnPhang - Design.palxp.cn',
   API_URL: envApiUrl || (viteDev ? devDefaultApi : ''),
   SCREEN_URL: screenBaseUrl,

@@ -1,0 +1,24 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="memberBg" x1="88" y1="74" x2="786" y2="1112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14142B"/>
+      <stop offset="0.5" stop-color="#2A2460"/>
+      <stop offset="1" stop-color="#9E7D3A"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#memberBg)"/>
+  <rect x="84" y="96" width="188" height="50" rx="25" fill="#F2DFC0"/>
+  <text x="132" y="129" fill="#7A5A22" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">VIP会员</text>
+  <text x="78" y="254" fill="#FFF4DE" font-size="104" font-family="Arial, Helvetica, sans-serif" font-weight="900">MEMBER</text>
+  <text x="78" y="362" fill="white" font-size="104" font-family="Arial, Helvetica, sans-serif" font-weight="900">PRICE</text>
+  <text x="82" y="436" fill="#F7EAD0" font-size="34" font-family="Arial, Helvetica, sans-serif">专属价、加赠权益、会员日活动一屏展示</text>
+  <circle cx="706" cy="290" r="146" fill="#EFD29E" fill-opacity="0.94"/>
+  <text x="626" y="312" fill="#5E4721" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">VIP</text>
+  <text x="620" y="378" fill="#5E4721" font-size="76" font-family="Arial, Helvetica, sans-serif" font-weight="900">SALE</text>
+  <rect x="82" y="572" width="736" height="552" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="140" y="632" width="620" height="436" rx="34" fill="#FFF6E8"/>
+  <text x="184" y="760" fill="#654F25" font-size="82" font-family="Arial, Helvetica, sans-serif" font-weight="900">会员专享价</text>
+  <text x="184" y="828" fill="#A0885B" font-size="32" font-family="Arial, Helvetica, sans-serif">积分加倍 / 独享折扣 / 限定礼包</text>
+  <rect x="184" y="884" width="240" height="58" rx="29" fill="#9E7D3A"/>
+  <text x="242" y="922" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即开通</text>
+</svg>

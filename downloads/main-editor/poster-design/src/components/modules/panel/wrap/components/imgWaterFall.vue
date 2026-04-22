@@ -9,11 +9,14 @@
       @click.stop="selectItem(item)"
     >
       <edit-model v-if="edit" :options="props.edit" :data="{ item, i }">
-        <div v-if="item.isDelect" class="list__mask">已删除</div>
+        <div v-if="(item as any).deleted === true" class="list__mask">已删除</div>
         <img
           v-if="!item.fail"
           class="img"
           :src="getCardImage(item)"
+          :width="state.width"
+          :height="Math.max(1, Math.round(item.height || state.width))"
+          sizes="146px"
           alt="template-cover"
           :loading="i < 6 ? 'eager' : 'lazy'"
           :fetchpriority="i === 0 ? 'high' : 'low'"
@@ -28,6 +31,9 @@
         v-else
         class="img"
         :src="getCardImage(item)"
+        :width="state.width"
+        :height="Math.max(1, Math.round(item.height || state.width))"
+        sizes="146px"
         alt="template-cover"
         :loading="i < 6 ? 'eager' : 'lazy'"
         :fetchpriority="i === 0 ? 'high' : 'low'"
@@ -46,7 +52,6 @@ import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   listData: IGetTempListData[]
-  /** 与路由 tempid 对齐，用于高亮当前打开的模板 */
   activeTempId?: number | null
   edit?: Record<string, any>
 }
@@ -73,14 +78,14 @@ const isActiveItem = (item: IGetTempListData) => {
 }
 
 const state = reactive<TState>({
-  width: 146,
+  width: 154,
   list: [],
   countHeight: 0,
 })
 
 const columnHeights: number[] = []
 const columnNums = 2
-const gap = 7
+const gap = 8
 
 watch(
   () => props.listData,
@@ -122,11 +127,6 @@ const normalizeLocalHost = (value?: string) => {
   return src
 }
 
-/**
- * 不可把截图 URL 强行改成 292×390：Draw 页画布按模板真实像素（如 1242×1660）渲染，
- * 视口若更小只会截到左上角 → 侧栏出现「巨大文字碎片」。服务端已用视口截图（非 fullPage），
- * 此处必须保留 URL 中的 width/height 与模板一致。
- */
 const getCardImage = (item: IGetTempListData) => {
   const raw = item.thumb || item.cover || item.url || ''
   const normalized = normalizeLoopbackMediaUrl(normalizeLocalHost(raw))
@@ -135,11 +135,30 @@ const getCardImage = (item: IGetTempListData) => {
 
 const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cover-1.png' : '/template-cover-2.png')
 
+const isPosterPreviewUrl = (value?: string) => {
+  const src = String(value || '')
+  return src.includes('/api/screenshots?') || src.includes('-screenshot-vp-')
+}
+
+const withCacheBust = (value: string) => `${value}${value.includes('?') ? '&' : '?'}_retry=${Date.now()}`
+
 const load = () => emit('load')
 const selectItem = (value: IGetTempListData) => emit('select', value)
 
 const loadError = (item: IGetTempListData, index: number, event?: Event) => {
   const target = event?.target as HTMLImageElement | null
+  if ((item as any).__previewRetried !== true) {
+    const retrySource = [item.thumb, item.cover, item.url].find((src) => isPosterPreviewUrl(src))
+    if (retrySource) {
+      ;(item as any).__previewRetried = true
+      if (item.thumb && isPosterPreviewUrl(item.thumb)) item.thumb = withCacheBust(item.thumb)
+      if (item.cover && isPosterPreviewUrl(item.cover)) item.cover = withCacheBust(item.cover)
+      if (item.url && isPosterPreviewUrl(item.url)) item.url = withCacheBust(item.url)
+      item.fail = false
+      if (target) target.src = getCardImage(item)
+      return
+    }
+  }
   if (item.thumb && item.cover && item.thumb !== item.cover) {
     item.thumb = ''
     item.fail = false
@@ -160,14 +179,7 @@ const loadError = (item: IGetTempListData, index: number, event?: Event) => {
   item.fail = true
 }
 
-const loadSuccess = (item: IGetTempListData, index: number, event?: Event) => {
-  const target = event?.target as HTMLImageElement | null
-  // 后端截图异常时会返回同一张占位图（典型尺寸 292x1130），这里做兜底替换
-  if (target && target.naturalWidth > 0 && target.naturalHeight > target.naturalWidth * 3) {
-    target.src = getFallbackByIndex(index)
-    item.fail = false
-    return
-  }
+const loadSuccess = (item: IGetTempListData) => {
   item.fail = false
 }
 

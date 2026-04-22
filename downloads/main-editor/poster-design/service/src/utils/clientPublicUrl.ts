@@ -16,6 +16,9 @@ export function getClientStaticBaseUrl(): string {
 export function getClientSiteRootUrl(): string {
   const raw = String(process.env.SERVICE_SCREENSHOT_LIST_BASE || '').trim()
   if (raw) return raw.replace(/\/?$/, '/')
+  if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
+    return `${getInternalApiOrigin()}/`
+  }
   return '/'
 }
 

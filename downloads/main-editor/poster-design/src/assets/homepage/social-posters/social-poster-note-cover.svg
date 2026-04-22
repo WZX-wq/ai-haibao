@@ -1,0 +1,31 @@
+<svg width="900" height="1500" viewBox="0 0 900 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg2" x1="92" y1="78" x2="776" y2="1440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8AB1"/>
+      <stop offset="0.48" stop-color="#FF5E8A"/>
+      <stop offset="1" stop-color="#7C2E76"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1500" rx="56" fill="url(#bg2)"/>
+  <circle cx="736" cy="250" r="170" fill="white" fill-opacity="0.14"/>
+  <circle cx="134" cy="170" r="94" fill="#FFD9E8" fill-opacity="0.4"/>
+  <rect x="88" y="98" width="174" height="54" rx="27" fill="#FFF1F7"/>
+  <text x="132" y="134" fill="#D63F72" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">图文种草</text>
+  <text x="82" y="270" fill="white" font-size="98" font-family="Arial, Helvetica, sans-serif" font-weight="900">小红书</text>
+  <text x="82" y="370" fill="white" font-size="98" font-family="Arial, Helvetica, sans-serif" font-weight="900">封面主图</text>
+  <text x="86" y="448" fill="#FFE8F1" font-size="34" font-family="Arial, Helvetica, sans-serif">高转化主视觉，适合种草合集和好物推荐</text>
+  <rect x="82" y="572" width="736" height="802" rx="42" fill="#FFF8FB"/>
+  <rect x="132" y="630" width="300" height="320" rx="28" fill="#FF7AA4"/>
+  <rect x="470" y="630" width="248" height="152" rx="28" fill="#FFD6E4"/>
+  <rect x="470" y="798" width="248" height="152" rx="28" fill="#FFE7EF"/>
+  <rect x="132" y="986" width="586" height="266" rx="28" fill="#FFF1F6"/>
+  <text x="176" y="734" fill="white" font-size="42" font-family="Arial, Helvetica, sans-serif" font-weight="800">爆款标题</text>
+  <text x="176" y="794" fill="#FFF4F7" font-size="30" font-family="Arial, Helvetica, sans-serif">3 个方法提升点击率</text>
+  <text x="510" y="708" fill="#C64978" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="800">封面排版</text>
+  <text x="510" y="875" fill="#C64978" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="800">品牌标签</text>
+  <text x="172" y="1080" fill="#AA345F" font-size="64" font-family="Arial, Helvetica, sans-serif" font-weight="900">封面即点击率</text>
+  <text x="172" y="1146" fill="#C14A73" font-size="30" font-family="Arial, Helvetica, sans-serif">统一系列封面视觉，提升账号识别</text>
+  <rect x="172" y="1188" width="210" height="60" rx="30" fill="#FF5C8D"/>
+  <text x="222" y="1227" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即使用</text>
+  <text x="86" y="1430" fill="#FFE6F0" font-size="26" font-family="Arial, Helvetica, sans-serif">适合探店笔记、教程合集、好物清单、账号包装</text>
+</svg>

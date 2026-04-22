@@ -1,0 +1,13 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="f" x1="88" y1="72" x2="790" y2="1128" gradientUnits="userSpaceOnUse"><stop stop-color="#B98058"/><stop offset="1" stop-color="#4A2B1F"/></linearGradient></defs>
+  <rect width="900" height="1200" rx="56" fill="url(#f)"/>
+  <rect x="84" y="92" width="128" height="50" rx="25" fill="#FFF2DF"/><text x="124" y="126" fill="#855230" font-size="28" font-family="Arial" font-weight="700">咖啡上新</text>
+  <text x="78" y="248" fill="#FFF8EE" font-size="104" font-family="Arial" font-weight="900">COFFEE</text>
+  <text x="78" y="352" fill="#FFF8EE" font-size="104" font-family="Arial" font-weight="900">MENU</text>
+  <text x="82" y="424" fill="#F8EBDD" font-size="34" font-family="Arial">今日特调 / 精品上新 / 限时尝鲜</text>
+  <rect x="84" y="564" width="732" height="554" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="142" y="626" width="616" height="436" rx="34" fill="#FFF7F0"/>
+  <text x="184" y="754" fill="#7A4728" font-size="84" font-family="Arial" font-weight="900">精品咖啡上新</text>
+  <text x="184" y="822" fill="#A56A46" font-size="32" font-family="Arial">适合新品首图、门店海报、饮品菜单更新宣传</text>
+  <rect x="184" y="882" width="224" height="58" rx="29" fill="#6B3F25"/><text x="238" y="920" fill="white" font-size="28" font-family="Arial" font-weight="800">今日特调</text>
+</svg>

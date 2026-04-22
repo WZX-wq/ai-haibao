@@ -53,6 +53,7 @@ const otherList = ref<TZoomData[]>(OtherList)
 const otherIndex = ref(-1)
 const bestZoom = ref(0)
 const curAction = ref('')
+const lastAutoZoomKey = ref('')
 
 // const { zoomScreenChange } = useSetupMapGetters(['zoomScreenChange'])
 const canvasStore = useCanvasStore()
@@ -118,8 +119,16 @@ watch(
   dPage,
   () => {
     screenChange()
+    applyRouteDefaultZoom()
   },
   { deep: true }
+)
+
+watch(
+  () => route.fullPath,
+  () => {
+    applyRouteDefaultZoom(true)
+  },
 )
 
 onMounted(async () => {
@@ -139,6 +148,7 @@ onMounted(async () => {
   window.addEventListener('resize', (event) => {
     changeScreen()
   })
+  applyRouteDefaultZoom(true)
 })
 
 onBeforeUnmount(() => {
@@ -158,6 +168,39 @@ function changeScreen() {
   }, 300)
 }
 
+function getRouteDefaultZoomKey() {
+  if (route.name !== 'Home') return ''
+  const section = String(route.query.section || 'welcome')
+  if (section === 'welcome') return ''
+
+  const id = String(route.query.id || '').trim()
+  const tempid = String(route.query.tempid || '').trim()
+  const aiSection = section === 'ai-poster'
+  const aiAuto = String(route.query.aiAutoGenerate || '').trim() === '1'
+
+  if (!id && !tempid && !aiSection && !aiAuto) return ''
+
+  const pageKey = `${Number(dPage.value.width) || 0}x${Number(dPage.value.height) || 0}`
+  return [section, id || '-', tempid || '-', aiAuto ? 'auto' : '-', pageKey].join('|')
+}
+
+function applyRouteDefaultZoom(force = false) {
+  const key = getRouteDefaultZoomKey()
+  if (!key) {
+    if (force) lastAutoZoomKey.value = ''
+    return
+  }
+  if (!force && lastAutoZoomKey.value === key) return
+  lastAutoZoomKey.value = key
+
+  window.setTimeout(() => {
+    setZoomValue(40)
+  }, 0)
+  window.setTimeout(() => {
+    setZoomValue(40)
+  }, 120)
+}
+
 function screenChange() {
   // 弹性尺寸即时修改
   if (activezoomIndex.value === zoomList.value.length - 1) {
@@ -170,6 +213,31 @@ function selectItem(index: number) {
   activezoomIndex.value = index
   otherIndex.value = -1
   show.value = false
+}
+
+function setZoomValue(value: number) {
+  const numericValue = Math.max(1, Math.round(Number(value) || 0))
+  const presetIndex = zoomList.value.findIndex((item) => item.value === numericValue)
+  const otherPresetIndex = otherList.value.findIndex((item) => item.value === numericValue)
+
+  show.value = false
+  if (presetIndex >= 0) {
+    activezoomIndex.value = presetIndex
+    otherIndex.value = -1
+    return
+  }
+  if (otherPresetIndex >= 0) {
+    activezoomIndex.value = zoomList.value.length
+    otherIndex.value = otherPresetIndex
+    return
+  }
+
+  activezoomIndex.value = zoomList.value.length
+  otherIndex.value = -1
+  zoom.value = {
+    value: numericValue,
+    text: `${numericValue}%`,
+  }
 }
 
 function close(_: MouseEvent) {
@@ -282,7 +350,8 @@ async function autoFixTop() {
 defineExpose({
   screenChange,
   add,
-  sub
+  sub,
+  setZoomValue,
 })
 
 </script>

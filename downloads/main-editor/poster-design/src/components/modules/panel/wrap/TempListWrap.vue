@@ -74,7 +74,7 @@ const { dHistoryParams } = storeToRefs(useHistoryStore())
 let listLoadNotified = false
 let detailLoadNotified = false
 
-const pageOptions: TPageOptions = { page: 0, pageSize: 20, cate: 1 }
+const pageOptions: TPageOptions = { page: 0, pageSize: 20, cate: 0 }
 const { cate, edit } = route.query
 if (cate !== undefined && cate !== null && String(cate) !== '') {
   pageOptions.cate = (Array.isArray(cate) ? cate[0] : cate) as LocationQueryValue as number | string
@@ -390,6 +390,48 @@ function parseTemplatePayload(payload: any) {
   return null
 }
 
+function buildTemplateSearchKeywords(item: IGetTempListData) {
+  const fullTitle = String(item.title || '').trim()
+  const normalized = fullTitle.replace(/^示例模板\s*-\s*/u, '').trim()
+  return [fullTitle, normalized].filter((value, index, arr) => value && arr.indexOf(value) === index)
+}
+
+async function tryResolveLiveTemplateId(item: IGetTempListData) {
+  const keywords = buildTemplateSearchKeywords(item)
+  for (const keyword of keywords) {
+    try {
+      const res = await api.home.getTempList({
+        search: keyword,
+        page: 1,
+        pageSize: 200,
+        cate: 0,
+      })
+      const list = Array.isArray(res?.list) ? res.list : []
+      const exact =
+        list.find((candidate) => String(candidate.title || '').trim() === String(item.title || '').trim()) ||
+        list.find((candidate) => String(candidate.title || '').includes(keyword))
+      if (exact?.id != null) {
+        return exact
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null
+}
+
+async function getRenderableTemplateDetail(item: IGetTempListData) {
+  try {
+    const detail = (await api.home.getTempDetail({ id: item.id })) as Record<string, unknown>
+    return { detail, resolvedItem: item }
+  } catch {
+    const resolvedItem = await tryResolveLiveTemplateId(item)
+    if (!resolvedItem) throw new Error('template not found')
+    const detail = (await api.home.getTempDetail({ id: resolvedItem.id })) as Record<string, unknown>
+    return { detail, resolvedItem }
+  }
+}
+
 async function selectItem(item: IGetTempListData) {
   controlStore.setShowMoveable(false)
   if (!hideReplacePrompt && dHistoryParams.value.length > 0) {
@@ -406,13 +448,14 @@ async function selectItem(item: IGetTempListData) {
   }
   userStore.managerEdit(false)
   widgetStore.setDWidgets([])
-  setTempId(item.id)
 
   let result = null
+  let activeItem = item
   try {
     if (!item.data) {
-      const res = await api.home.getTempDetail({ id: item.id })
-      result = parseTemplatePayload((res as any)?.data ?? res)
+      const { detail, resolvedItem } = await getRenderableTemplateDetail(item)
+      activeItem = resolvedItem
+      result = parseTemplatePayload((detail as any)?.data ?? detail)
     } else {
       result = parseTemplatePayload(item.data)
     }
@@ -422,6 +465,14 @@ async function selectItem(item: IGetTempListData) {
       useNotification('模板打开失败', '这个模板暂时无法打开，请稍后再试。', { type: 'error' })
     }
     return
+  }
+
+  setTempId(activeItem.id)
+  if (activeItem.id !== item.id) {
+    const idx = state.list.findIndex((x) => normalizeTemplateId(x.id) === normalizeTemplateId(item.id))
+    if (idx >= 0) {
+      state.list.splice(idx, 1, { ...state.list[idx], ...activeItem, id: Number(activeItem.id) })
+    }
   }
 
   result = deepNormalizeLoopbackMediaUrls(result)
@@ -457,12 +508,12 @@ async function selectItem(item: IGetTempListData) {
 
 function setTempId(tempId: number | string) {
   const { id, ...rest } = route.query
+  void id
   router.push({
     path: '/home',
     query: {
       ...rest,
       tempid: String(tempId),
-      ...(id != null && id !== '' ? { id } : {}),
     },
     replace: true,
   })

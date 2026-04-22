@@ -1,0 +1,28 @@
+<svg width="900" height="1500" viewBox="0 0 900 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg6" x1="88" y1="72" x2="788" y2="1412" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E0F1C"/>
+      <stop offset="0.48" stop-color="#171B3D"/>
+      <stop offset="1" stop-color="#252E7F"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1500" rx="56" fill="url(#bg6)"/>
+  <circle cx="178" cy="184" r="116" fill="#6D74FF" fill-opacity="0.28"/>
+  <circle cx="744" cy="1266" r="180" fill="#7EECFF" fill-opacity="0.14"/>
+  <rect x="84" y="100" width="198" height="54" rx="27" fill="#FFFFFF" fill-opacity="0.16"/>
+  <text x="126" y="136" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">多端分发</text>
+  <text x="82" y="276" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">传播矩阵</text>
+  <text x="82" y="376" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">海报模板</text>
+  <text x="86" y="452" fill="#D7DBFF" font-size="34" font-family="Arial, Helvetica, sans-serif">同一主题，一键适配封面图、活动图和渠道传播图</text>
+  <rect x="86" y="582" width="728" height="796" rx="40" fill="white" fill-opacity="0.08"/>
+  <rect x="146" y="648" width="248" height="596" rx="28" fill="#6A71FF"/>
+  <rect x="430" y="648" width="132" height="596" rx="28" fill="#19D7C5"/>
+  <rect x="590" y="648" width="164" height="596" rx="28" fill="#F14D77"/>
+  <text x="188" y="770" fill="white" font-size="42" font-family="Arial, Helvetica, sans-serif" font-weight="900">封面图</text>
+  <text x="470" y="770" fill="#09393E" font-size="38" font-family="Arial, Helvetica, sans-serif" font-weight="900">故事图</text>
+  <text x="622" y="770" fill="white" font-size="38" font-family="Arial, Helvetica, sans-serif" font-weight="900">活动图</text>
+  <text x="182" y="922" fill="#EEF1FF" font-size="30" font-family="Arial, Helvetica, sans-serif">账号首页</text>
+  <text x="462" y="922" fill="#0D4B4A" font-size="28" font-family="Arial, Helvetica, sans-serif">动态页</text>
+  <text x="622" y="922" fill="#FFE8EF" font-size="28" font-family="Arial, Helvetica, sans-serif">传播页</text>
+  <text x="86" y="1430" fill="#D5DAFF" font-size="26" font-family="Arial, Helvetica, sans-serif">适合社媒分发、专题运营、平台联动、统一视觉传播</text>
+</svg>

@@ -3,7 +3,7 @@ import { NavigationGuardNext, RouteLocationNormalized, Router } from 'vue-router
 import config from '@/config'
 
 const routeTitles: Record<string, string> = {
-  Welcome: '欢迎页',
+  Welcome: '首页',
   Home: '编辑器',
   AccountCenter: '个人中心',
   Login: '登录',

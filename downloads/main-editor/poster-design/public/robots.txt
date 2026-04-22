@@ -1,4 +1,4 @@
-# robots.txt for 鲲穹设计 (design.palxp.cn)
+# robots.txt for 鲲穹海报 (design.palxp.cn)
 
 # 允许所有搜索引擎爬取
 User-agent: *

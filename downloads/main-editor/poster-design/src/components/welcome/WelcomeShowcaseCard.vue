@@ -147,7 +147,22 @@ const fitZoom = computed(() => {
 })
 
 function openAi() {
-  router.push({ path: '/home', query: { aiTheme: props.item.theme, returnTo: props.editorReturn } })
+  router.push({
+    path: '/home',
+    query: {
+      section: 'ai-poster',
+      aiTheme: props.item.theme,
+      aiPrompt: props.item.theme,
+      aiAutoGenerate: '1',
+      aiPurpose: '引流',
+      aiIndustry: props.item.industry,
+      aiStyle: props.item.style,
+      aiSizeKey: props.item.sizeKey,
+      aiQrUrl: '',
+      aiContent: [props.item.slogan, props.item.body].filter(Boolean).join(' '),
+      returnTo: props.editorReturn,
+    },
+  })
 }
 </script>
 

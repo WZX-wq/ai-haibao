@@ -284,22 +284,22 @@ onBeforeUnmount(() => {
 .top-edit-toolbar {
   position: fixed;
   z-index: 88;
-  min-height: 40px;
-  max-width: min(92vw, 980px);
+  min-height: 34px;
+  max-width: min(84vw, 820px);
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  border-radius: 9px;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.1);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 4px 8px;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
 .toolbar-title {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -308,7 +308,7 @@ onBeforeUnmount(() => {
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .toolbar-actions-main {
@@ -320,10 +320,10 @@ onBeforeUnmount(() => {
   border: 1px solid #e2e8f0;
   background: #fff;
   color: #1e293b;
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 7px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 5px 9px;
+  padding: 4px 7px;
   cursor: pointer;
 }
 
@@ -332,9 +332,9 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn-pill {
-  height: 30px;
-  line-height: 18px;
-  min-width: 38px;
+  height: 26px;
+  line-height: 16px;
+  min-width: 32px;
 }
 
 .toolbar-btn-primary {
@@ -351,29 +351,29 @@ onBeforeUnmount(() => {
 
 .toolbar-divider {
   width: 1px;
-  height: 22px;
+  height: 18px;
   background: #e2e8f0;
   margin: 0 2px;
 }
 
 .toolbar-icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #ffffff;
   color: #0f172a;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .toolbar-color-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   border: 1px solid #e2e8f0;
   background: #fff;
   display: inline-flex;
@@ -382,9 +382,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
 
   span {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
     display: block;
   }
 }
@@ -412,6 +412,6 @@ onBeforeUnmount(() => {
 .editor-popover-wrap {
   max-height: 62vh;
   overflow: auto;
-  padding: 10px 10px 14px;
+  padding: 8px 8px 10px;
 }
 </style>

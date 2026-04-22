@@ -55,10 +55,6 @@
               <el-icon :size="15"><EditPen /></el-icon>
               进入编辑器
             </button>
-            <button type="button" class="ac-btn ac-btn--outline" @click="go('/welcome')">
-              <el-icon :size="15"><House /></el-icon>
-              首页
-            </button>
             <button type="button" class="ac-btn ac-btn--outline" @click="logout">
               <el-icon :size="15"><SwitchButton /></el-icon>
               退出

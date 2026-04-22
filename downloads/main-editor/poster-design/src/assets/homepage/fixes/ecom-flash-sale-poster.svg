@@ -1,0 +1,24 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flashBg" x1="90" y1="70" x2="790" y2="1130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF5F45"/>
+      <stop offset="0.5" stop-color="#FF294B"/>
+      <stop offset="1" stop-color="#54133D"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#flashBg)"/>
+  <rect x="82" y="94" width="178" height="50" rx="25" fill="white" fill-opacity="0.16"/>
+  <text x="126" y="128" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">限时秒杀</text>
+  <text x="76" y="252" fill="white" font-size="122" font-family="Arial, Helvetica, sans-serif" font-weight="900">9.9</text>
+  <text x="76" y="352" fill="#FFE0D7" font-size="102" font-family="Arial, Helvetica, sans-serif" font-weight="900">FLASH</text>
+  <text x="80" y="426" fill="#FFE4DD" font-size="34" font-family="Arial, Helvetica, sans-serif">倒计时抢购，价格冲击力更强</text>
+  <circle cx="704" cy="284" r="142" fill="#FFD369" fill-opacity="0.92"/>
+  <text x="622" y="304" fill="#D6344B" font-size="56" font-family="Arial, Helvetica, sans-serif" font-weight="900">LOW</text>
+  <text x="620" y="370" fill="#D6344B" font-size="76" font-family="Arial, Helvetica, sans-serif" font-weight="900">9.9</text>
+  <rect x="82" y="570" width="734" height="554" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="138" y="630" width="624" height="438" rx="34" fill="#FFF2ED"/>
+  <text x="182" y="764" fill="#E53B4C" font-size="86" font-family="Arial, Helvetica, sans-serif" font-weight="900">秒杀专场</text>
+  <text x="182" y="834" fill="#A55562" font-size="32" font-family="Arial, Helvetica, sans-serif">低价引流 / 爆品抢购 / 限时库存</text>
+  <rect x="182" y="884" width="218" height="58" rx="29" fill="#FF5F45"/>
+  <text x="238" y="922" fill="white" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">马上开抢</text>
+</svg>

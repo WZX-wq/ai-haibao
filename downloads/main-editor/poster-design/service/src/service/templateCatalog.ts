@@ -196,6 +196,17 @@ function makeTemplateCoverScreenshotUrl(seed: TemplateSeed) {
   return root.endsWith('/') ? `${root}${path}` : `${root}/${path}`
 }
 
+function getTemplateListPreview(seed: TemplateSeed) {
+  const screenshotUrl = makeTemplateCoverScreenshotUrl(seed)
+  const svgFallback = makePreviewSvg(seed)
+  const primary = screenshotUrl
+
+  return {
+    primary,
+    fallback: svgFallback,
+  }
+}
+
 const categories: TemplateCategory[] = [
   {
     "id": 1,
@@ -1256,17 +1267,20 @@ export function getTemplateSeeds() {
 }
 
 export function getTemplateList() {
-  return templateSeeds.map((seed) => ({
-    id: seed.id,
-    cover: makePreviewSvg(seed),
-    // thumb 用真实渲染截图，cover 保留为 SVG 兜底
-    thumb: makeTemplateCoverScreenshotUrl(seed),
-    title: seed.fullTitle,
-    width: seed.width,
-    height: seed.height,
-    state: 1,
-    cate: seed.cate,
-  })) as TemplateListItem[]
+  return templateSeeds.map((seed) => {
+    const preview = getTemplateListPreview(seed)
+    return {
+      id: seed.id,
+      cover: preview.primary,
+      thumb: preview.primary,
+      title: seed.fullTitle,
+      width: seed.width,
+      height: seed.height,
+      state: 1,
+      cate: seed.cate,
+      url: preview.fallback,
+    }
+  }) as TemplateListItem[]
 }
 
 // 启动时预热一批常用模板主图（异步，不阻塞服务）
@@ -1336,7 +1350,8 @@ export function getTemplateCandidatesByIndustry(industry: string, limit = 3) {
         tone: seed.tag,
         score: 0.86,
         reason: `匹配${industry}常见场景`,
-        cover: makePreviewSvg(seed),
+        cover: getTemplateListPreview(seed).primary,
+        thumb: getTemplateListPreview(seed).primary,
       }
     })
     .filter(Boolean)

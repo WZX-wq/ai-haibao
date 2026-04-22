@@ -1,0 +1,27 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pyBg" x1="84" y1="72" x2="792" y2="1128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C2C8A"/>
+      <stop offset="0.5" stop-color="#1149C8"/>
+      <stop offset="1" stop-color="#18D2DA"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" rx="56" fill="url(#pyBg)"/>
+  <rect x="88" y="92" width="136" height="50" rx="25" fill="white" fill-opacity="0.18"/>
+  <text x="130" y="126" fill="white" font-size="28" font-family="Arial" font-weight="700">编程</text>
+  <text x="100" y="246" fill="#D8EEFF" font-size="58" font-family="Arial" font-weight="700">Python 编码课程</text>
+  <text x="100" y="392" fill="white" font-size="116" font-family="Arial" font-weight="900">Python</text>
+  <text x="100" y="500" fill="#7CF4FF" font-size="116" font-family="Arial" font-weight="900">训练营</text>
+  <text x="104" y="572" fill="#D8EEFF" font-size="32" font-family="Arial">零基础入门 · 7天见效 · 项目实战</text>
+  <rect x="84" y="620" width="732" height="472" rx="40" fill="white" fill-opacity="0.08"/>
+  <rect x="476" y="690" width="214" height="286" rx="30" transform="rotate(12 476 690)" fill="#193A9A"/>
+  <rect x="450" y="676" width="214" height="286" rx="30" transform="rotate(12 450 676)" fill="#2F68FF"/>
+  <rect x="536" y="760" width="46" height="120" rx="12" fill="#D8EEFF"/>
+  <path d="M602 760l42 58-42 58" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="206" y="776" width="76" height="76" rx="20" fill="#25D7F0" fill-opacity="0.22"/>
+  <path d="M232 814h24M232 830h16" stroke="#8AF7FF" stroke-width="8" stroke-linecap="round"/>
+  <rect x="294" y="704" width="72" height="72" rx="18" fill="#25D7F0" fill-opacity="0.22"/>
+  <path d="M316 740l14-14 14 14" stroke="#8AF7FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="310" y="892" width="220" height="58" rx="29" fill="white"/>
+  <text x="366" y="930" fill="#1454CD" font-size="28" font-family="Arial" font-weight="800">立即报名</text>
+</svg>

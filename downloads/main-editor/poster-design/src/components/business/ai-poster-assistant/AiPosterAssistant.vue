@@ -401,14 +401,33 @@ function routeQuerySingle(key: string) {
 
 async function maybeAutoGenerateFromWelcome() {
   const auto = routeQuerySingle('aiAutoGenerate').trim() === '1'
+  const preset = routeQuerySingle('preset').trim()
   const theme = routeQuerySingle('aiTheme').trim()
   const prompt = routeQuerySingle('aiPrompt').trim()
+  const purpose = routeQuerySingle('aiPurpose').trim()
+  const industry = routeQuerySingle('aiIndustry').trim()
+  const style = routeQuerySingle('aiStyle').trim()
+  const sizeKey = routeQuerySingle('aiSizeKey').trim()
+  const qrUrl = routeQuerySingle('aiQrUrl').trim()
+  const content = routeQuerySingle('aiContent').trim()
   if (!auto) return
-  const key = `${auto}|${theme}|${prompt}|${route.fullPath}`
+  const key = `${auto}|${preset}|${theme}|${prompt}|${purpose}|${industry}|${style}|${sizeKey}|${qrUrl}|${content}|${route.fullPath}`
   if (autoGenerateHandledKey.value === key) return
   autoGenerateHandledKey.value = key
+  if (preset) {
+    applyPreset(preset)
+  }
   if (theme) form.theme = theme
-  if (prompt && !form.content) form.content = prompt
+  if (purpose) form.purpose = purpose
+  if (industry) form.industry = industry
+  if (style) form.style = style
+  if (sizeKey && sizePresets.some((item) => item.key === sizeKey)) form.sizeKey = sizeKey
+  if (qrUrl) form.qrUrl = qrUrl
+  if (content) {
+    form.content = content
+  } else if (prompt && !form.content) {
+    form.content = prompt
+  }
   await applyPoster()
   const nextQuery = { ...route.query } as Record<string, any>
   delete nextQuery.aiAutoGenerate

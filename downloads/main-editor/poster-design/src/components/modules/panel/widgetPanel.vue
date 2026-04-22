@@ -1,29 +1,83 @@
 <template>
   <div id="widget-panel">
     <div class="widget-classify">
+      <div class="brand-block">
+        <img :src="brandLogo" :alt="ui.brand" class="brand-block__logo" />
+        <span class="brand-block__text">{{ ui.brand }}</span>
+      </div>
+
       <ul class="classify-wrap">
-        <li v-for="(item, index) in state.widgetClassifyList" :key="index" :class="['classify-item', { 'active-classify-item': state.activeWidgetClassify === index && state.active }]" @click="clickClassify(index)">
-          <div class="icon-box"><i :class="['iconfont', 'icon', item.icon]" :style="item.style" /></div>
+        <li
+          v-for="(item, index) in state.widgetClassifyList"
+          :key="index"
+          :class="['classify-item', { 'active-classify-item': state.activeWidgetClassify === index }]"
+          @click="clickClassify(index)"
+        >
+          <div class="icon-box">
+            <svg
+              v-if="item.iconType === 'custom-home'"
+              class="custom-nav-icon custom-nav-icon--home"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <rect x="4.25" y="4.25" width="15.5" height="15.5" rx="4.25" />
+              <path d="M8.2 10.85 12 7.65l3.8 3.2" />
+              <path d="M9.4 10.15v5.35h5.2v-5.35" />
+            </svg>
+            <i v-else :class="['iconfont', 'icon', item.icon]" :style="item.style" />
+          </div>
           <p>{{ item.name }}</p>
         </li>
       </ul>
-    </div>
-    <div v-show="state.active" class="widget-wrap">
-      <div class="panel-mode-tabs">
-        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'material' }]" @click="setPanelMode('material')">{{ materialTabLabel }}</span>
-        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'setting' }]" @click="setPanelMode('setting')">设置</span>
+
+      <div class="utility-wrap">
+        <button type="button" class="utility-item" @click="showLanguageTip">
+          <span class="utility-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18"></path>
+              <path d="M12 3a13.5 13.5 0 0 1 0 18"></path>
+              <path d="M12 3a13.5 13.5 0 0 0 0 18"></path>
+            </svg>
+          </span>
+          <span class="utility-text">{{ ui.language }}</span>
+        </button>
+
+        <button type="button" class="utility-item" @click="goAccount">
+          <span class="utility-icon">
+            <img v-if="accountAvatarUrl" :src="accountAvatarUrl" :alt="accountLabel" class="utility-avatar" />
+            <span v-else-if="accountAvatarFallback" class="utility-avatar utility-avatar--fallback">{{ accountAvatarFallback }}</span>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.5"></circle>
+              <path d="M5 20a7 7 0 0 1 14 0"></path>
+            </svg>
+          </span>
+          <span v-if="!userStore.online" class="utility-text">{{ accountLabel }}</span>
+        </button>
       </div>
+    </div>
+
+    <div v-show="showMaterialPanel" class="widget-wrap">
+      <div class="panel-mode-tabs">
+        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'material' }]" @click="setPanelMode('material')">
+          {{ materialTabLabel }}
+        </span>
+        <span :class="['mode-tab', { 'active-mode-tab': state.panelMode === 'setting' }]" @click="setPanelMode('setting')">{{ ui.setting }}</span>
+      </div>
+
       <div v-show="state.panelMode === 'material'" class="panel-mode-content">
         <keep-alive>
-          <component :is="state.widgetClassifyList[state.activeWidgetClassify].component" />
+          <component :is="state.widgetClassifyList[state.activeWidgetClassify]?.component" />
         </keep-alive>
       </div>
+
       <div v-show="state.panelMode === 'setting'" class="panel-mode-content">
         <style-panel combined />
       </div>
     </div>
-    <div v-show="state.active" class="side-wrap">
-      <el-tooltip :show-after="300" :hide-after="0" effect="dark" content="关闭侧边栏" placement="right">
+
+    <div v-show="showMaterialPanel" class="side-wrap">
+      <el-tooltip :show-after="300" :hide-after="0" effect="dark" :content="ui.collapse" placement="right">
         <div class="pack__up" @click="state.active = false"></div>
       </el-tooltip>
     </div>
@@ -31,46 +85,115 @@
 </template>
 
 <script lang="ts" setup>
-// 缁勪欢闈㈡澘
 import widgetClassifyListData from '@/assets/data/WidgetClassifyList'
-import { reactive, onMounted, watch, nextTick, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import brandLogo from '@/assets/branding/design.png'
+import { computed, nextTick, onMounted, reactive, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { storeToRefs } from 'pinia'
-import { useControlStore, useWidgetStore } from '@/store'
+import { useControlStore, useUserStore, useWidgetStore } from '@/store'
 
 const route = useRoute()
+const router = useRouter()
 const widgetStore = useWidgetStore()
 const controlStore = useControlStore()
+const userStore = useUserStore()
 const { dActiveElement } = storeToRefs(widgetStore)
 const { leftPanelMode } = storeToRefs(controlStore)
+
+const sectionToIndex: Record<string, number> = {
+  welcome: 0,
+  'ai-poster': 1,
+  template: 2,
+  material: 3,
+  text: 4,
+  photo: 5,
+  toolbox: 6,
+  mine: 7,
+}
+
+const indexToSection = ['welcome', 'ai-poster', 'template', 'material', 'text', 'photo', 'toolbox', 'mine']
+
+const ui = {
+  brand: '\u9cb2\u7a79\u8bbe\u8ba1',
+  language: '\u7b80\u4f53\u4e2d\u6587',
+  login: '\u767b\u5f55',
+  mine: '\u6211\u7684',
+  material: '\u7d20\u6750',
+  setting: '\u8bbe\u7f6e',
+  collapse: '\u5173\u95ed\u4fa7\u8fb9\u680f',
+  languageTip: '\u5f53\u524d\u754c\u9762\u5df2\u4f7f\u7528\u7b80\u4f53\u4e2d\u6587',
+} as const
+
 const state = reactive({
   widgetClassifyList: widgetClassifyListData,
   activeWidgetClassify: 0,
-  active: true,
+  active: false,
   panelMode: 'material' as 'material' | 'setting',
 })
 
-const materialTabLabel = computed(() => {
-  return state.widgetClassifyList[state.activeWidgetClassify]?.name || '素材'
+const currentSection = computed(() => String(route.query.section || 'welcome'))
+const showMaterialPanel = computed(() => currentSection.value !== 'welcome' && state.active)
+const materialTabLabel = computed(() => state.widgetClassifyList[state.activeWidgetClassify]?.name || ui.material)
+const accountLabel = computed(() => ui.login)
+const accountAvatarUrl = computed(() => String(userStore.user?.avatar || '').trim())
+const accountAvatarFallback = computed(() => {
+  if (!userStore.online) return ''
+  const name = String(userStore.user?.name || '').trim()
+  return name ? name.slice(0, 1).toUpperCase() : '\u6211'
 })
+
+function normalizeSection(section: string) {
+  return sectionToIndex[section] !== undefined ? section : 'welcome'
+}
+
+function applySection(section: string) {
+  const normalized = normalizeSection(section)
+  state.activeWidgetClassify = sectionToIndex[normalized]
+  state.active = normalized !== 'welcome'
+  state.panelMode = 'material'
+  controlStore.setLeftPanelMode('material')
+}
 
 function setPanelMode(mode: 'material' | 'setting') {
   state.panelMode = mode
   controlStore.setLeftPanelMode(mode)
 }
 
-const clickClassify = (index: number) => {
-  state.activeWidgetClassify = index
-  state.active = true
-  state.panelMode = 'material'
-  controlStore.setLeftPanelMode('material')
+function clickClassify(index: number) {
+  const section = indexToSection[index] || 'welcome'
+  const nextQuery = { ...route.query, section } as Record<string, string>
+  if (section !== 'ai-poster') {
+    delete nextQuery.aiAutoGenerate
+  }
+  void router.replace({ path: '/home', query: nextQuery })
+  applySection(section)
+}
+
+function showLanguageTip() {
+  ElMessage.info(ui.languageTip)
+}
+
+function goAccount() {
+  void router.push(userStore.online ? '/account' : '/login')
 }
 
 onMounted(async () => {
   await nextTick()
-  const { koutu } = route.query
-  koutu && (state.activeWidgetClassify = 4)
+  if (route.query.koutu) {
+    void router.replace({ path: '/home', query: { ...route.query, section: 'photo' } })
+    applySection('photo')
+    return
+  }
+  applySection(String(route.query.section || 'welcome'))
 })
+
+watch(
+  () => route.query.section,
+  (section) => {
+    applySection(String(section || 'welcome'))
+  },
+)
 
 watch(
   () => state.activeWidgetClassify,
@@ -84,8 +207,8 @@ watch(
 watch(
   () => dActiveElement.value?.uuid,
   (uuid) => {
+    if (currentSection.value === 'welcome') return
     if (!uuid || uuid === '-1') return
-    // 点击画布元素（文字/图片/二维码等）时，在同一左侧框内切到设置编辑
     state.panelMode = 'setting'
     state.active = true
     controlStore.setLeftPanelMode('setting')
@@ -110,7 +233,7 @@ defineExpose({
 @color1: #3e4651;
 
 #widget-panel {
-  transition: all .3s ease;
+  transition: all 0.3s ease;
   color: @color1;
   display: flex;
   flex-direction: row;
@@ -122,21 +245,53 @@ defineExpose({
   .widget-classify {
     position: relative;
     border-right: 1px solid rgba(15, 23, 42, 0.08);
-    background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+    background: linear-gradient(180deg, #f6f9fd 0%, #fbfcfe 100%);
     height: 100%;
     text-align: center;
-    width: 72px;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.85);
+    width: 104px;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .brand-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 14px 0 12px;
+    }
+
+    .brand-block__logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      object-fit: contain;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    .brand-block__text {
+      max-width: 76px;
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #475569;
+      text-align: center;
+    }
 
     .icon {
-      font-size: 24px;
+      font-size: 21px;
       color: #334155;
     }
 
     .classify-wrap {
-      padding-top: 10px;
+      padding-top: 12px;
       user-select: none;
       width: 100%;
+      flex: 1;
 
       .classify-item {
         position: relative;
@@ -144,19 +299,21 @@ defineExpose({
         cursor: pointer;
         display: flex;
         flex-direction: column;
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 500;
-        height: 74px;
+        min-height: 70px;
         justify-content: center;
-        width: calc(100% - 10px);
+        width: calc(100% - 14px);
         margin: 0 auto 8px;
         border-radius: 16px;
-        transition: background-color .18s ease, transform .18s ease, box-shadow .18s ease;
+        transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 
         p {
-          color: #64748b;
+          color: #6b7280;
           font-weight: 600;
-          margin-top: 4px;
+          margin-top: 6px;
+          line-height: 1.15;
+          transform: none;
         }
 
         .icon-box {
@@ -165,56 +322,141 @@ defineExpose({
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 12px;
-          background: rgba(241, 245, 249, 0.95);
+          border-radius: 13px;
+          background: rgba(255, 255, 255, 0.76);
+          box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.85);
         }
 
         .icon {
-          color: #334155;
+          color: #64748b;
+        }
+
+        .custom-nav-icon {
+          width: 22px;
+          height: 22px;
+          stroke: #64748b;
+          fill: none;
+          stroke-width: 1.7;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          transition: stroke 0.18s ease;
         }
       }
 
       .classify-item:hover {
-        background: rgba(59, 130, 246, 0.08);
+        background: rgba(255, 255, 255, 0.82);
         transform: translateY(-1px);
       }
 
       .classify-item:hover .icon-box {
-        background: rgba(219, 234, 254, 0.95);
+        background: rgba(248, 250, 252, 0.98);
       }
 
       .active-classify-item {
-        position: relative;
-        background: linear-gradient(180deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.08));
-        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.98));
+        box-shadow: 0 10px 22px rgba(59, 130, 246, 0.1);
+      }
 
-        .icon,
-        p {
-          color: #2563eb;
-        }
-
-        .icon-box {
-          background: rgba(219, 234, 254, 0.98);
-        }
+      .active-classify-item .icon,
+      .active-classify-item .custom-nav-icon,
+      .active-classify-item p {
+        color: #2563eb;
+        stroke: #2563eb;
       }
 
       .active-classify-item::after,
       .classify-item:hover::after {
         position: absolute;
         content: '';
-        left: 6px;
-        top: 18px;
-        width: 4px;
-        height: 38px;
+        left: 3px;
+        top: 16px;
+        width: 3px;
+        height: 36px;
         border-radius: 999px;
-        background: @active-text-color;
+        background: #2563eb;
       }
+    }
+
+    .utility-wrap {
+      width: 100%;
+      padding: 12px 0 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.54) 100%);
+    }
+
+    .utility-item {
+      width: calc(100% - 16px);
+      margin: 0 auto;
+      padding: 9px 4px;
+      border: none;
+      border-radius: 14px;
+      background: transparent;
+      color: #64748b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: background-color 0.18s ease, color 0.18s ease;
+    }
+
+    .utility-item:hover {
+      background: rgba(255, 255, 255, 0.82);
+      color: #2563eb;
+    }
+
+    .utility-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+    }
+
+    .utility-icon svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .utility-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      object-fit: cover;
+      box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.2);
+      background: #ffffff;
+    }
+
+    .utility-avatar--fallback {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #2563eb;
+      font-size: 12px;
+      font-weight: 700;
+      background: linear-gradient(180deg, #ffffff, #eff6ff);
+    }
+
+    .utility-text {
+      font-size: 10px;
+      line-height: 1.15;
+      font-weight: 600;
+      text-align: center;
+      transform: none;
     }
   }
 
   .widget-wrap {
     width: 328px;
-    transition: all .3s;
+    transition: all 0.3s;
     background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
     flex: 1;
     height: 100%;
@@ -240,7 +482,7 @@ defineExpose({
         color: #64748b;
         border-radius: 10px;
         padding: 8px 14px;
-        transition: all .18s ease;
+        transition: all 0.18s ease;
       }
 
       .mode-tab:hover {
@@ -263,7 +505,7 @@ defineExpose({
 
   .side-wrap {
     position: absolute;
-    left: 394px;
+    left: 401px;
     pointer-events: none;
     z-index: 99;
     width: 15px;
@@ -290,6 +532,4 @@ defineExpose({
     }
   }
 }
-
 </style>
-

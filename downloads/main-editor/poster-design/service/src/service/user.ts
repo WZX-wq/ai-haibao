@@ -13,6 +13,7 @@ import { filesReader } from '../utils/fs'
 import { isMysqlConfigured } from '../utils/mysql'
 import { tryResolveSession } from './account'
 import { getClientStaticBaseUrl } from '../utils/clientPublicUrl'
+import { deleteImageThumbnail, findExistingImageThumbnail, isGeneratedImageThumb } from '../utils/imageThumbnail'
 
 function listUserScopedImages(userId: number) {
   const rel = `user/${userId}`
@@ -24,6 +25,7 @@ function listUserScopedImages(userId: number) {
   const list: any[] = []
   for (const file of names) {
     if (file === '.DS_Store' || file.startsWith('.')) continue
+    if (isGeneratedImageThumb(file)) continue
     const abs = path.join(fullDir, file)
     if (!fs.statSync(abs).isFile()) continue
     let width = 0
@@ -36,11 +38,13 @@ function listUserScopedImages(userId: number) {
       /* ignore */
     }
     const key = `${rel}/${file}`
+    const thumbAbs = findExistingImageThumbnail(abs)
     list.push({
       id: file,
       width,
       height,
       url: `${getClientStaticBaseUrl()}${key}`,
+      thumb: thumbAbs ? `${getClientStaticBaseUrl()}${rel}/${path.basename(thumbAbs)}` : undefined,
       user_id: userId,
       created_time: '',
       key,
@@ -101,6 +105,7 @@ export async function deleteUserImage(req: any, res: any) {
       send.error(res, 'not found')
       return
     }
+    deleteImageThumbnail(normalizedAbs)
     fs.unlinkSync(normalizedAbs)
     send.success(res, true)
     return
@@ -117,6 +122,7 @@ export async function deleteUserImage(req: any, res: any) {
     send.error(res, 'not found')
     return
   }
+  deleteImageThumbnail(nAbs)
   fs.unlinkSync(nAbs)
   send.success(res, true)
 }

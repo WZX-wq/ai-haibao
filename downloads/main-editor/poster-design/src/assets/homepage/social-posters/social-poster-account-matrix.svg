@@ -1,0 +1,31 @@
+<svg width="900" height="1500" viewBox="0 0 900 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg3" x1="102" y1="84" x2="762" y2="1428" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4656FF"/>
+      <stop offset="0.55" stop-color="#3041C8"/>
+      <stop offset="1" stop-color="#121B58"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1500" rx="56" fill="url(#bg3)"/>
+  <rect x="86" y="102" width="206" height="54" rx="27" fill="#DCE3FF"/>
+  <text x="134" y="137" fill="#3041C8" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">账号运营</text>
+  <text x="82" y="276" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">内容分发</text>
+  <text x="82" y="376" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">矩阵模板</text>
+  <text x="86" y="452" fill="#D9E2FF" font-size="34" font-family="Arial, Helvetica, sans-serif">统一主图、统一节奏、统一账号视觉规范</text>
+  <rect x="84" y="576" width="732" height="804" rx="42" fill="white" fill-opacity="0.1"/>
+  <rect x="138" y="636" width="624" height="208" rx="30" fill="white"/>
+  <rect x="138" y="876" width="294" height="410" rx="30" fill="#B9C9FF"/>
+  <rect x="468" y="876" width="294" height="410" rx="30" fill="#DCE4FF"/>
+  <rect x="178" y="684" width="184" height="24" rx="12" fill="#4656FF"/>
+  <rect x="178" y="738" width="374" height="18" rx="9" fill="#D4DBF8"/>
+  <rect x="178" y="778" width="300" height="18" rx="9" fill="#E1E6FB"/>
+  <circle cx="672" cy="736" r="56" fill="#4656FF"/>
+  <path d="M648 736h48M672 712v48" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <text x="172" y="964" fill="#2437C9" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">矩阵</text>
+  <text x="172" y="1030" fill="#2437C9" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">封面库</text>
+  <text x="512" y="964" fill="#2437C9" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">更新</text>
+  <text x="512" y="1030" fill="#2437C9" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="900">日历图</text>
+  <text x="172" y="1112" fill="#3041C8" font-size="28" font-family="Arial, Helvetica, sans-serif">统一封面模板，快速适配不同栏目</text>
+  <text x="512" y="1112" fill="#5060CC" font-size="28" font-family="Arial, Helvetica, sans-serif">让发布时间、节奏和系列更有序</text>
+  <text x="86" y="1430" fill="#D7E1FF" font-size="26" font-family="Arial, Helvetica, sans-serif">适合多账号运营、内容栏目更新、矩阵封面统一</text>
+</svg>

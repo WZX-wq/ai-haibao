@@ -1,0 +1,32 @@
+<svg width="900" height="1500" viewBox="0 0 900 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg1" x1="80" y1="64" x2="770" y2="1424" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8F5BFF"/>
+      <stop offset="0.55" stop-color="#5D5FEF"/>
+      <stop offset="1" stop-color="#151A56"/>
+    </linearGradient>
+    <linearGradient id="card1" x1="160" y1="720" x2="658" y2="1260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB36B"/>
+      <stop offset="1" stop-color="#FF6A3D"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1500" rx="56" fill="url(#bg1)"/>
+  <circle cx="714" cy="218" r="180" fill="#C9BCFF" fill-opacity="0.22"/>
+  <circle cx="168" cy="1326" r="208" fill="#3CE8FF" fill-opacity="0.2"/>
+  <rect x="76" y="90" width="190" height="54" rx="27" fill="white" fill-opacity="0.18"/>
+  <text x="118" y="126" fill="white" fill-opacity="0.92" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700">短视频栏目</text>
+  <text x="80" y="272" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">爆款封面</text>
+  <text x="80" y="376" fill="white" font-size="96" font-family="Arial, Helvetica, sans-serif" font-weight="900">视觉模板</text>
+  <text x="84" y="452" fill="#E2E6FF" font-size="34" font-family="Arial, Helvetica, sans-serif">系列栏目 / 访谈播客 / 热门专题</text>
+  <rect x="78" y="598" width="744" height="760" rx="42" fill="white" fill-opacity="0.12"/>
+  <rect x="132" y="652" width="636" height="652" rx="34" fill="url(#card1)"/>
+  <rect x="180" y="712" width="160" height="42" rx="21" fill="#FFE7C2"/>
+  <text x="218" y="741" fill="#B84C1E" font-size="24" font-family="Arial, Helvetica, sans-serif" font-weight="700">REELS</text>
+  <text x="182" y="884" fill="white" font-size="94" font-family="Arial, Helvetica, sans-serif" font-weight="900">SUMMER</text>
+  <text x="182" y="980" fill="#FFF2DB" font-size="88" font-family="Arial, Helvetica, sans-serif" font-weight="900">TREND</text>
+  <text x="182" y="1052" fill="#FFF0DE" font-size="34" font-family="Arial, Helvetica, sans-serif">抓住 3 秒停留，提升完播与点击</text>
+  <polygon points="436,888 436,1080 590,984" fill="white" fill-opacity="0.96"/>
+  <rect x="182" y="1146" width="216" height="66" rx="33" fill="white"/>
+  <text x="226" y="1190" fill="#E05A2D" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="800">立即套用</text>
+  <text x="84" y="1430" fill="#DDE4FF" font-size="26" font-family="Arial, Helvetica, sans-serif">适合视频封面、栏目包装、账号更新预告</text>
+</svg>

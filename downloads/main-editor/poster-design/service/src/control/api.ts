@@ -20,6 +20,7 @@ export default {
   GET_TEMPLATE: '/design/temp',
   GET_MY_DESIGNS: '/design/my',
   GET_WORK_DETAIL: '/design/poster',
+  SAVE_WORK: '/design/save',
   DELETE_WORK: '/design/poster/del',
   GET_MATERIAL: '/design/material',
   GET_PHOTOS: '/design/imgs',

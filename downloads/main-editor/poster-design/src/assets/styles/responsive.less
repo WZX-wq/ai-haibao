@@ -1,0 +1,409 @@
+/**
+ * 响应式样式 - 移动端适配
+ * 基于 PC 端浅色主题
+ */
+
+// ==================== 断点定义 ====================
+@mobile-small: 600px;
+@mobile: 640px;
+@tablet: 768px;
+@desktop-small: 1024px;
+@desktop: 1280px;
+@large-desktop: 1536px;
+
+// ==================== 颜色变量 (浅色主题 - 与PC端一致) ====================
+@bg-marketing: #f8fbff;
+@bg-panel: rgba(255, 255, 255, 0.94);
+@bg-surface: #ffffff;
+@bg-secondary: #f8fafc;
+
+@text-primary: #0f172a;
+@text-secondary: #334155;
+@text-tertiary: #64748b;
+@text-quaternary: #94a3b8;
+
+@brand-indigo: #2563eb;
+@accent-violet: #3b82f6;
+@accent-hover: #1d4ed8;
+
+@border-subtle: rgba(15, 23, 42, 0.04);
+@border-standard: rgba(15, 23, 42, 0.08);
+
+// ==================== 间距系统 ====================
+@spacing-xs: 4px;
+@spacing-sm: 8px;
+@spacing-md: 16px;
+@spacing-lg: 24px;
+@spacing-xl: 32px;
+@spacing-2xl: 48px;
+
+// ==================== 触摸目标尺寸 ====================
+@touch-target-min: 44px;
+
+// ==================== 移动端通用样式 ====================
+.mobile-only {
+  display: none;
+
+  @media (max-width: @tablet) {
+    display: block;
+  }
+}
+
+.tablet-only {
+  display: none;
+
+  @media (min-width: @tablet) and (max-width: @desktop-small) {
+    display: block;
+  }
+}
+
+.desktop-only {
+  display: none;
+
+  @media (min-width: @desktop-small) {
+    display: block;
+  }
+}
+
+.mobile-hidden {
+  @media (max-width: @tablet) {
+    display: none !important;
+  }
+}
+
+.tablet-hidden {
+  @media (min-width: @tablet) and (max-width: @desktop-small) {
+    display: none !important;
+  }
+}
+
+.desktop-hidden {
+  @media (min-width: @desktop-small) {
+    display: none !important;
+  }
+}
+
+// ==================== 移动端容器 ====================
+.mobile-container {
+  @media (max-width: @tablet) {
+    padding: 0 @spacing-md;
+    max-width: 100%;
+  }
+}
+
+// ==================== 移动端按钮 ====================
+.mobile-touch-button {
+  @media (max-width: @tablet) {
+    min-width: @touch-target-min;
+    min-height: @touch-target-min;
+    padding: 12px 16px;
+    font-size: 16px;
+    border-radius: 8px;
+
+    &:active {
+      transform: scale(0.98);
+      transition: transform 0.1s ease;
+    }
+  }
+}
+
+// ==================== 移动端工具栏 ====================
+.mobile-toolbar {
+  @media (max-width: @tablet) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: @bg-panel;
+    border-top: 1px solid @border-standard;
+    padding: @spacing-sm @spacing-md;
+    padding-bottom: calc(@spacing-sm + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: @spacing-sm;
+  }
+}
+
+// ==================== 移动端抽屉面板 ====================
+.mobile-drawer {
+  @media (max-width: @tablet) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: @bg-surface;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-top: 1px solid @border-standard;
+    max-height: 70vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &.active {
+      transform: translateY(0);
+    }
+
+    .drawer-handle {
+      width: 40px;
+      height: 4px;
+      background: @border-standard;
+      border-radius: 2px;
+      margin: 12px auto 16px;
+    }
+
+    .drawer-content {
+      padding: 0 @spacing-md @spacing-lg;
+      padding-bottom: calc(@spacing-lg + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+// ==================== 移动端全屏遮罩 ====================
+.mobile-overlay {
+  @media (max-width: @tablet) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 998;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+
+    &.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}
+
+// ==================== 移动端画布优化 ====================
+.mobile-canvas {
+  @media (max-width: @tablet) {
+    width: 100vw !important;
+    height: calc(100vh - 60px) !important; // 减去工具栏高度
+    overflow: hidden;
+    touch-action: none;
+
+    // 隐藏标尺和辅助线
+    .ruler,
+    .guide-line {
+      display: none !important;
+    }
+
+    // 优化控制手柄尺寸
+    .control-handle {
+      width: @touch-target-min;
+      height: @touch-target-min;
+      border-radius: 50%;
+      background: @accent-violet;
+      border: 2px solid #ffffff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+    }
+  }
+}
+
+// ==================== 移动端文本编辑 ====================
+.mobile-text-editor {
+  @media (max-width: @tablet) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1001;
+    background: @bg-surface;
+    border-top: 1px solid @border-standard;
+    padding: @spacing-md;
+    padding-bottom: calc(@spacing-md + env(safe-area-inset-bottom));
+
+    .text-input {
+      width: 100%;
+      min-height: 44px;
+      padding: 12px;
+      background: @bg-panel;
+      border: 1px solid @border-standard;
+      border-radius: 8px;
+      color: @text-primary;
+      font-size: 16px;
+
+      &:focus {
+        outline: none;
+        border-color: @accent-violet;
+      }
+    }
+
+    .text-toolbar {
+      display: flex;
+      gap: @spacing-sm;
+      margin-top: @spacing-sm;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+
+      button {
+        min-width: @touch-target-min;
+        height: @touch-target-min;
+        flex-shrink: 0;
+      }
+    }
+  }
+}
+
+// ==================== 移动端图层面板 ====================
+.mobile-layers {
+  @media (max-width: @tablet) {
+    .layer-item {
+      min-height: @touch-target-min;
+      padding: @spacing-sm @spacing-md;
+      display: flex;
+      align-items: center;
+      gap: @spacing-sm;
+      background: @bg-panel;
+      border: 1px solid @border-subtle;
+      border-radius: 8px;
+      margin-bottom: @spacing-xs;
+
+      &:active {
+        background: @bg-surface;
+      }
+
+      .layer-icon {
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+      }
+
+      .layer-name {
+        flex: 1;
+        font-size: 15px;
+        color: @text-secondary;
+      }
+
+      .layer-actions {
+        display: flex;
+        gap: @spacing-xs;
+
+        button {
+          width: @touch-target-min;
+          height: @touch-target-min;
+          padding: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+      }
+    }
+  }
+}
+
+// ==================== 移动端对话框 ====================
+.mobile-dialog {
+  @media (max-width: @tablet) {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 32px);
+    max-width: 400px;
+    max-height: 80vh;
+    background: @bg-surface;
+    border: 1px solid @border-standard;
+    border-radius: 16px;
+    padding: @spacing-lg;
+    overflow-y: auto;
+    z-index: 1002;
+
+    .dialog-title {
+      font-size: 20px;
+      font-weight: 590;
+      color: @text-primary;
+      margin-bottom: @spacing-md;
+    }
+
+    .dialog-content {
+      color: @text-secondary;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: @spacing-lg;
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: @spacing-sm;
+
+      button {
+        flex: 1;
+        min-height: @touch-target-min;
+      }
+    }
+  }
+}
+
+// ==================== 移动端加载状态 ====================
+.mobile-loading {
+  @media (max-width: @tablet) {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1003;
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid @border-standard;
+      border-top-color: @accent-violet;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .loading-text {
+      margin-top: @spacing-md;
+      text-align: center;
+      color: @text-secondary;
+      font-size: 14px;
+    }
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ==================== 移动端安全区域 ====================
+.mobile-safe-area {
+  @media (max-width: @tablet) {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+// ==================== 横屏优化 ====================
+@media (max-width: @tablet) and (orientation: landscape) {
+  .mobile-toolbar {
+    padding: @spacing-xs @spacing-md;
+  }
+
+  .mobile-drawer {
+    max-height: 60vh;
+  }
+
+  .mobile-canvas {
+    height: calc(100vh - 48px) !important;
+  }
+}

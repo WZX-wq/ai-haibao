@@ -1,0 +1,13 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="e" x1="88" y1="70" x2="790" y2="1128" gradientUnits="userSpaceOnUse"><stop stop-color="#8D5B3B"/><stop offset="1" stop-color="#3B2218"/></linearGradient></defs>
+  <rect width="900" height="1200" rx="56" fill="url(#e)"/>
+  <rect x="84" y="92" width="140" height="50" rx="25" fill="#F5E1CD"/><text x="132" y="126" fill="#7B4A23" font-size="28" font-family="Arial" font-weight="700">西餐约会</text>
+  <text x="78" y="248" fill="#FFF5E7" font-size="96" font-family="Arial" font-weight="900">ROMANTIC</text>
+  <text x="78" y="346" fill="#FFF5E7" font-size="96" font-family="Arial" font-weight="900">DINNER</text>
+  <text x="82" y="420" fill="#F7E5D3" font-size="34" font-family="Arial">烛光氛围 / 情绪拉满 / 约会夜套餐宣传</text>
+  <rect x="84" y="564" width="732" height="554" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="142" y="626" width="616" height="436" rx="34" fill="#FFF6EE"/>
+  <text x="184" y="754" fill="#7D4D29" font-size="82" font-family="Arial" font-weight="900">浪漫西餐约会夜</text>
+  <text x="184" y="822" fill="#A06D4A" font-size="32" font-family="Arial">适合套餐海报、节日餐单、情侣主题活动宣传</text>
+  <rect x="184" y="882" width="224" height="58" rx="29" fill="#8D5B3B"/><text x="238" y="920" fill="white" font-size="28" font-family="Arial" font-weight="800">立即预订</text>
+</svg>

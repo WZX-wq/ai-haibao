@@ -4,12 +4,12 @@ export default [
   {
     path: '/',
     name: 'main',
-    redirect: 'welcome',
+    redirect: { path: '/home', query: { section: 'welcome' } },
   },
   {
     path: '/welcome',
     name: 'Welcome',
-    component: () => import(/* webpackChunkName: 'welcome' */ '@/views/Welcome.vue'),
+    redirect: { path: '/home', query: { section: 'welcome' } },
   },
   {
     path: '/home',

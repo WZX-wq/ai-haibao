@@ -1,0 +1,14 @@
+<svg width="900" height="1200" viewBox="0 0 900 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="c" x1="88" y1="70" x2="788" y2="1128" gradientUnits="userSpaceOnUse"><stop stop-color="#FF5F6D"/><stop offset="1" stop-color="#C61F38"/></linearGradient></defs>
+  <rect width="900" height="1200" rx="56" fill="url(#c)"/>
+  <circle cx="700" cy="186" r="150" fill="#FFD76B" fill-opacity="0.24"/>
+  <rect x="84" y="92" width="140" height="50" rx="25" fill="#FFF1D8"/><text x="132" y="126" fill="#B43222" font-size="28" font-family="Arial" font-weight="700">国庆主题</text>
+  <text x="78" y="246" fill="white" font-size="102" font-family="Arial" font-weight="900">国庆盛典</text>
+  <text x="78" y="350" fill="#FFE5B5" font-size="102" font-family="Arial" font-weight="900">城市欢庆</text>
+  <text x="82" y="422" fill="#FFE7D7" font-size="34" font-family="Arial">节庆活动宣传 / 城市嘉年华 / 品牌节日传播</text>
+  <rect x="84" y="560" width="732" height="556" rx="40" fill="white" fill-opacity="0.1"/>
+  <rect x="142" y="624" width="616" height="440" rx="34" fill="#FFF4F0"/>
+  <text x="184" y="754" fill="#C72232" font-size="86" font-family="Arial" font-weight="900">欢度国庆</text>
+  <text x="184" y="824" fill="#D34A58" font-size="32" font-family="Arial">盛世华章，适合城市节庆和品牌节日活动宣传</text>
+  <rect x="184" y="882" width="226" height="58" rx="29" fill="#D22A3D"/><text x="238" y="920" fill="white" font-size="28" font-family="Arial" font-weight="800">查看方案</text>
+</svg>
