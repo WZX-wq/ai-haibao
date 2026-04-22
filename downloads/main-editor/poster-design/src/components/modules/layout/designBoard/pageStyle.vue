@@ -18,7 +18,14 @@
         <color-select v-show="state.mode === '颜色'" v-model="state.innerElement.backgroundColor" :modes="['纯色', '渐变']" @change="colorChange" />
         <div v-if="state.mode === '图片' && state.innerElement.backgroundImage" style="margin-top: 1.2rem">
           <div class="backgroud-wrap">
-            <el-image style="height: 100%" :src="state.innerElement.backgroundImage" fit="contain"></el-image>
+            <img
+              class="background-preview"
+              :src="backgroundPreviewUrl"
+              alt="background-preview"
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+            />
             <div class="bg-control">
               <div class="btns">
                 <uploader style="width: 47%" @done="uploadImgDone">
@@ -53,7 +60,7 @@
 <script lang="ts" setup>
 // 画布组件样式
 // const NAME = 'page-style'
-import { nextTick, onMounted, reactive, watch, ref, Ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, watch, ref, Ref } from 'vue'
 import colorSelect, { colorChangeData } from '@/components/modules/settings/colorSelect.vue'
 import uploader, { TUploadDoneData } from '@/components/common/Uploader/index.vue'
 import api from '@/api'
@@ -67,6 +74,7 @@ import { Delete as iconDelete, Download as iconDownload } from '@element-plus/ic
 import wImageSetting from '@/components/modules/widgets/wImage/wImageSetting'
 import sizeEditor from '@/components/business/create-design/sizeEditor.vue'
 import createDesign from '@/components/business/create-design'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TState = {
   activeNames: string[]
@@ -95,6 +103,7 @@ const sizeEditRef: Ref<typeof createDesign | null> = ref(null)
 // const { dActiveElement } = useSetupMapGetters(['dActiveElement'])
 const { dActiveElement } = storeToRefs(widgetStore)
 let _localTempBG: string | null = null
+const backgroundPreviewUrl = computed(() => normalizeLoopbackMediaUrl(String(state.innerElement.backgroundImage || '')))
 
 watch(
   () => dActiveElement.value,
@@ -255,6 +264,12 @@ function openSizeEdit() {
   padding: 16px;
   background-color: #f1f2f4;
   border-radius: 8px;
+  .background-preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
   .bg-options {
     position: absolute;
     top: 8px;

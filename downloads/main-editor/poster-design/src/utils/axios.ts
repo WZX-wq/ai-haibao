@@ -90,7 +90,7 @@ const normalizeAxiosPayload = (payload: any) => {
   const data = isAxiosResponse ? payload?.data : (payload?.response?.data ?? payload)
 
   if (data?.code === 401) {
-    console.log('鐧诲綍澶辨晥')
+    console.log('登录失效')
     useUserStore().changeOnline(false)
   }
 

@@ -27,7 +27,7 @@
           :class="['category-card', { 'is-active': activeCategory === category.key }]"
           @click="activateCategory(category.key)"
         >
-          <img :src="category.cover" :alt="category.name" />
+          <img :src="resolveImageUrl(category.cover)" :alt="category.name" loading="eager" decoding="async" />
           <span>{{ category.name }}</span>
         </button>
       </section>
@@ -41,7 +41,7 @@
           <div :key="activeCategory" class="tab-panel is-active">
             <div class="poster-grid poster-grid--five">
             <article
-              v-for="card in activeCategoryMeta.cards"
+              v-for="(card, cardIndex) in activeCategoryMeta.cards"
               :key="card.title"
               class="poster-card"
               @click="navigateToAi(card, activeCategoryMeta)"
@@ -52,15 +52,21 @@
               >
                 <img
                   v-if="card.imageBlendBackground"
-                  :src="card.image"
+                  :src="resolveImageUrl(card.image)"
                   :alt="`${card.title} 背景`"
                   class="poster-card__bg"
+                  loading="eager"
+                  :fetchpriority="cardIndex === 0 ? 'high' : 'auto'"
+                  decoding="async"
                   :style="getPosterBackgroundStyle(card)"
                 />
                 <img
-                  :src="card.image"
+                  :src="resolveImageUrl(card.image)"
                   :alt="card.title"
                   class="poster-card__foreground"
+                  loading="eager"
+                  :fetchpriority="cardIndex === 0 ? 'high' : 'auto'"
+                  decoding="async"
                   :style="getPosterImageStyle(card)"
                 />
                 <span class="poster-card__tag">{{ card.tag }}</span>
@@ -92,7 +98,7 @@
               :key="item.image"
               :class="['gallery-card', { 'gallery-card--wide': item.wide }]"
             >
-              <img :src="item.image" :alt="item.alt" />
+              <img :src="resolveImageUrl(item.image)" :alt="item.alt" loading="eager" decoding="async" />
               <div v-if="item.title || item.desc" class="gallery-card__overlay">
                 <span v-if="item.badge" class="gallery-card__badge">{{ item.badge }}</span>
                 <h4 v-if="item.title">{{ item.title }}</h4>
@@ -102,10 +108,10 @@
                 v-if="item.thumbs?.length"
                 :class="['gallery-card__thumbs', { 'gallery-card__thumbs--dual': item.thumbs.length > 1 }]"
               >
-                <img :src="item.thumbs[0]" :alt="`${item.alt} 缩略图`" />
+                <img :src="resolveImageUrl(item.thumbs[0])" :alt="`${item.alt} 缩略图`" loading="eager" decoding="async" />
                 <template v-if="item.thumbs.length > 1">
                   <span>+</span>
-                  <img :src="item.thumbs[1]" :alt="`${item.alt} 缩略图 2`" />
+                  <img :src="resolveImageUrl(item.thumbs[1])" :alt="`${item.alt} 缩略图 2`" loading="eager" decoding="async" />
                 </template>
               </div>
             </article>
@@ -130,7 +136,7 @@
               :key="item.image"
               class="gallery-card"
             >
-              <img :src="item.image" :alt="item.alt" />
+              <img :src="resolveImageUrl(item.image)" :alt="item.alt" loading="eager" decoding="async" />
               <div v-if="item.title || item.desc" class="gallery-card__overlay">
                 <span v-if="item.badge" class="gallery-card__badge">{{ item.badge }}</span>
                 <h4 v-if="item.title">{{ item.title }}</h4>
@@ -140,10 +146,10 @@
                 v-if="item.thumbs?.length"
                 :class="['gallery-card__thumbs', { 'gallery-card__thumbs--dual': item.thumbs.length > 1 }]"
               >
-                <img :src="item.thumbs[0]" :alt="`${item.alt} 缩略图`" />
+                <img :src="resolveImageUrl(item.thumbs[0])" :alt="`${item.alt} 缩略图`" loading="eager" decoding="async" />
                 <template v-if="item.thumbs.length > 1">
                   <span>+</span>
-                  <img :src="item.thumbs[1]" :alt="`${item.alt} 缩略图 2`" />
+                  <img :src="resolveImageUrl(item.thumbs[1])" :alt="`${item.alt} 缩略图 2`" loading="eager" decoding="async" />
                 </template>
               </div>
             </article>
@@ -181,13 +187,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import ecomFirstExact from '@/assets/homepage/ecom-1-CnyaMv3A.jpg'
-import ecomSecondExact from '@/assets/homepage/ecom-3-BDTXEpPy.jpg'
-import ecomThirdExact from '@/assets/homepage/ecom-2-CgF97onk.jpg'
-import ecomFourthExact from '@/assets/homepage/ecom-4-D5dHMJ3u.jpg'
-import foodCoffeeExact from '@/assets/homepage/food-2-DVBWl6Q0.jpg'
-import foodSecondFixed from '@/assets/homepage/fixes/food-bbq.jpg'
-import foodFifthFixed from '@/assets/homepage/fixes/festival-christmas.jpg'
 
 type TemplateCard = {
   image: string
@@ -256,19 +255,92 @@ const heroInputRef = ref<HTMLTextAreaElement | null>(null)
 const floatingInputRef = ref<HTMLTextAreaElement | null>(null)
 let templateCategoryAutoplayTimer: number | null = null
 
-const rawImageModules = import.meta.glob('../../assets/homepage/**/*.{jpg,png,svg}', { eager: true }) as Record<string, { default: string }>
-const imageModules: Record<string, string> = Object.fromEntries(
-  Object.entries(rawImageModules).map(([key, mod]) => [key, mod.default]),
-)
+const ecomFirstExact = 'ecom-1'
+const ecomSecondExact = 'ecom-3'
+const ecomThirdExact = 'ecom-2'
+const ecomFourthExact = 'ecom-4'
+const foodCoffeeExact = 'food-2'
+const foodSecondFixed = 'food-bbq'
+const foodFifthFixed = 'festival-christmas'
+
+const BLANK_IMAGE =
+  'data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2216%22 viewBox=%220 0 24 16%22%3E%3Crect width=%2224%22 height=%2216%22 rx=%222%22 fill=%22%23e2e8f0%22/%3E%3C/svg%3E'
+
+type ImageModuleLoader = () => Promise<{ default: string }>
+
+const imageModules = import.meta.glob('../../assets/homepage/**/*.{jpg,jpeg,png,svg,webp,avif}') as Record<string, ImageModuleLoader>
+const imageModuleEntries = Object.entries(imageModules)
+const imageUrlCache = ref<Record<string, string>>({})
+const pendingImageLoads = new Set<string>()
+
+function getImageFormatPriority(filePath: string) {
+  const normalized = filePath.toLowerCase()
+  if (normalized.endsWith('.avif')) return 0
+  if (normalized.endsWith('.webp')) return 1
+  if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 2
+  if (normalized.endsWith('.png')) return 3
+  if (normalized.endsWith('.svg')) return 4
+  return 9
+}
+
+function findImageModuleKey(prefix: string) {
+  const matches = imageModuleEntries
+    .filter(([item]) =>
+      item.endsWith(`/${prefix}.avif`) ||
+      item.endsWith(`/${prefix}.webp`) ||
+      item.endsWith(`/${prefix}.jpg`) ||
+      item.endsWith(`/${prefix}.jpeg`) ||
+      item.endsWith(`/${prefix}.png`) ||
+      item.endsWith(`/${prefix}.svg`) ||
+      item.includes(`${prefix}-`)
+    )
+    .sort((a, b) => getImageFormatPriority(a[0]) - getImageFormatPriority(b[0]))
+  return matches[0]?.[0]
+}
 
 function getImage(prefix: string) {
-  const key = Object.keys(imageModules).find((item) =>
-    item.endsWith(`/${prefix}.jpg`) ||
-    item.endsWith(`/${prefix}.png`) ||
-    item.includes(`${prefix}-`) ||
-    item.endsWith(`/${prefix}.svg`)
-  )
-  return key ? imageModules[key] : ''
+  return prefix
+}
+
+function resolveImageUrl(value?: string) {
+  const src = String(value || '').trim()
+  if (!src) return BLANK_IMAGE
+  if (/^(https?:)?\/\//.test(src) || src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('/')) {
+    return src
+  }
+
+  const cached = imageUrlCache.value[src]
+  if (cached) {
+    return cached
+  }
+
+  const moduleKey = findImageModuleKey(src)
+  if (!moduleKey) {
+    return BLANK_IMAGE
+  }
+
+  if (!pendingImageLoads.has(src)) {
+    pendingImageLoads.add(src)
+    imageModules[moduleKey]()
+      .then((mod) => {
+        imageUrlCache.value = {
+          ...imageUrlCache.value,
+          [src]: mod.default,
+        }
+      })
+      .finally(() => {
+        pendingImageLoads.delete(src)
+      })
+  }
+
+  return BLANK_IMAGE
+}
+
+function preloadImages(values: Array<string | undefined | null>) {
+  values.forEach((value) => {
+    if (!value) return
+    resolveImageUrl(String(value))
+  })
 }
 
 const validSizeKeys = new Set(['a4', 'wechat-cover', 'xiaohongshu', 'moments', 'ecommerce', 'flyer'])
@@ -556,6 +628,23 @@ const socialGallery: GalleryItem[] = [
   },
 ]
 
+function preloadCategoryAssets(category: ResolvedCategoryItem | undefined) {
+  if (!category) return
+  preloadImages([
+    category.cover,
+    ...category.cards.map((card) => card.image),
+  ])
+}
+
+function preloadGalleryAssets(items: GalleryItem[], limit = items.length) {
+  preloadImages(
+    items.slice(0, limit).flatMap((item) => [
+      item.image,
+      ...(item.thumbs || []),
+    ]),
+  )
+}
+
 function pauseTemplateLoop() {
   stopTemplateCategoryAutoplay()
 }
@@ -652,9 +741,20 @@ watch(promptText, async () => {
   resizeTextarea(floatingInputRef.value, 98)
 })
 
+watch(
+  () => activeCategoryMeta.value,
+  (category) => {
+    preloadCategoryAssets(category)
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   resizeTextarea(heroInputRef.value, 124)
   resizeTextarea(floatingInputRef.value, 98)
+  preloadImages(categories.map((category) => category.cover))
+  preloadGalleryAssets(enterpriseGallery, 2)
+  preloadGalleryAssets(socialGallery, 2)
   startTemplateCategoryAutoplay()
   if (import.meta.env.DEV) {
     validateTemplateCategories(resolvedCategories.value)

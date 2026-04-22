@@ -9,17 +9,17 @@
       @click.stop="selectItem(item)"
     >
       <edit-model v-if="edit" :options="props.edit" :data="{ item, i }">
-        <div v-if="(item as any).deleted === true" class="list__mask">已删除</div>
+        <div v-if="item.isDelect" class="list__mask">已删除</div>
         <img
           v-if="!item.fail"
           class="img"
           :src="getCardImage(item)"
           :width="state.width"
           :height="Math.max(1, Math.round(item.height || state.width))"
-          sizes="146px"
+          sizes="154px"
           alt="template-cover"
-          :loading="i < 6 ? 'eager' : 'lazy'"
-          :fetchpriority="i === 0 ? 'high' : 'low'"
+          loading="eager"
+          fetchpriority="high"
           decoding="async"
           @error="loadError(item, i, $event)"
           @load="loadSuccess(item, i, $event)"
@@ -33,10 +33,10 @@
         :src="getCardImage(item)"
         :width="state.width"
         :height="Math.max(1, Math.round(item.height || state.width))"
-        sizes="146px"
+        sizes="154px"
         alt="template-cover"
-        :loading="i < 6 ? 'eager' : 'lazy'"
-        :fetchpriority="i === 0 ? 'high' : 'low'"
+        loading="eager"
+        fetchpriority="high"
         decoding="async"
         @error="loadError(item, i, $event)"
         @load="loadSuccess(item, i, $event)"
@@ -128,39 +128,65 @@ const normalizeLocalHost = (value?: string) => {
 }
 
 const getCardImage = (item: IGetTempListData) => {
-  const raw = item.thumb || item.cover || item.url || ''
+  const raw = item.thumb || item.url || item.cover || ''
   const normalized = normalizeLoopbackMediaUrl(normalizeLocalHost(raw))
   return normalized || '/template-cover-1.png'
 }
 
 const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cover-1.png' : '/template-cover-2.png')
 
-const isPosterPreviewUrl = (value?: string) => {
-  const src = String(value || '')
-  return src.includes('/api/screenshots?') || src.includes('-screenshot-vp-')
+const withRetryParam = (raw: string, key = 'retry') => {
+  if (!raw) return raw
+  return `${raw}${raw.includes('?') ? '&' : '?'}${key}=${Date.now()}`
 }
 
-const withCacheBust = (value: string) => `${value}${value.includes('?') ? '&' : '?'}_retry=${Date.now()}`
+const looksLikeBlankCover = (img: HTMLImageElement) => {
+  const width = img.naturalWidth || img.width
+  const height = img.naturalHeight || img.height
+  if (!width || !height || width <= 8 || height <= 8) return false
+
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return false
+
+  const sampleWidth = 12
+  const sampleHeight = Math.max(12, Math.round((height / width) * sampleWidth))
+  canvas.width = sampleWidth
+  canvas.height = sampleHeight
+
+  try {
+    ctx.drawImage(img, 0, 0, sampleWidth, sampleHeight)
+    const data = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data
+    let visibleCount = 0
+    let brightCount = 0
+
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3]
+      if (alpha < 16) continue
+      visibleCount += 1
+      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
+      if (brightness >= 245) brightCount += 1
+    }
+
+    return visibleCount > 0 && brightCount / visibleCount > 0.98
+  } catch {
+    return false
+  }
+}
 
 const load = () => emit('load')
 const selectItem = (value: IGetTempListData) => emit('select', value)
 
 const loadError = (item: IGetTempListData, index: number, event?: Event) => {
   const target = event?.target as HTMLImageElement | null
-  if ((item as any).__previewRetried !== true) {
-    const retrySource = [item.thumb, item.cover, item.url].find((src) => isPosterPreviewUrl(src))
-    if (retrySource) {
-      ;(item as any).__previewRetried = true
-      if (item.thumb && isPosterPreviewUrl(item.thumb)) item.thumb = withCacheBust(item.thumb)
-      if (item.cover && isPosterPreviewUrl(item.cover)) item.cover = withCacheBust(item.cover)
-      if (item.url && isPosterPreviewUrl(item.url)) item.url = withCacheBust(item.url)
-      item.fail = false
-      if (target) target.src = getCardImage(item)
-      return
-    }
-  }
   if (item.thumb && item.cover && item.thumb !== item.cover) {
     item.thumb = ''
+    item.fail = false
+    if (target) target.src = getCardImage(item)
+    return
+  }
+  if (item.thumb && item.url && item.thumb !== item.url) {
+    item.thumb = item.url
     item.fail = false
     if (target) target.src = getCardImage(item)
     return
@@ -179,7 +205,38 @@ const loadError = (item: IGetTempListData, index: number, event?: Event) => {
   item.fail = true
 }
 
-const loadSuccess = (item: IGetTempListData) => {
+const loadSuccess = (item: IGetTempListData, index: number, event?: Event) => {
+  const target = event?.target as HTMLImageElement | null
+  if (target && target.naturalWidth > 0 && target.naturalHeight > target.naturalWidth * 3) {
+    target.src = getFallbackByIndex(index)
+    item.fail = false
+    return
+  }
+
+  if (target && looksLikeBlankCover(target)) {
+    const meta = item as IGetTempListData & { __blankRetryCount?: number }
+    const blankRetryCount = Number(meta.__blankRetryCount || 0)
+
+    if (item.url && blankRetryCount < 2) {
+      meta.__blankRetryCount = blankRetryCount + 1
+      item.thumb = withRetryParam(item.url, 'blankRetry')
+      item.fail = false
+      target.src = getCardImage(item)
+      return
+    }
+
+    if (item.cover && item.cover !== item.url) {
+      item.thumb = item.cover
+      item.fail = false
+      target.src = getCardImage(item)
+      return
+    }
+
+    target.src = getFallbackByIndex(index)
+    item.fail = false
+    return
+  }
+
   item.fail = false
 }
 

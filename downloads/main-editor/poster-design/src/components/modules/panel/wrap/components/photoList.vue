@@ -19,11 +19,11 @@
       >
         <edit-model v-if="props.edit" :options="props.edit" :data="{ item, i }">
           <div v-if="item.isDelect" class="list__mask">已删除</div>
-          <el-image class="img transparent-bg" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }" lazy />
+          <el-image class="img transparent-bg" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }" />
         </edit-model>
         <template v-else>
           <imageTip :detail="item">
-            <el-image class="img" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }" lazy>
+            <el-image class="img" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }">
               <template #placeholder>
                 <div :style="{ backgroundColor: item.color }" class="image-color" />
               </template>

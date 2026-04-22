@@ -9,7 +9,7 @@
   <div class="wrap">
     <slot />
     <div class="showMask" @click.stop="">
-      <el-dropdown placement="bottom-end" :show-arrow="false">
+      <el-dropdown placement="bottom-end" :show-arrow="false" @visible-change="handleDropdownVisibleChange">
         <i class="iconfont icon-more"></i>
         <template #dropdown>
           <el-dropdown-menu>
@@ -36,6 +36,18 @@ export default defineComponent({
   },
   emits: ['action'],
   setup(props, context) {
+    function handleDropdownVisibleChange(visible: boolean) {
+      if (visible || typeof document === 'undefined') return
+      setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null
+        if (!active) return
+        const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
+        if (insideDropdown) {
+          active.blur()
+        }
+      }, 0)
+    }
+
     async function action(name: string, value: any) {
       if (name === 'del') {
         const isDel = await useConfirm('警告', '删除后不可恢复,是否继续', 'warning')
@@ -47,6 +59,7 @@ export default defineComponent({
     }
     return {
       action,
+      handleDropdownVisibleChange,
     }
   },
 })

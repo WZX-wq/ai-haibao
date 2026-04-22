@@ -40,6 +40,9 @@ const route = useRoute()
 
 // 组件大小控制器
 let holder: number | undefined
+let unbindMouseWheel: (() => void) | undefined
+let resizeHandler: (() => void) | undefined
+let paddingRafId: number | undefined
 
 const hideControl = ref(false)
 const activezoomIndex = ref(0)
@@ -88,7 +91,7 @@ watch(
   (data) => {
     let realValue = data.value
     if (realValue === -1) {
-      realValue = calcZoom()
+      realValue = getSafeAutoFitZoom()
     }
     canvasStore.updateZoom(realValue)
     autoFixTop()
@@ -96,11 +99,10 @@ watch(
 )
 
 watch(
-  dScreen,
+  () => [dScreen.value.width, dScreen.value.height],
   () => {
     screenChange()
   },
-  { deep: true, }
 )
 
 watch(
@@ -116,12 +118,11 @@ watch(paddingLayoutTick, () => {
 })
 
 watch(
-  dPage,
+  () => [dPage.value.width, dPage.value.height],
   () => {
     screenChange()
     applyRouteDefaultZoom()
   },
-  { deep: true }
 )
 
 watch(
@@ -141,18 +142,33 @@ onMounted(async () => {
     activezoomIndex.value = zoomList.value.length - 1
   }
   // 添加滚轮监听
-  addMouseWheel('page-design', (isDown: boolean) => {
+  unbindMouseWheel = addMouseWheel('page-design', (isDown: boolean) => {
     mousewheelZoom(isDown)
   })
   // 添加窗口大小监听
-  window.addEventListener('resize', (event) => {
+  resizeHandler = () => {
     changeScreen()
-  })
+  }
+  window.addEventListener('resize', resizeHandler)
   applyRouteDefaultZoom(true)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('click', close)
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = undefined
+  }
+  unbindMouseWheel?.()
+  unbindMouseWheel = undefined
+  if (holder) {
+    clearTimeout(holder)
+    holder = undefined
+  }
+  if (paddingRafId) {
+    cancelAnimationFrame(paddingRafId)
+    paddingRafId = undefined
+  }
 })
 
     // ...mapActions(['updateZoom', 'updateScreen']),
@@ -204,7 +220,7 @@ function applyRouteDefaultZoom(force = false) {
 function screenChange() {
   // 弹性尺寸即时修改
   if (activezoomIndex.value === zoomList.value.length - 1) {
-    canvasStore.updateZoom(calcZoom())
+    canvasStore.updateZoom(getSafeAutoFitZoom())
     autoFixTop()
   }
 }
@@ -297,11 +313,12 @@ function sub() {
 function mousewheelZoom(down: boolean) {
   const value = Number(dZoom.value.toFixed(0))
   if (down && value <= 1) return
-  canvasStore.updateZoom(down ? value - 2 : value + 2)
-  zoom.value.text = (value + '%') as any
-  zoom.value.value = value
+  const nextValue = down ? value - 2 : value + 2
+  canvasStore.updateZoom(nextValue)
+  zoom.value.text = (nextValue + '%') as any
+  zoom.value.value = nextValue
   autoFixTop()
-  const closest = findClosestNumber(value, zoomList.value.map(x => x.value))
+  const closest = findClosestNumber(nextValue, zoomList.value.map(x => x.value))
   activezoomIndex.value = zoomList.value.findIndex(x => x.value === closest)
 }
 
@@ -328,23 +345,51 @@ function calcZoom() {
   return bestZoom.value
 }
 
+function getSafeAutoFitZoom() {
+  const fitZoom = Math.floor(calcZoom())
+  const pageWidth = Math.max(1, Number(dPage.value.width) || 1)
+  const pageHeight = Math.max(1, Number(dPage.value.height) || 1)
+  const longerEdge = Math.max(pageWidth, pageHeight)
+  const aspectRatio = longerEdge / Math.max(1, Math.min(pageWidth, pageHeight))
+
+  // 超长海报更强调“看全”，常规模板更强调“可读性”。
+  let dynamicMinZoom = 25
+  if (longerEdge >= 9000 || aspectRatio >= 6) {
+    dynamicMinZoom = 10
+  } else if (longerEdge >= 7000 || aspectRatio >= 4) {
+    dynamicMinZoom = 12
+  } else if (longerEdge >= 5000 || aspectRatio >= 3) {
+    dynamicMinZoom = 16
+  } else if (longerEdge >= 3500 || aspectRatio >= 2.2) {
+    dynamicMinZoom = 20
+  }
+
+  return Math.max(dynamicMinZoom, fitZoom)
+}
+
 async function autoFixTop() {
   await nextTick()
-  const el = document.getElementById('out-page')
-  if (!el) return
-  // 为顶部浮动编辑栏预留安全区：增加 db-scroll 的 paddingTop，只影响画布区域下移
-  // 高海报/小视口时原先的 maxPadding 会吃掉预留，导致画布贴顶仍被遮挡
-  const topToolbarReserve = 60
-  const headerBarHeight = 54
-  const clientHeight = window.innerHeight - headerBarHeight - canvasStore.dBottomHeight
-  let padding = (clientHeight - el.offsetHeight) / 2
-  if (typeof curAction.value === 'undefined') {
-    padding += presetPadding / 2
+  if (paddingRafId) {
+    cancelAnimationFrame(paddingRafId)
   }
-  curAction.value === 'add' && (padding -= presetPadding)
-  padding += topToolbarReserve
-  padding = Math.max(topToolbarReserve, padding)
-  canvasStore.updatePaddingTop(Math.max(0, padding))
+  paddingRafId = requestAnimationFrame(() => {
+    paddingRafId = undefined
+    const el = document.getElementById('out-page')
+    if (!el) return
+    // 为顶部浮动编辑栏预留安全区：增加 db-scroll 的 paddingTop，只影响画布区域下移
+    // 高海报/小视口时原先的 maxPadding 会吃掉预留，导致画布贴顶仍被遮挡
+    const topToolbarReserve = 60
+    const headerBarHeight = 54
+    const clientHeight = window.innerHeight - headerBarHeight - canvasStore.dBottomHeight
+    let padding = (clientHeight - el.offsetHeight) / 2
+    if (typeof curAction.value === 'undefined') {
+      padding += presetPadding / 2
+    }
+    curAction.value === 'add' && (padding -= presetPadding)
+    padding += topToolbarReserve
+    padding = Math.max(topToolbarReserve, padding)
+    canvasStore.updatePaddingTop(Math.max(0, padding))
+  })
 }
 
 defineExpose({

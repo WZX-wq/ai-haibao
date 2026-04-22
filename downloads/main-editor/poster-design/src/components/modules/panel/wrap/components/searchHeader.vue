@@ -1,6 +1,6 @@
 <template>
   <div class="search__wrap">
-    <el-dropdown v-if="type !== 'none'" placement="bottom-start">
+    <el-dropdown v-if="type !== 'none'" placement="bottom-start" @visible-change="handleDropdownVisibleChange">
       <div class="search__type" @click="ensureCategoriesLoaded">
         <i class="iconfont icon-ego-caidan" />
       </div>
@@ -74,6 +74,18 @@ const state = reactive<TState>({
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let categoryLoadNotified = false
 let requestSeq = 0
+
+function handleDropdownVisibleChange(visible: boolean) {
+  if (visible || typeof document === 'undefined') return
+  setTimeout(() => {
+    const active = document.activeElement as HTMLElement | null
+    if (!active) return
+    const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
+    if (insideDropdown) {
+      active.blur()
+    }
+  }, 0)
+}
 
 function clearRetryTimer() {
   if (retryTimer) {

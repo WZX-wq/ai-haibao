@@ -20,7 +20,7 @@
       opacity: params.opacity,
       backgroundColor: params.backgroundColor,
       writingMode: params.writingMode,
-      fontFamily: `'${params.fontClass.value}'`,
+      fontFamily: resolvedFontFamily,
     }"
   >
     <template v-if="Array.isArray(params.textEffects) && params.textEffects.length > 0">
@@ -28,7 +28,7 @@
         v-for="(ef, efi) in params.textEffects"
         :key="efi + 'effect'"
         :style="{
-          fontFamily: `'${params.fontClass.value}'`,
+          fontFamily: resolvedFontFamily,
           color: ef.filling && ef.filling.enable && ef.filling.type === 0 ? ef.filling.color : 'transparent',
           WebkitTextStroke: ef.stroke && ef.stroke.enable ? `${ef.stroke.width}px ${ef.stroke.color}` : undefined,
           textShadow: ef.shadow && ef.shadow.enable ? `${ef.shadow.offsetX}px ${ef.shadow.offsetY}px ${ef.shadow.blur}px ${ef.shadow.color}` : undefined,
@@ -43,7 +43,7 @@
     </template>
     <div
       v-show="!params.textEffects?.length"
-      :style="{ fontFamily: `'${params.fontClass.value}'` }"
+      :style="{ fontFamily: resolvedFontFamily }"
       class="edit-text"
       spellcheck="false"
       v-html="params.text"
@@ -53,6 +53,7 @@
 
 <script lang="ts" setup>
 import { reactive, onMounted, ref } from 'vue'
+import { buildWidgetFontFamily } from '@/utils/fontFamily'
 import getGradientOrImg from './getGradientOrImg'
 import { wTextSetting } from './wTextSetting'
 
@@ -73,6 +74,7 @@ type TProps = {
 
 const props = defineProps<TProps>()
 const widget = ref<HTMLElement | null>(null)
+const resolvedFontFamily = buildWidgetFontFamily(props.params.fontClass?.value, props.params.fontFamily)
 
 onMounted(() => {
   if (!widget.value) return

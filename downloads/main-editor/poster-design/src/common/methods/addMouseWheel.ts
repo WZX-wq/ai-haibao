@@ -16,8 +16,8 @@ type TAddEventObj = {
 export default function(el: HTMLElement | string, cb: Function, altLimit: boolean = true) {
   const box = typeof el === 'string' ? document.getElementById(el) : el
   const controlStore = useControlStore()
-  if (!box) return;
-  addEvent(box, 'mousewheel', (e: any) => {
+  if (!box) return () => {}
+  const handler = (e: any) => {
     const ev = e || window.event
     const down = ev.wheelDelta ? ev.wheelDelta < 0 : ev.detail > 0
     // if (down) {
@@ -30,7 +30,11 @@ export default function(el: HTMLElement | string, cb: Function, altLimit: boolea
       cb(down)
     }
     return false
-  })
+  }
+  addEvent(box, 'mousewheel', handler)
+  return () => {
+    removeEvent(box, 'mousewheel', handler)
+  }
 }
 
 function addEvent(obj: TAddEventObj, xEvent: keyof HTMLElementEventMap, fn: TAddEventCb) {
@@ -38,5 +42,13 @@ function addEvent(obj: TAddEventObj, xEvent: keyof HTMLElementEventMap, fn: TAdd
     obj.attachEvent('on' + xEvent, fn)
   } else {
     obj.addEventListener(xEvent, fn, false)
+  }
+}
+
+function removeEvent(obj: TAddEventObj, xEvent: keyof HTMLElementEventMap, fn: TAddEventCb) {
+  if ((obj as any).detachEvent) {
+    ;(obj as any).detachEvent('on' + xEvent, fn)
+  } else {
+    obj.removeEventListener(xEvent, fn, false)
   }
 }

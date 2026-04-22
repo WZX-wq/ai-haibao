@@ -460,6 +460,7 @@ defineExpose({
 
 .editor-action-dock__options {
   min-width: 0;
+  max-width: min(100%, 620px);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(226, 232, 240, 0.92);
@@ -491,7 +492,7 @@ defineExpose({
 }
 
 .editor-action-dock :deep(.top-title .input-wrap) {
-  width: 160px;
+  width: 128px;
 }
 
 .editor-action-dock :deep(.top-title .input-wrap input) {
@@ -509,13 +510,14 @@ defineExpose({
   height: 30px;
   padding-right: 0;
   align-items: center;
+  min-width: 0;
 }
 
 .editor-action-dock :deep(.top-icon-wrap .el-button) {
   min-height: 30px;
   height: 30px;
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 0 8px;
   background: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   font-weight: 600;

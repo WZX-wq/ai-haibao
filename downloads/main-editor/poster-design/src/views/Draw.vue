@@ -22,6 +22,7 @@
 <script lang="ts" setup>
 import { computed, nextTick, onMounted } from 'vue'
 import api from '@/api'
+import { LocalStorageKey } from '@/config'
 import Preload from '@/utils/plugins/preload'
 import FontFaceObserver from 'fontfaceobserver'
 import { fontMinWithDraw, font2style } from '@/utils/widgets/loadFontRule'
@@ -52,7 +53,11 @@ function goHome() {
 async function load() {
   let backgroundImage = ''
   let loadFlag = false
-  const { id, tempid, tempType: type = 0, index = 0 }: any = route.query
+  const { id, tempid, tempType: type = 0, index = 0, authToken }: any = route.query
+  const token = String(authToken || '').trim()
+  if (token && typeof localStorage !== 'undefined') {
+    localStorage.setItem(LocalStorageKey.tokenKey, token)
+  }
   if (id || tempid) {
     const postData = {
       id: id || tempid,

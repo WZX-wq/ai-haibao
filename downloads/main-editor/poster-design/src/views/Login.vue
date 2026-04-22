@@ -43,7 +43,7 @@
         <el-button v-if="bootstrapFailed" size="large" plain :loading="bootstrapLoading" @click="loadBootstrap">
           重试
         </el-button>
-        <el-button size="large" plain :disabled="bootstrapLoading" @click="router.push({ path: '/home', query: { section: 'welcome' } })">
+        <el-button size="large" plain :disabled="bootstrapLoading" @click="router.push('/welcome')">
           {{ backHomeText }}
         </el-button>
       </div>

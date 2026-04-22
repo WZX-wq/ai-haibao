@@ -4,7 +4,7 @@
   "private": true,
   "author": "ShawnPhang",
   "scripts": {
-    "prepared": "npm i && cd service && PUPPETEER_DOWNLOAD_BASE_URL=https://cdn.npmmirror.com/binaries/chrome-for-testing npm i",
+    "prepared": "npm i --registry=https://mirrors.cloud.tencent.com/npm/ --prefer-offline && cd service && set PUPPETEER_SKIP_DOWNLOAD=1&& set PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1&& npm i --registry=https://mirrors.cloud.tencent.com/npm/ --prefer-offline",
     "serve": "node scripts/dev-orchestrator.mjs",
     "serve:bg": "powershell -ExecutionPolicy Bypass -File scripts/serve-bg.ps1",
     "serve:stop": "powershell -ExecutionPolicy Bypass -File scripts/serve-stop.ps1",

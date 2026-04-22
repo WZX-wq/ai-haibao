@@ -5,6 +5,7 @@ const isDev = process.env.NODE_ENV === 'development'
 const puppeteer = require('puppeteer')
 const images = require('images')
 const { executablePath } = require('../configs.ts')
+import { ensureScreenshotFonts } from './screenshot-font'
 
 const forceTimeOut = 60
 const maxPXs = 4211840
@@ -109,6 +110,7 @@ export const saveScreenshot = async (
     if (!prevent) {
       page.on('load', async () => {
         try {
+          await ensureScreenshotFonts(page)
           await autoScroll(page)
           await sleep(wait)
           await finish()
@@ -128,6 +130,7 @@ export const saveScreenshot = async (
     // fallback to an automatic capture after a short wait.
     if (prevent) {
       try {
+        await ensureScreenshotFonts(page)
         await sleep(Number(wait) > 0 ? Number(wait) : 2500)
         await finish()
       } catch {}

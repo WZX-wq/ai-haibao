@@ -55,7 +55,13 @@ export async function screenshots(req: any, res: any) {
       res.json({ code: 200, msg: '服务器表示顶不住啊，等等再来吧~' })
       return
     }
-    const targetUrl = url + id + `${tempType ? '&tempType=' + tempType : ''}` + `&index=${index}`
+    const authToken = String(req.query.authToken || '').trim()
+    const targetUrl =
+      url +
+      id +
+      `${tempType ? '&tempType=' + tempType : ''}` +
+      `&index=${index}` +
+      (authToken ? `&authToken=${encodeURIComponent(authToken)}` : '')
     queueRun(saveScreenshot, targetUrl, {
       width,
       height,

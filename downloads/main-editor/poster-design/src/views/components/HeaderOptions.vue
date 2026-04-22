@@ -1,15 +1,15 @@
-﻿<template>
+<template>
   <div class="top-title">
     <el-input v-model="state.title" placeholder="未命名设计" class="input-wrap" />
   </div>
   <div class="top-icon-wrap">
-    <template v-if="showTemplateEditActions && tempEditing">
+    <template v-if="showTemplateEditActions">
       <el-button plain type="primary" @click="saveTemp">保存模板</el-button>
       <el-button @click="userStore.managerEdit(false)">取消</el-button>
       <div class="divide__line">|</div>
     </template>
-    <el-button v-else-if="showTemplateEditActions" @click="jump2Edit">修改模板</el-button>
-    <el-button class="save-work-btn" type="primary" @click="save">保存</el-button>
+    <el-button v-else-if="showWorkSaveAction" plain type="primary" @click="save">保存</el-button>
+    <el-button v-else-if="canEnterTemplateEdit" @click="jump2Edit">修改模板</el-button>
     <watermark-option />
     <slot />
     <button
@@ -107,19 +107,21 @@ const state = reactive<TState>({
 const userAvatar = computed(() => userStore.user.avatar || '')
 const userInitial = computed(() => (userStore.user.name || '我').slice(0, 1))
 const accountEntryLabel = computed(() => (userStore.online ? '个人中心' : '登录'))
-
-const canEditTemplate = computed(() => {
-  const editFlag = String(route.query.edit || '').trim()
-  const tempType = Number(route.query.tempType || 0)
-  return editFlag === '1' || tempType === 1
+const isTemplateRoute = computed(() => {
+  const tempId = String(route.query.tempid ?? '').trim()
+  const id = String(route.query.id ?? '').trim()
+  return Boolean(tempId) && !id
 })
-const showTemplateEditActions = computed(() => canEditTemplate.value)
+const isWorkRoute = computed(() => Boolean(String(route.query.id ?? '').trim()))
+const showTemplateEditActions = computed(() => isTemplateRoute.value && tempEditing.value)
+const canEnterTemplateEdit = computed(() => isTemplateRoute.value && !tempEditing.value)
+const showWorkSaveAction = computed(() => isWorkRoute.value)
 
 let currentDownloadPreviewUrl = ''
 let activeDownloadXhr: XMLHttpRequest | null = null
-/** 瀵煎嚭娴佺▼鍙栨秷鏃朵腑姝€屼繚瀛樹綔鍝併€嶈姹?*/
+/** 导出流程取消时中止「保存作品」请求 */
 let activeDownloadSaveAbort: AbortController | null = null
-/** 鍙栨秷鎴栨柊寮€瀵煎嚭鏃堕€掑锛岀敤浜庝涪寮冨崱浣忕殑 createPoster / 鏃ф祦绋嬪 loading 鐨勫啓鍏?*/
+/** 取消或新开导出时递增，用于丢弃卡住的 createPoster / 旧流程对 loading 的写入 */
 let exportGeneration = 0
 const CLIENT_EXPORT_TIMEOUT_MS = 180000
 
@@ -129,7 +131,7 @@ function isRequestCanceledError(e: unknown) {
   return err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || err.message === 'canceled'
 }
 
-/** 涓瀵煎嚭锛氶噴鏀?loading銆佹墦鏂繚瀛樹笌涓嬭浇 XHR銆佹竻绌鸿繘搴︽潯锛堝彇娑堟寜閽笌 v-model 鍚屾閮戒細璧板埌锛?*/
+/** 中止导出：释放 loading、打断保存与下载 XHR、清空进度条（取消按钮与 v-model 同步都会走到） */
 function abortActiveDownload() {
   exportGeneration++
   state.loading = false
@@ -154,6 +156,16 @@ watch(
     abortActiveDownload()
   },
   { flush: 'sync' },
+)
+
+watch(
+  () => [route.query.id, route.query.tempid],
+  () => {
+    if (!isTemplateRoute.value && tempEditing.value) {
+      userStore.managerEdit(false)
+    }
+  },
+  { immediate: true },
 )
 
 function updateDownloadPreview(url: string) {
@@ -225,22 +237,51 @@ function applyLoadedData(content: string, type: string | number | undefined, wid
 }
 
 type TSaveTempOpts = {
-  /** 瀵煎嚭鏃朵紶鍏ワ紝渚夸簬鐢ㄦ埛鐐广€屽彇娑堛€嶄腑姝繚瀛樿姹?*/
+  /** 导出时传入，便于用户点「取消」中止保存请求 */
   signal?: AbortSignal
+  preserveTemplateRoute?: boolean
+}
+
+function getTemplateWorkLinkKey(tempId: string) {
+  return `xp_template_saved_work:${tempId}`
+}
+
+function readLinkedWorkId(tempId: string) {
+  if (!tempId || typeof sessionStorage === 'undefined') return ''
+  return String(sessionStorage.getItem(getTemplateWorkLinkKey(tempId)) || '').trim()
+}
+
+function writeLinkedWorkId(tempId: string, workId: string) {
+  if (!tempId || !workId || typeof sessionStorage === 'undefined') return
+  sessionStorage.setItem(getTemplateWorkLinkKey(tempId), workId)
+}
+
+function isHandledFailureResponse(payload: any) {
+  if (!payload || typeof payload !== 'object') return false
+  if (typeof payload.code === 'number' && payload.code !== 200) return true
+  if (typeof payload.stat === 'number' && payload.stat === 0) return true
+  return false
 }
 
 async function save(opts?: TSaveTempOpts) {
-  const designId = String(route.query.id ?? '').trim()
+  const sourceTempId = String(route.query.tempid ?? '').trim()
+  const currentId = String(route.query.id ?? readLinkedWorkId(sourceTempId) ?? '').trim()
   const signal = opts?.signal
+  const preserveTemplateRoute = Boolean(opts?.preserveTemplateRoute)
   const axiosExtra = signal
     ? { signal, timeout: 120000 as number }
     : {}
+
+  if (!userStore.online) {
+    useNotification('请先登录', '保存海报到我的作品前，请先登录账号。', { type: 'warning' })
+    return null
+  }
 
   try {
     const payload = buildDraftPayload(0)
     const res = await api.home.saveWorks(
       {
-        ...(designId ? { id: designId } : {}),
+        ...(currentId ? { id: currentId } : {}),
         title: payload.title,
         data: payload.data,
         width: payload.width,
@@ -250,28 +291,30 @@ async function save(opts?: TSaveTempOpts) {
       axiosExtra,
     )
 
-    clearLocalDraft()
-    if (res?.stat != 0) {
-      useNotification('保存成功', '刚刚的修改已经保存好了。', { type: 'success' })
+    if (res?.code === 401) {
+      userStore.changeOnline(false)
+      useNotification('请先登录', '保存海报到我的作品前，请先登录账号。', { type: 'warning' })
+      return null
     }
-    const resolvedDesignId = String(res?.id ?? designId ?? '').trim()
-    if (resolvedDesignId) {
-      const next = {
-        ...route.query,
-        id: resolvedDesignId,
-        section: 'mine',
-        userTab: 'design',
-      } as Record<string, string | string[] | undefined>
+    if (isHandledFailureResponse(res)) {
+      useNotification('保存失败', String(res?.msg || '当前暂时无法保存，请稍后再试。'), { type: 'error' })
+      return null
+    }
+
+    clearLocalDraft()
+    const resolvedId = String(res?.id ?? currentId ?? '').trim()
+    if (sourceTempId && resolvedId) {
+      writeLinkedWorkId(sourceTempId, resolvedId)
+    }
+    useNotification('保存成功', '海报已经保存到我的作品。', { type: 'success' })
+    if (resolvedId && !(sourceTempId && preserveTemplateRoute)) {
+      const next = { ...route.query, id: resolvedId } as Record<string, string | string[] | undefined>
       delete next.tempid
       delete next.tempType
       router.replace({ path: route.path, query: next, replace: true })
     }
-    userStore.managerEdit(false)
-    eventBus.emit('refreshUserDesigns', {
-      id: resolvedDesignId,
-    })
-    controlStore.setLeftPanelMode('material')
-    return resolvedDesignId
+    eventBus.emit('refreshUserDesigns', { id: resolvedId })
+    return res
   } catch (error: any) {
     if (isRequestCanceledError(error) || signal?.aborted) {
       throw error
@@ -285,22 +328,22 @@ async function save(opts?: TSaveTempOpts) {
     useNotification(
       '保存失败',
       isNetworkError
-        ? '当前网络连接异常，内容已自动保存到本地草稿，请稍后再试。'
-        : '当前暂时无法保存，请稍后重试。',
+        ? '当前网络连接异常，内容已经自动保存在本机草稿里，请稍后再试。'
+        : '当前暂时无法保存，请稍后再试。',
       { type: 'error' },
     )
+    return null
   }
-
-  return designId
 }
 
 async function saveTemp(opts?: TSaveTempOpts) {
-  if (!canEditTemplate.value) {
-    userStore.managerEdit(false)
-    return
-  }
-  const rawId = route.query.tempid
+  const rawId = route.query.tempid ?? route.query.id
   const designId = rawId != null && String(rawId).trim() !== '' ? String(rawId) : ''
+  if (!designId) return
+  if (!userStore.online) {
+    useNotification('请先登录', '保存海报到我的作品前，请先登录账号。', { type: 'warning' })
+    return null
+  }
 
   const { tempType: type } = route.query
 
@@ -320,9 +363,15 @@ async function saveTemp(opts?: TSaveTempOpts) {
             'text',
         ).trim() || 'text'
       : ''
-  const basePayload = designId ? { id: designId } : {}
 
   try {
+    if (numericType !== 1) {
+      return await save({
+        ...opts,
+        preserveTemplateRoute: true,
+      })
+    }
+
     if (numericType === 1) {
       if (dWidgets.value[0]?.type === 'w-group') {
         const group = dWidgets.value.shift()
@@ -340,7 +389,7 @@ async function saveTemp(opts?: TSaveTempOpts) {
       const payload = buildDraftPayload(numericType)
       res = await api.home.saveTemp(
         {
-          ...basePayload,
+          id: designId,
           type,
           title: payload.title,
           data: payload.data,
@@ -355,7 +404,7 @@ async function saveTemp(opts?: TSaveTempOpts) {
       const payload = buildDraftPayload(numericType)
       res = await api.home.saveTemp(
         {
-          ...basePayload,
+          id: designId,
           title: payload.title,
           data: payload.data,
           width: payload.width,
@@ -366,20 +415,27 @@ async function saveTemp(opts?: TSaveTempOpts) {
       )
     }
 
-    clearLocalDraft()
-    if (res?.stat != 0) {
-      useNotification('保存成功', '刚刚的修改已经保存好了。', { type: 'success' })
+    if (res?.code === 401) {
+      userStore.changeOnline(false)
+      useNotification('请先登录', '保存海报到我的作品前，请先登录账号。', { type: 'warning' })
+      return null
     }
-    const resolvedDesignId = String(res?.id ?? designId ?? '').trim()
-    if (resolvedDesignId) {
-      const next = {
-        ...route.query,
-        tempid: resolvedDesignId,
-      } as Record<string, string | string[] | undefined>
+    if (isHandledFailureResponse(res)) {
+      useNotification('保存失败', String(res?.msg || '当前暂时无法保存，请稍后再试。'), { type: 'error' })
+      return null
+    }
+
+    clearLocalDraft()
+    useNotification('保存成功', numericType === 1 ? '组件已经保存好了。' : '海报已经保存到我的作品。', { type: 'success' })
+    if (res?.id != null && String(res.id) !== designId) {
+      const next = { ...route.query, tempid: String(res.id) } as Record<string, string | string[] | undefined>
       delete next.id
       router.replace({ path: route.path, query: next, replace: true })
     }
-    controlStore.setLeftPanelMode('material')
+    if (numericType !== 1) {
+      eventBus.emit('refreshUserDesigns', { id: String(res?.id ?? designId) })
+    }
+    return res
   } catch (error: any) {
     if (isRequestCanceledError(error) || signal?.aborted) {
       throw error
@@ -393,10 +449,11 @@ async function saveTemp(opts?: TSaveTempOpts) {
     useNotification(
       '保存失败',
       isNetworkError
-        ? '当前网络连接异常，内容已自动保存到本地草稿，请稍后再试。'
-        : '当前暂时无法保存，请稍后重试。',
+        ? '当前网络连接异常，内容已经自动保存在本机草稿里，请稍后再试。'
+        : '当前暂时无法保存，请稍后再试。',
       { type: 'error' },
     )
+    return null
   }
 }
 
@@ -412,7 +469,7 @@ async function stateChange(e: string | number | boolean) {
 
 type TDownloadFormat = 'png' | 'jpg' | 'pdf'
 
-/** 鍓嶇鎴栨湇鍔＄寰楀埌鐨?PNG Blob锛屾寜鎵€閫夋牸寮忚惤鐩?*/
+/** 前端或服务端得到的 PNG Blob，按所选格式落盘 */
 async function persistExportBlob(sourcePng: Blob, fmt: TDownloadFormat, baseName: string): Promise<void> {
   if (fmt === 'png') {
     downloadBlob(sourcePng, `${baseName}.png`)
@@ -432,7 +489,7 @@ async function download(format: string = 'png') {
     if (!hasActiveTask) {
       state.loading = false
     } else {
-      useNotification('正在导出', '当前已有导出任务，请稍后重试。')
+      useNotification('正在导出', '当前已有导出任务，请稍后再试。')
       return
     }
   }
@@ -495,18 +552,21 @@ async function download(format: string = 'png') {
       }
       const blob = result?.blob
       if (!blob || blob.size < 32) {
-        /** 妯℃澘甯稿惈澶栭摼涓诲浘锛宧tml2canvas 鏄撳洜璺ㄥ煙姹℃煋鐢诲竷瀵艰嚧 toBlob 澶辫触锛涙湁 tempid/id 涓旀埅鍥炬湇鍔″彲鐢ㄦ椂鏀硅蛋鏈嶅姟绔鍑?*/
+        /** 模板常含外链主图，html2canvas 易因跨域污染画布导致 toBlob 失败；有 tempid/id 且截图服务可用时改走服务端导出 */
         const canServerFallback =
           Boolean(_config.SCREEN_URL) && (Boolean(route.query.tempid) || Boolean(route.query.id))
         if (canServerFallback) {
           emitDownloadChange({
             downloadPercent: 6,
-            downloadText: '前端导出未完成，正在切换为服务端生成...',
+            downloadText: '前端导出未完成，正在改用服务端生成…',
             downloadImage: '',
           })
-          let savedId = ''
           try {
-            savedId = (await save({ signal: saveAbort.signal })) || ''
+            const saved = await save({ signal: saveAbort.signal })
+            if (!saved) {
+              emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+              return
+            }
           } catch (e: unknown) {
             if (isRequestCanceledError(e) || saveAbort.signal.aborted || !props.modelValue || myGen !== exportGeneration) {
               emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
@@ -514,7 +574,7 @@ async function download(format: string = 'png') {
             }
             useNotification(
               '导出失败',
-              '服务端导出需要先保存到服务器，请确认本机 API(7001) 已启动且网络正常后再试。',
+              '服务端导出需要先保存到服务器，请确认本机 API(7001)已启动且网络正常后再试。',
               { type: 'error' },
             )
             emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
@@ -524,16 +584,15 @@ async function download(format: string = 'png') {
             emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
             return
           }
-          const id = String(route.query.id ?? savedId ?? '')
-          const tempid = String(route.query.tempid ?? '')
+          const { id, tempid } = route.query
           const previewUrl = `${api.home.download({
-            id: id || undefined,
-            tempid: tempid || undefined,
+            id,
+            tempid,
             width: dPage.value.width,
             height: dPage.value.height,
             index: pageStore.dCurrentPage,
           })}&r=${Math.random()}`
-          emitDownloadChange({ downloadPercent: 10, downloadText: '正在服务端生成图片...', downloadImage: previewUrl })
+          emitDownloadChange({ downloadPercent: 10, downloadText: '正在服务端生成图片…', downloadImage: previewUrl })
           try {
             if (fmt === 'png') {
               await _dl.downloadImg(
@@ -550,7 +609,7 @@ async function download(format: string = 'png') {
                   if (progress > 0) {
                     emitDownloadChange({
                       downloadPercent: Math.min(99, Math.max(8, Math.round(progress))),
-                      downloadText: '服务端导出中...',
+                      downloadText: '服务端导出中…',
                       downloadImage: previewUrl,
                     })
                   }
@@ -570,7 +629,7 @@ async function download(format: string = 'png') {
                 if (progress > 0) {
                   emitDownloadChange({
                     downloadPercent: Math.min(99, Math.max(8, Math.round(progress))),
-                      downloadText: '服务端导出中...',
+                    downloadText: '服务端导出中…',
                     downloadImage: previewUrl,
                   })
                 }
@@ -590,7 +649,7 @@ async function download(format: string = 'png') {
             if (props.modelValue && myGen === exportGeneration) {
               useNotification(
                 '导出失败',
-                '服务端导出失败，请确认已运行 npm run serve:bg 或 serve，且 7001 截图服务可用后再试。',
+                '服务端导出失败，请确认已运行 npm run serve:bg（或 serve）且 7001 截图服务可用后再试。',
                 { type: 'error' },
               )
             }
@@ -601,7 +660,7 @@ async function download(format: string = 'png') {
         useNotification(
           '导出失败',
           !blob
-            ? '生成图片超时或已取消，请稍后重试，或点击取消后重新导出。'
+            ? '生成图片超时或已取消，请稍后重试或点击取消后再次导出。'
             : '未能生成图片，请确认画布内容已加载完整后重试。',
           { type: 'error' },
         )
@@ -612,7 +671,7 @@ async function download(format: string = 'png') {
       try {
         await persistExportBlob(blob, fmt, baseName)
         emitDownloadChange({ downloadPercent: 100, downloadText: '导出成功，文件已保存到本地。', downloadImage: previewUrl })
-        // 鎴愬姛鏃朵笉鑳界珛鍒?revoke锛歅rogressLoading 浠嶇敤 imageSrc 寮曠敤璇?blob锛屽惁鍒欐帶鍒跺彴 net::ERR_FILE_NOT_FOUND
+        // 成功时不能立刻 revoke：ProgressLoading 仍用 imageSrc 引用该 blob，否则控制台 net::ERR_FILE_NOT_FOUND
       } catch {
         URL.revokeObjectURL(previewUrl)
         if (props.modelValue && myGen === exportGeneration) {
@@ -624,9 +683,12 @@ async function download(format: string = 'png') {
     }
 
     emitDownloadChange({ downloadPercent: 2, downloadText: '正在保存作品...', downloadImage: '' })
-    let savedId = ''
     try {
-      savedId = (await save({ signal: saveAbort.signal })) || ''
+      const saved = await save({ signal: saveAbort.signal })
+      if (!saved) {
+        emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
+        return
+      }
     } catch (e: unknown) {
       if (isRequestCanceledError(e) || saveAbort.signal.aborted || !props.modelValue || myGen !== exportGeneration) {
         emitDownloadChange({ downloadPercent: 0, downloadText: '', downloadMsg: '', downloadImage: '' })
@@ -640,8 +702,7 @@ async function download(format: string = 'png') {
       return
     }
 
-    const id = String(route.query.id ?? savedId ?? '')
-    const tempid = String(route.query.tempid ?? '')
+    const { id, tempid } = route.query
     if (!id && !tempid) {
       emitDownloadChange({ downloadPercent: 0, downloadText: '请稍候...', downloadImage: '' })
       useNotification('暂时无法导出', '请先打开一个作品或模板后再导出。', { type: 'error' })
@@ -755,11 +816,17 @@ function randomNumber(min: number, max: number) {
   return Math.ceil(Math.random() * (max - min)) + min
 }
 
+async function clearInvalidTemplateRoute() {
+  if (route.query.id || !route.query.tempid) return
+  const next = { ...route.query } as Record<string, string | string[] | undefined>
+  delete next.tempid
+  delete next.tempType
+  await router.replace({ path: route.path, query: next, replace: true })
+  eventBus.emit('refreshTemplates')
+}
+
 async function load(cb: () => void) {
   const { id, tempid: tempId, tempType: type, w_h } = route.query
-  if (!canEditTemplate.value && tempEditing.value) {
-    userStore.managerEdit(false)
-  }
   if (route.name !== 'Draw') {
     await useFontStore.init()
   }
@@ -792,7 +859,7 @@ async function load(cb: () => void) {
       rawCate === undefined || rawCate === null
         ? ''
         : String(Array.isArray(rawCate) ? rawCate[0] ?? '' : rawCate)
-    /** URL 宸插甫鍒嗙被锛堝惈銆屽叏閮ㄣ€峜ate=0锛夋椂锛屽皧閲嶇敤鎴峰綋鍓嶅垪琛紝涓嶈鐢ㄨ鎯呴噷鐨勫垎绫昏鐩?*/
+    /** URL 已带分类（含「全部」cate=0）时，尊重用户当前列表，不要用详情里的分类覆盖 */
     const userChoseCategory = cateFromQuery !== ''
     if (tempId && !id && resolvedCate != null && resolvedCate !== '' && !userChoseCategory) {
       const next = String(resolvedCate)
@@ -813,7 +880,8 @@ async function load(cb: () => void) {
       cb()
       return
     }
-    useNotification('加载失败', '当前暂时无法加载内容，请稍后重试。', { type: 'error' })
+    await clearInvalidTemplateRoute()
+    useNotification('加载失败', '当前暂时无法加载内容，请稍后再试。', { type: 'error' })
     initBoard()
     cb()
   }
@@ -837,7 +905,6 @@ function draw() {
 }
 
 function jump2Edit() {
-  if (!canEditTemplate.value) return
   userStore.managerEdit(true)
 }
 
@@ -850,7 +917,8 @@ function checkDownloadPoster(board: any) {
   let backEndCapture = false
   for (let i = 0; i < layers.length; i++) {
     const { type, mask, textEffects } = layers[i]
-    // Only fall back to backend capture for effects that html2canvas cannot reproduce reliably.
+    // 仅对 html2canvas 难以还原的能力走服务端截图；w-svg / w-qrcode 在 DOM 中可正常克隆导出，
+    // 若一并强制走 Puppeteer，大画布 + 队列易超时，表现为「只有含装饰/二维码的模板」下载失败。
     if ((type === 'w-image' && mask) || (textEffects && textEffects.length > 0)) {
       backEndCapture = true
       break
@@ -877,6 +945,8 @@ defineExpose({
   gap: 10px;
   padding-right: 18px;
   height: 54px;
+  min-width: 0;
+  flex-shrink: 1;
 
   :deep(.el-button) {
     border-radius: 12px;
@@ -906,22 +976,7 @@ defineExpose({
     color: #fff;
   }
 
-  :deep(.save-work-btn.el-button),
-  :deep(.save-work-btn.el-button:hover),
-  :deep(.save-work-btn.el-button:focus) {
-    min-width: 72px;
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    border-color: transparent;
-    color: #fff;
-    font-weight: 700;
-    text-shadow: none;
-  }
-
-  :deep(.save-work-btn.el-button span) {
-    color: #fff;
-  }
-
-  /* 涓庡彸渚с€岀櫥褰曘€嶈兌鍥婃寜閽悓閲忕骇锛氶珮搴︿笌瀛楀彿瀵归綈 */
+  /* 与右侧「登录」胶囊按钮同量级：高度与字号对齐 */
   :deep(.header-download-btn.el-button) {
     min-height: 34px;
     height: 34px;
@@ -944,10 +999,13 @@ defineExpose({
 .top-title {
   color: @color-black;
   flex: 1;
+  min-width: 0;
   padding-left: 18px;
 
   .input-wrap {
-    width: 20rem;
+    width: min(11rem, 100%);
+    max-width: 100%;
+    display: block;
 
     :deep(input) {
       height: 40px;
@@ -1047,4 +1105,3 @@ defineExpose({
   height: 20px;
 }
 </style>
-

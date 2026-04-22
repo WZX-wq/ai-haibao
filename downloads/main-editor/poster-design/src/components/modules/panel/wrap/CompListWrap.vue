@@ -42,7 +42,6 @@
               class="list__img-thumb"
               :src="item.cover"
               fit="contain"
-              lazy
             />
           </div>
         </div>
@@ -107,7 +106,6 @@
             class="list__img"
             :src="item.cover"
             fit="contain"
-            lazy
           />
         </div>
       </el-space>
@@ -170,9 +168,9 @@ const compTextFallbackById: Record<number, string> = {
   6: '\u4eca\u65e5\u4e0a\u65b0',
 }
 const compTextFallbackByRaw: Record<string, string> = {
-  '濂界墿鎺ㄨ崘': '\u597d\u7269\u63a8\u8350',
-  '浠婃棩鎺㈠簵': '\u4eca\u65e5\u63a2\u5e97',
-  '浠婃棩涓婃柊': '\u4eca\u65e5\u4e0a\u65b0',
+  '\u6fc2\u754c\u58bf\u93ba\u3128\u5d18': '\u597d\u7269\u63a8\u8350',
+  '\u6d60\u5a43\u68e9\u93ba\u3220\u7c35': '\u4eca\u65e5\u63a2\u5e97',
+  '\u6d60\u5a43\u68e9\u6d93\u5a43\u67ca': '\u4eca\u65e5\u4e0a\u65b0',
   'm60Z43he9m93Z43gca': '\u4eca\u65e5\u4e0a\u65b0',
 }
 const dragHelper = new DragHelper()

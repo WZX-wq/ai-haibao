@@ -1,19 +1,13 @@
-# 使用远程 MySQL：在 .env 填写 DB_HOST / DB_USERNAME / DB_PASSWORD / DB_NAME（不在此 compose 中起库）
-# 宝塔：docker compose -f docker-compose.yaml up -d --build
-# Dockerfile 使用 BuildKit 缓存 npm（需 Docker 20+ / Compose v2，一般已默认开启；否则 export DOCKER_BUILDKIT=1）
 services:
   api:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
       args:
-        # 国内 Docker Hub 代理前缀（library 镜像），见 DaoCloud 等文档；可在 .env 设 DOCKER_HUB_MIRROR
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.m.daocloud.io}
-        # Debian apt 源主机名（仅用 http）；可在 .env 设 APT_MIRROR_HOST
-        APT_MIRROR_HOST: ${APT_MIRROR_HOST:-mirrors.aliyun.com}
-        # rembg 模型下载代理前缀（解决 GitHub 直连慢/不通）
-        # 可在 .env 配 REMBG_MODEL_MIRROR，例如：https://ghproxy.net/ 或 https://mirror.ghproxy.com/
-        REMBG_MODEL_MIRROR: ${REMBG_MODEL_MIRROR:-https://ghproxy.net/}
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
+        APT_MIRROR_ROOT: ${APT_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian}
+        APT_SECURITY_MIRROR_ROOT: ${APT_SECURITY_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian-security}
     env_file:
       - .env
     environment:
@@ -22,13 +16,8 @@ services:
       FILE_STORAGE_PATH: /app/static/
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_PAGE_BASE_URL: http://web
-      # Persist rembg model cache to avoid repeated downloads
-      XDG_CACHE_HOME: /app/.cache
-      U2NET_HOME: /app/.cache/u2net
-      AI_CUTOUT_PYTHON: python3
     volumes:
       - poster_api_static:/app/static
-      - poster_api_cache:/app/.cache
     restart: unless-stopped
     networks:
       - poster_net
@@ -38,8 +27,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.m.daocloud.io}
-        # 留空则前端走当前站点同源（Nginx 反代 /api、/static）；勿填 127.0.0.1 否则公网访问会被浏览器拦截
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_SCREEN_URL: ${VITE_SCREEN_URL:-}
     ports:
@@ -52,7 +41,6 @@ services:
 
 volumes:
   poster_api_static:
-  poster_api_cache:
 
 networks:
   poster_net:

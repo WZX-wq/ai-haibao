@@ -1,16 +1,24 @@
-# 不使用 # syntax=docker/dockerfile:1，避免部分云镜像站拉取 docker/dockerfile 元数据失败（如腾讯云 500）。
-# 基础镜像走国内 Docker Hub 代理（默认 DaoCloud）；可用 build-arg REGISTRY_PREFIX 覆盖
-ARG REGISTRY_PREFIX=docker.m.daocloud.io
+ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
+ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm AS builder
 WORKDIR /app
 
-ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+ENV npm_config_registry=${NPM_REGISTRY}
+ENV NPM_CONFIG_REPLACE_REGISTRY_HOST=always
+ENV npm_config_replace_registry_host=always
+ENV npm_config_fetch_retries=5
+ENV npm_config_fetch_retry_mintimeout=20000
+ENV npm_config_fetch_retry_maxtimeout=120000
+ENV npm_config_prefer_offline=true
 
 COPY package.json package-lock.json ./
 COPY packages/color-picker/package.json ./packages/color-picker/
 COPY packages/image-extraction/package.json ./packages/image-extraction/
 
-RUN npm ci --registry=https://registry.npmmirror.com --no-audit --no-fund
+RUN npm ci --registry=${NPM_REGISTRY} --prefer-offline --no-audit --no-fund
 
 COPY . .
 
@@ -21,7 +29,7 @@ ENV VITE_SCREEN_URL=$VITE_SCREEN_URL
 
 RUN npm run build
 
-ARG REGISTRY_PREFIX=docker.m.daocloud.io
+ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
 FROM ${REGISTRY_PREFIX}/library/nginx:alpine
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html

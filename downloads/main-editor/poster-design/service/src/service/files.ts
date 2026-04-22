@@ -5,11 +5,9 @@
  * @LastEditors: ShawnPhang <https://m.palxp.cn>
  * @LastEditTime: 2024-08-12 18:52:18
  */
-import path from 'path'
 import { Request } from 'express'
 import { tryResolveSession } from './account'
 import { isMysqlConfigured } from '../utils/mysql'
-import { ensureImageThumbnail } from '../utils/imageThumbnail'
 
 const multiparty = require('multiparty')
 const { filePath } = require('../configs.ts')
@@ -56,22 +54,10 @@ export async function upload(req: Request, res: any) {
     const targetPath = `${folderPath}${name}`
     copyFile(file.path, targetPath)
       .then(() => {
-        const key = `${folder ? `${folder}/` : ''}${name}`
-        const staticBaseUrl = getClientStaticBaseUrl()
-        const url = `${staticBaseUrl}${key}`
-        let thumb = ''
-        try {
-          const thumbPath = ensureImageThumbnail(targetPath)
-          if (thumbPath) {
-            thumb = `${staticBaseUrl}${folder ? `${folder}/` : ''}${path.basename(thumbPath)}`
-          }
-        } catch (error) {
-          console.warn('[upload] thumbnail generation failed', error)
-        }
+        const url = `${getClientStaticBaseUrl()}${folder ? folder + '/' : ''}${name}`
         send.success(res, {
-          key,
+          key: `${folder}/${name}`,
           url,
-          thumb: thumb || undefined,
         })
       })
       .catch((copyError: any) => {

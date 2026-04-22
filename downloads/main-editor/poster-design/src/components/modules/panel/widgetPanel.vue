@@ -115,7 +115,7 @@ const sectionToIndex: Record<string, number> = {
 const indexToSection = ['welcome', 'ai-poster', 'template', 'material', 'text', 'photo', 'toolbox', 'mine']
 
 const ui = {
-  brand: '\u9cb2\u7a79\u8bbe\u8ba1',
+  brand: '\u9cb2\u7a79\u6d77\u62a5',
   language: '\u7b80\u4f53\u4e2d\u6587',
   login: '\u767b\u5f55',
   mine: '\u6211\u7684',
@@ -273,10 +273,10 @@ defineExpose({
     }
 
     .brand-block__text {
-      max-width: 76px;
-      font-size: 10px;
-      line-height: 1.2;
-      font-weight: 700;
+      max-width: 84px;
+      font-size: 13px;
+      line-height: 1.25;
+      font-weight: 800;
       letter-spacing: 0.02em;
       color: #475569;
       text-align: center;

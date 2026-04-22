@@ -24,7 +24,7 @@
       opacity: params.opacity,
       backgroundColor: params.backgroundColor,
       writingMode: params.writingMode,
-      fontFamily: `'${params.fontClass.value}'`,
+      fontFamily: resolvedFontFamily,
     }"
     @dblclick="(e) => dblclickText(e)"
   >
@@ -35,7 +35,7 @@
         v-for="(ef, efi) in params.textEffects"
         :key="efi + 'effect'"
         :style="{
-          fontFamily: `'${params.fontClass.value}'`,
+          fontFamily: resolvedFontFamily,
           color: ef.filling && ef.filling.enable && ef.filling.type === 0 ? ef.filling.color : 'transparent',
           WebkitTextStroke: ef.stroke && ef.stroke.enable ? `${ef.stroke.width}px ${ef.stroke.color}` : undefined,
           textShadow: ef.shadow && ef.shadow.enable ? `${ef.shadow.offsetX}px ${ef.shadow.offsetY}px ${ef.shadow.blur}px ${ef.shadow.color}` : undefined,
@@ -51,7 +51,7 @@
     <div
       ref="editWrap"
       v-show="state.editable || !params.textEffects?.length"
-      :style="{ fontFamily: `'${params.fontClass.value}'` }"
+      :style="{ fontFamily: resolvedFontFamily }"
       class="edit-text"
       spellcheck="false"
       :contenteditable="state.editable ? 'plaintext-only' : false"
@@ -68,6 +68,7 @@
 
 import { reactive, toRefs, computed, onUpdated, watch, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { buildWidgetFontFamily } from '@/utils/fontFamily'
 import { fontMinWithDraw } from '@/utils/widgets/loadFontRule'
 import getGradientOrImg from './getGradientOrImg'
 import { wTextSetting } from './wTextSetting'
@@ -100,9 +101,64 @@ const state = reactive({
 })
 const widget = ref<HTMLElement | null>(null)
 const editWrap = ref<HTMLElement | null>(null)
+const fontLoadCache = new Map<string, Promise<void>>()
+const skippedFontCache = new Set<string>()
+const failedFontCache = new Set<string>()
 
 const dActiveElement = computed(() => widgetStore.dActiveElement)
 const isDraw = computed(() => route.name === 'Draw')
+const resolvedFontFamily = computed(() => buildWidgetFontFamily(props.params.fontClass?.value, props.params.fontFamily))
+
+function buildFontLoadKey(font: any) {
+  return `${String(font?.value || '')}::${String(font?.url || '')}`
+}
+
+function shouldSkipSlowRemoteFont(font: any) {
+  const url = String(font?.url || '').trim()
+  if (!/^https?:\/\//i.test(url)) return false
+  const connection = (navigator as any)?.connection
+  const effectiveType = String(connection?.effectiveType || '').toLowerCase()
+  return Boolean(connection?.saveData) || effectiveType === 'slow-2g' || effectiveType === '2g'
+}
+
+async function ensureFontLoaded(font: any) {
+  const loadKey = buildFontLoadKey(font)
+  if (!font?.url || skippedFontCache.has(loadKey) || failedFontCache.has(loadKey)) return
+
+  if (shouldSkipSlowRemoteFont(font)) {
+    skippedFontCache.add(loadKey)
+    return
+  }
+
+  const cachedTask = fontLoadCache.get(loadKey)
+  if (cachedTask) {
+    await cachedTask
+    return
+  }
+
+  const task = (async () => {
+    try {
+      const loadFont = new window.FontFace(font.value, `url(${font.url})`, {
+        display: 'swap',
+      })
+      await Promise.race([
+        loadFont.load().then(() => {
+          document.fonts.add(loadFont)
+        }),
+        new Promise((_, reject) => {
+          window.setTimeout(() => reject(new Error('font-load-timeout')), 4000)
+        }),
+      ])
+    } catch {
+      failedFontCache.add(loadKey)
+    } finally {
+      fontLoadCache.delete(loadKey)
+    }
+  })()
+
+  fontLoadCache.set(loadKey, task)
+  await task
+}
 
 onUpdated(() => {
   updateRecord()
@@ -125,7 +181,8 @@ watch(
       return
     }
     let font = nval.fontClass
-    const isDone = font.value === state.loadFontDone
+    const loadKey = buildFontLoadKey(font)
+    const isDone = loadKey === state.loadFontDone
 
     if (font.url && !isDone) {
       if (font.id && isDraw.value) {
@@ -134,11 +191,9 @@ watch(
       if (fontMinWithDraw) {
         return
       }
-      state.loading = !isDraw.value
-      const loadFont = new window.FontFace(font.value, `url(${font.url})`)
-      await loadFont.load()
-      document.fonts.add(loadFont)
-      state.loadFontDone = font.value
+      state.loading = !isDraw.value && !shouldSkipSlowRemoteFont(font)
+      await ensureFontLoaded(font)
+      state.loadFontDone = loadKey
       state.loading = false
     } else {
       state.loading = false

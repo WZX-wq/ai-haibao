@@ -36,6 +36,7 @@ import imgWaterFall from './components/imgWaterFall.vue'
 import { IGetTempListData } from '@/api/home'
 import { useControlStore, useCanvasStore, useUserStore, useHistoryStore, useWidgetStore, useForceStore } from '@/store'
 import { storeToRefs } from 'pinia'
+import eventBus from '@/utils/plugins/eventBus'
 
 type TState = {
   loading: boolean
@@ -196,6 +197,19 @@ function waitLoadingEnd(maxMs = 12000): Promise<void> {
   })
 }
 
+async function clearInvalidTemplateSelection(tid?: number | null) {
+  const currentTid = activeTempId.value
+  if (currentTid == null) return
+  if (tid != null && currentTid !== tid) return
+  const next = { ...route.query } as Record<string, string | string[] | undefined>
+  delete next.tempid
+  delete next.tempType
+  await router.replace({
+    path: '/home',
+    query: next,
+  })
+}
+
 async function syncSidebarToActiveTempId() {
   const tid = activeTempId.value
   if (tid == null) return
@@ -226,7 +240,9 @@ async function syncSidebarToActiveTempId() {
       const row = buildPinnedListItem(tid, detail, { force: 1, bust: true })
       state.list = normalizeAndDedupeTemplateList([row, ...state.list.filter((x) => normalizeTemplateId(x.id) !== tid)])
     } catch {
-      /* ignore */
+      await clearInvalidTemplateSelection(tid)
+      state.list = normalizeAndDedupeTemplateList(state.list.filter((x) => normalizeTemplateId(x.id) !== tid))
+      return
     }
   } else {
     await upsertListRowFromDetail(tid, true)
@@ -262,6 +278,13 @@ onMounted(() => {
   if (activeTempId.value != null) {
     scheduleSyncSidebar()
   }
+})
+
+eventBus.on('refreshTemplates', () => {
+  state.list = []
+  pageOptions.page = 0
+  state.loadDone = false
+  void load(true, pageOptions.state)
 })
 
 function mergeUniqueTemplates(current: IGetTempListData[], incoming: IGetTempListData[]) {
@@ -390,48 +413,6 @@ function parseTemplatePayload(payload: any) {
   return null
 }
 
-function buildTemplateSearchKeywords(item: IGetTempListData) {
-  const fullTitle = String(item.title || '').trim()
-  const normalized = fullTitle.replace(/^示例模板\s*-\s*/u, '').trim()
-  return [fullTitle, normalized].filter((value, index, arr) => value && arr.indexOf(value) === index)
-}
-
-async function tryResolveLiveTemplateId(item: IGetTempListData) {
-  const keywords = buildTemplateSearchKeywords(item)
-  for (const keyword of keywords) {
-    try {
-      const res = await api.home.getTempList({
-        search: keyword,
-        page: 1,
-        pageSize: 200,
-        cate: 0,
-      })
-      const list = Array.isArray(res?.list) ? res.list : []
-      const exact =
-        list.find((candidate) => String(candidate.title || '').trim() === String(item.title || '').trim()) ||
-        list.find((candidate) => String(candidate.title || '').includes(keyword))
-      if (exact?.id != null) {
-        return exact
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return null
-}
-
-async function getRenderableTemplateDetail(item: IGetTempListData) {
-  try {
-    const detail = (await api.home.getTempDetail({ id: item.id })) as Record<string, unknown>
-    return { detail, resolvedItem: item }
-  } catch {
-    const resolvedItem = await tryResolveLiveTemplateId(item)
-    if (!resolvedItem) throw new Error('template not found')
-    const detail = (await api.home.getTempDetail({ id: resolvedItem.id })) as Record<string, unknown>
-    return { detail, resolvedItem }
-  }
-}
-
 async function selectItem(item: IGetTempListData) {
   controlStore.setShowMoveable(false)
   if (!hideReplacePrompt && dHistoryParams.value.length > 0) {
@@ -447,15 +428,12 @@ async function selectItem(item: IGetTempListData) {
     }
   }
   userStore.managerEdit(false)
-  widgetStore.setDWidgets([])
 
   let result = null
-  let activeItem = item
   try {
     if (!item.data) {
-      const { detail, resolvedItem } = await getRenderableTemplateDetail(item)
-      activeItem = resolvedItem
-      result = parseTemplatePayload((detail as any)?.data ?? detail)
+      const res = await api.home.getTempDetail({ id: item.id })
+      result = parseTemplatePayload((res as any)?.data ?? res)
     } else {
       result = parseTemplatePayload(item.data)
     }
@@ -464,23 +442,22 @@ async function selectItem(item: IGetTempListData) {
       detailLoadNotified = true
       useNotification('模板打开失败', '这个模板暂时无法打开，请稍后再试。', { type: 'error' })
     }
+    await clearInvalidTemplateSelection(normalizeTemplateId(item.id))
+    state.list = normalizeAndDedupeTemplateList(state.list.filter((x) => normalizeTemplateId(x.id) !== normalizeTemplateId(item.id)))
     return
-  }
-
-  setTempId(activeItem.id)
-  if (activeItem.id !== item.id) {
-    const idx = state.list.findIndex((x) => normalizeTemplateId(x.id) === normalizeTemplateId(item.id))
-    if (idx >= 0) {
-      state.list.splice(idx, 1, { ...state.list[idx], ...activeItem, id: Number(activeItem.id) })
-    }
   }
 
   result = deepNormalizeLoopbackMediaUrls(result)
 
   if (!isRenderableTemplateData(result)) {
     useNotification('模板暂不可用', '这个模板内容不完整，暂时无法使用。', { type: 'warning' })
+    await clearInvalidTemplateSelection(normalizeTemplateId(item.id))
+    state.list = normalizeAndDedupeTemplateList(state.list.filter((x) => normalizeTemplateId(x.id) !== normalizeTemplateId(item.id)))
     return
   }
+
+  widgetStore.setDWidgets([])
+  setTempId(item.id)
 
   if (Array.isArray(result)) {
     const first = result[0]

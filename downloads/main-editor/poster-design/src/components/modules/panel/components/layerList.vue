@@ -19,8 +19,8 @@
         <li :class="['widget', { active: getIsActive(element.uuid), disable: !showItem(element) }, 'item-one']" @click="selectLayer(element)" @mouseover="hoverLayer(element)" @mouseout="hoverLayer('-1')">
           <!-- <span v-show="+element.parent !== -1" :class="['widget-type icon', `sd-xiaji`]"></span> -->
           <span v-show="+element.parent !== -1" class="second-layer"></span>
-          <img v-if="element.imgUrl" class="widget-type widget-type__img" :src="element.imgUrl" />
-          <img v-else-if="element.svgUrl" class="widget-type widget-type__img" :src="element.svgUrl" />
+          <img v-if="element.imgUrl" class="widget-type widget-type__img" :src="getLayerPreviewSrc(element.imgUrl)" />
+          <img v-else-if="element.svgUrl" class="widget-type widget-type__img" :src="getLayerPreviewSrc(element.svgUrl)" />
           <span v-else :class="['widget-type icon', `sd-${element.type}`, element.type]"></span>
           <span :class="['widget-name', 'line-clamp-1', `${element.type}`]">{{ getLayerLabel(element) }} {{ element.mask ? '(容器)' : '' }}</span>
           <div class="widget-out" :data-type="element.type" :data-uuid="element.uuid">
@@ -43,6 +43,7 @@ import { useWidgetStore } from '@/store'
 import { TdWidgetData } from '@/store/design/widget'
 import { defineComponent, computed, reactive, ref, toRefs } from 'vue'
 import { decodeTextIfNeeded, repairKnownMojibake } from '@/utils/decodeText'
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 import draggable from 'vuedraggable'
 
@@ -110,6 +111,8 @@ export default defineComponent({
       return repairKnownMojibake(item.name)
     }
 
+    const getLayerPreviewSrc = (value: string) => normalizeLoopbackMediaUrl(value)
+
     const getIsActive = (uuid: string) => {
       if (widgetStore.dSelectWidgets.length > 0) {
         let widget = widgetStore.dSelectWidgets.find((item) => item.uuid === uuid)
@@ -161,7 +164,7 @@ export default defineComponent({
       // item.lock = typeof item.lock === 'undefined' ? true : !item.lock
     }
 
-    return { lockLayer, onDone, onMove, selectLayer, hoverLayer, widgets, getWidgets, getIsActive, getLayerLabel, ...toRefs(state), dragOptions, showItem }
+    return { lockLayer, onDone, onMove, selectLayer, hoverLayer, widgets, getWidgets, getIsActive, getLayerLabel, getLayerPreviewSrc, ...toRefs(state), dragOptions, showItem }
   },
   watch: {
     data: {

@@ -13,7 +13,7 @@
       <template v-slot="{ index }">
         <div class="list-wrap">
           <div v-for="(item, i) in state.showList[index]" :key="i + 'sl'" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" lazy />
+            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" />
           </div>
         </div>
       </template>
@@ -23,7 +23,7 @@
       <classHeader :is-back="true" @back="back">{{ state.currentCategory.name }}</classHeader>
       <el-space fill wrap :fillRatio="30" direction="horizontal" class="list">
         <div v-for="(item, i) in state.list" :key="i + 'i'" class="list__item" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-          <el-image class="list__img" :src="item.thumb" fit="contain" lazy />
+          <el-image class="list__img" :src="item.thumb" fit="contain" />
         </div>
       </el-space>
       <div v-show="state.loading" class="loading"><i class="el-icon-loading" /> 加载中...</div>

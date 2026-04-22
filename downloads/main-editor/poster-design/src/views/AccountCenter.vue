@@ -19,7 +19,7 @@
   <!-- 已登录：侧栏 + 主区（对齐 account-center-optimized.html） -->
   <div v-else class="ac-page">
     <aside class="ac-sidebar" aria-label="账户导航">
-      <router-link to="/welcome" class="ac-sidebar-logo">鲲穹设计</router-link>
+      <router-link to="/welcome" class="ac-sidebar-logo">鲲穹海报</router-link>
       <div class="ac-sidebar-avatar" :title="displayUser.name || '用户'">
         <img v-if="displayUser.avatar" :src="displayUser.avatar" alt="" />
         <span v-else>{{ userInitial }}</span>

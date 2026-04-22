@@ -9,6 +9,7 @@ const isDev = process.env.NODE_ENV === 'development'
 const puppeteer = require('puppeteer')
 const images = require('images')
 const { executablePath, releaseTime } = require('../configs.ts')
+import { ensureScreenshotFonts } from './screenshot-font'
 const forceTimeOut = 60 // 强制超时时间，单位：秒
 let browser: typeof puppeteer = null
 let release: any = null
@@ -43,6 +44,7 @@ export const saveScreenshot = async (url: string, { path, width, height, thumbPa
     if (!prevent) {
       page.on('load', async () => {
         clearTimeout(regulators)
+        await ensureScreenshotFonts(page)
         await autoScroll(page)
         await sleep(wait)
         // await waitTillHTMLRendered(page)
@@ -55,6 +57,7 @@ export const saveScreenshot = async (url: string, { path, width, height, thumbPa
       // 主动模式下注入全局方法
       await page.exposeFunction('loadFinishToInject', async () => {
         clearTimeout(regulators)
+        await ensureScreenshotFonts(page)
         await page.screenshot({ path, omitBackground: true })
         await page.close()
         thumbPath && compress()

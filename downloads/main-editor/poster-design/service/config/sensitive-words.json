@@ -1,0 +1,31 @@
+{
+  "allowlistPaths": ["sourceImageUrl", "baseImageUrl", "qrUrl"],
+  "keywords": [
+    { "keyword": "台独", "level": "block" },
+    { "keyword": "港独", "level": "block" },
+    { "keyword": "藏独", "level": "block" },
+    { "keyword": "疆独", "level": "block" },
+    { "keyword": "法轮功", "level": "block" },
+    { "keyword": "六四", "level": "block" },
+    { "keyword": "色情", "level": "block" },
+    { "keyword": "约炮", "level": "block" },
+    { "keyword": "毒品", "level": "block" },
+    { "keyword": "赌博", "level": "block" },
+    { "keyword": "博彩", "level": "block" },
+    { "keyword": "枪支", "level": "block" },
+    { "keyword": "洗钱", "level": "block" },
+    { "keyword": "刷单", "level": "review" },
+    { "keyword": "跑分", "level": "review" },
+    { "keyword": "套现", "level": "review" }
+  ],
+  "regexRules": [
+    { "keyword": "台独", "regex": "台\\\\W*独", "flags": "i", "level": "block" },
+    { "keyword": "港独", "regex": "港\\\\W*独", "flags": "i", "level": "block" },
+    { "keyword": "法轮功", "regex": "法\\\\W*轮\\\\W*功", "flags": "i", "level": "block" },
+    { "keyword": "六四", "regex": "六\\\\W*四", "flags": "i", "level": "block" },
+    { "keyword": "约炮", "regex": "约\\\\W*炮", "flags": "i", "level": "block" },
+    { "keyword": "赌博", "regex": "赌\\\\W*博", "flags": "i", "level": "block" },
+    { "keyword": "毒品", "regex": "毒\\\\W*品", "flags": "i", "level": "block" },
+    { "keyword": "刷单", "regex": "刷\\\\W*单", "flags": "i", "level": "review" }
+  ]
+}
