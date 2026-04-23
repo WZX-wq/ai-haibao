@@ -84,6 +84,7 @@ async function saveWorkToMysql(req: any, res: any) {
   const width = Number(req.body.width) || 0
   const height = Number(req.body.height) || 0
   const cate = Number(req.body.cate || 0) || 0
+  const tempId = String(req.body.temp_id || '').trim()
 
   if (id) {
     const [ownRows] = await db.query(
@@ -95,20 +96,40 @@ async function saveWorkToMysql(req: any, res: any) {
       id = String(ownedList[0].id)
       await db.query(
         `UPDATE user_designs
-         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, updated_at = NOW()
+         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, source_template_id = COALESCE(?, source_template_id), updated_at = NOW()
          WHERE id = ? AND user_id = ? AND design_type = 0`,
-        [title, width, height, cate, dataJson, id, userId],
+        [title, width, height, cate, dataJson, tempId || null, id, userId],
       )
     } else {
       id = ''
     }
   }
 
+  if (!id && tempId) {
+    const [existingRows] = await db.query(
+      `SELECT id FROM user_designs
+       WHERE user_id = ? AND design_type = 0 AND source_template_id = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [userId, tempId],
+    )
+    const existingList = existingRows as { id: number | string }[]
+    if (existingList?.length) {
+      id = String(existingList[0].id)
+      await db.query(
+        `UPDATE user_designs
+         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, source_template_id = ?, updated_at = NOW()
+         WHERE id = ? AND user_id = ? AND design_type = 0`,
+        [title, width, height, cate, dataJson, tempId, id, userId],
+      )
+    }
+  }
+
   if (!id) {
     const [ins] = await db.query(
-      `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
-       VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
-      [userId, title, width, height, cate, dataJson],
+      `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, source_template_id, state, data_json)
+       VALUES (?, 0, ?, ?, ?, ?, ?, 1, ?)`,
+      [userId, title, width, height, cate, tempId || null, dataJson],
     )
     id = String((ins as { insertId?: number | string }).insertId ?? '')
   }
@@ -833,6 +854,15 @@ export async function saveWork(req: any, res: any) {
     const width = Number(req.body.width) || 0
     const height = Number(req.body.height) || 0
     const cate = Number(req.body.cate || 0) || 0
+    let tempId = String(req.body.temp_id || '').trim()
+
+    if (!id && tempId) {
+      const list = getMockPosterList()
+      const existing = list.find((item: any) => String(item.temp_id || '').trim() === tempId)
+      if (existing?.id) {
+        id = String(existing.id)
+      }
+    }
 
     const isAdd = !id
     if (!id) {
@@ -840,7 +870,11 @@ export async function saveWork(req: any, res: any) {
     }
 
     const detailPath = getSavedWorkPath(id)
-    const detailPayload = { id, data, title, width, height, cate }
+    if (!tempId && fs.existsSync(detailPath)) {
+      const existingDetail = readJsonIfExists(detailPath, null)
+      tempId = String(existingDetail?.temp_id || '').trim()
+    }
+    const detailPayload = { id, data, title, width, height, cate, temp_id: tempId || '' }
     writeJsonFile(detailPath, detailPayload)
 
     const size = width > height ? 640 : 320
@@ -861,6 +895,7 @@ export async function saveWork(req: any, res: any) {
       width,
       height,
       cate,
+      temp_id: tempId || '',
       state: 1,
       isDelect: false,
       fail: false,

@@ -282,6 +282,7 @@ async function save(opts?: TSaveTempOpts) {
     const res = await api.home.saveWorks(
       {
         ...(currentId ? { id: currentId } : {}),
+        ...(sourceTempId ? { temp_id: sourceTempId } : {}),
         title: payload.title,
         data: payload.data,
         width: payload.width,

@@ -92,7 +92,7 @@ import _config from '../config'
 import {
   computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, Ref, watch,
 } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import RightClickMenu from '@/components/business/right-click-menu/RcMenu.vue'
@@ -116,6 +116,7 @@ import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 
 useHistory()
 const route = useRoute()
+const router = useRouter()
 
 const pageDesignIndex = ref<HTMLElement | null>(null)
 const ref2 = ref<any>()
@@ -223,6 +224,38 @@ function loadData() {
   })
 }
 
+async function normalizeWelcomeRoute() {
+  if (!isWelcomeMode.value) return
+  const nextQuery = { ...route.query } as Record<string, string | string[] | undefined>
+  let changed = false
+  const removableKeys = [
+    'id',
+    'tempid',
+    'tempType',
+    'cate',
+    'aiTheme',
+    'aiPrompt',
+    'aiAutoGenerate',
+    'aiPurpose',
+    'aiIndustry',
+    'aiStyle',
+    'aiSizeKey',
+    'aiQrUrl',
+    'aiContent',
+    'preset',
+  ]
+
+  removableKeys.forEach((key) => {
+    if (key in nextQuery) {
+      delete nextQuery[key]
+      changed = true
+    }
+  })
+
+  if (!changed) return
+  await router.replace({ path: '/home', query: nextQuery, replace: true })
+}
+
 async function forcePosterZoom(value: number) {
   const apply = () => {
     zoomControlRef.value?.setZoomValue?.(value)
@@ -322,10 +355,13 @@ watch(
 watch(
   () => isWelcomeMode.value,
   (welcome) => {
-    if (!welcome) {
-      void nextTick(() => loadData())
+    if (welcome) {
+      void normalizeWelcomeRoute()
+      return
     }
+    void nextTick(() => loadData())
   },
+  { immediate: true },
 )
 
 onBeforeUnmount(() => {

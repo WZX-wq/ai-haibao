@@ -162,6 +162,16 @@ function setPanelMode(mode: 'material' | 'setting') {
 
 function clickClassify(index: number) {
   const section = indexToSection[index] || 'welcome'
+  if (section === 'welcome') {
+    void router.replace({
+      path: '/home',
+      query: {
+        section: 'welcome',
+      },
+    })
+    applySection(section)
+    return
+  }
   const nextQuery = { ...route.query, section } as Record<string, string>
   if (section !== 'ai-poster') {
     delete nextQuery.aiAutoGenerate
