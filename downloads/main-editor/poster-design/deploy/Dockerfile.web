@@ -1,10 +1,10 @@
-ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG REGISTRY_PREFIX=docker.m.daocloud.io
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm AS builder
 WORKDIR /app
 
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
 ENV npm_config_registry=${NPM_REGISTRY}
 ENV NPM_CONFIG_REPLACE_REGISTRY_HOST=always
@@ -29,7 +29,7 @@ ENV VITE_SCREEN_URL=$VITE_SCREEN_URL
 
 RUN npm run build
 
-ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
+ARG REGISTRY_PREFIX=docker.m.daocloud.io
 FROM ${REGISTRY_PREFIX}/library/nginx:alpine
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html

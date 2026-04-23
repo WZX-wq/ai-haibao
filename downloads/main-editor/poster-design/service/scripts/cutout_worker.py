@@ -2,7 +2,18 @@ import io
 import json
 import os
 import sys
+from urllib.parse import urlparse
 from PIL import Image
+
+
+MIRROR_HOST_ALLOWLIST = {
+    "github.com",
+    "raw.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+    "objects.githubusercontent.com",
+    "media.githubusercontent.com",
+    "huggingface.co",
+}
 
 
 def print_result(payload):
@@ -14,6 +25,35 @@ def ensure_parent(target_path):
     parent = os.path.dirname(target_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+
+
+def build_mirrored_url(raw_url):
+    mirror_prefix = os.getenv("REMBG_MODEL_MIRROR", "").strip()
+    if not mirror_prefix or not isinstance(raw_url, str):
+        return raw_url
+    if not raw_url.startswith(("http://", "https://")):
+        return raw_url
+    parsed = urlparse(raw_url)
+    if parsed.netloc not in MIRROR_HOST_ALLOWLIST:
+        return raw_url
+    return f"{mirror_prefix.rstrip('/')}/{raw_url}"
+
+
+def enable_model_mirror():
+    mirror_prefix = os.getenv("REMBG_MODEL_MIRROR", "").strip()
+    if not mirror_prefix:
+        return
+    try:
+        import requests
+    except Exception:
+        return
+
+    original_request = requests.sessions.Session.request
+
+    def mirrored_request(self, method, url, *args, **kwargs):
+        return original_request(self, method, build_mirrored_url(url), *args, **kwargs)
+
+    requests.sessions.Session.request = mirrored_request
 
 
 def inspect_image(input_path):
@@ -32,6 +72,10 @@ def inspect_image(input_path):
 
 
 def run_rembg(input_path, output_path, model_name="u2net"):
+    u2net_home = os.getenv("U2NET_HOME", "").strip()
+    if u2net_home:
+        os.makedirs(u2net_home, exist_ok=True)
+    enable_model_mirror()
     from rembg import new_session, remove
 
     ensure_parent(output_path)

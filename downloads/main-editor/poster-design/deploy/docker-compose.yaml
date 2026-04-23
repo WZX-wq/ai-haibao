@@ -4,10 +4,13 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.api
       args:
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
-        APT_MIRROR_ROOT: ${APT_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian}
-        APT_SECURITY_MIRROR_ROOT: ${APT_SECURITY_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian-security}
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.m.daocloud.io}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        APT_MIRROR_HOST: ${APT_MIRROR_HOST:-mirrors.aliyun.com}
+        APT_MIRROR_ROOT: ${APT_MIRROR_ROOT:-}
+        APT_SECURITY_MIRROR_ROOT: ${APT_SECURITY_MIRROR_ROOT:-}
     env_file:
       - .env
     environment:
@@ -16,8 +19,12 @@ services:
       FILE_STORAGE_PATH: /app/static/
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_PAGE_BASE_URL: http://web
+      U2NET_HOME: /app/.u2net
+      REMBG_MODEL_MIRROR: ${REMBG_MODEL_MIRROR:-https://ghproxy.net/}
+      AI_CUTOUT_PYTHON: ${AI_CUTOUT_PYTHON:-python3}
     volumes:
       - poster_api_static:/app/static
+      - poster_api_models:/app/.u2net
     restart: unless-stopped
     networks:
       - poster_net
@@ -27,8 +34,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.m.daocloud.io}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_SCREEN_URL: ${VITE_SCREEN_URL:-}
     ports:
@@ -41,6 +48,7 @@ services:
 
 volumes:
   poster_api_static:
+  poster_api_models:
 
 networks:
   poster_net:

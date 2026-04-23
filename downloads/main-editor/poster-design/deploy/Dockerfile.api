@@ -1,10 +1,10 @@
-ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG REGISTRY_PREFIX=docker.m.daocloud.io
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm AS builder
 WORKDIR /build
 
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
 ENV npm_config_registry=${NPM_REGISTRY}
 ENV NPM_CONFIG_REPLACE_REGISTRY_HOST=always
@@ -21,29 +21,38 @@ RUN npm ci --registry=${NPM_REGISTRY} --prefer-offline --no-audit --no-fund
 COPY service/ ./
 RUN npm run build
 
-ARG REGISTRY_PREFIX=mirror.ccs.tencentyun.com
+ARG REGISTRY_PREFIX=docker.m.daocloud.io
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm-slim
 
-ARG APT_MIRROR_ROOT=http://mirrors.cloud.tencent.com/debian
-ARG APT_SECURITY_MIRROR_ROOT=http://mirrors.cloud.tencent.com/debian-security
+ARG APT_MIRROR_HOST=mirrors.aliyun.com
+ARG APT_MIRROR_ROOT=
+ARG APT_SECURITY_MIRROR_ROOT=
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 RUN set -eux; \
+  mirror_root="${APT_MIRROR_ROOT:-}"; \
+  security_root="${APT_SECURITY_MIRROR_ROOT:-}"; \
+  if [ -z "$mirror_root" ]; then mirror_root="http://${APT_MIRROR_HOST}/debian"; fi; \
+  if [ -z "$security_root" ]; then security_root="http://${APT_MIRROR_HOST}/debian-security"; fi; \
   for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
     [ -f "$f" ] || continue; \
-    sed -i "s|http://deb.debian.org/debian|${APT_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|https://deb.debian.org/debian|${APT_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|http://security.debian.org/debian-security|${APT_SECURITY_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|https://security.debian.org/debian-security|${APT_SECURITY_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|http://deb.debian.org|${APT_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|https://deb.debian.org|${APT_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|http://security.debian.org|${APT_SECURITY_MIRROR_ROOT}|g" "$f"; \
-    sed -i "s|https://security.debian.org|${APT_SECURITY_MIRROR_ROOT}|g" "$f"; \
-  done
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+    sed -i "s|http://deb.debian.org/debian|${mirror_root}|g" "$f"; \
+    sed -i "s|https://deb.debian.org/debian|${mirror_root}|g" "$f"; \
+    sed -i "s|http://security.debian.org/debian-security|${security_root}|g" "$f"; \
+    sed -i "s|https://security.debian.org/debian-security|${security_root}|g" "$f"; \
+    sed -i "s|http://deb.debian.org|${mirror_root}|g" "$f"; \
+    sed -i "s|https://deb.debian.org|${mirror_root}|g" "$f"; \
+    sed -i "s|http://security.debian.org|${security_root}|g" "$f"; \
+    sed -i "s|https://security.debian.org|${security_root}|g" "$f"; \
+  done; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
     chromium \
     ca-certificates \
+    curl \
+    fontconfig \
     fonts-liberation \
+    fonts-noto-cjk \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -63,21 +72,33 @@ RUN apt-get update \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
-  && rm -rf /var/lib/apt/lists/*
+    python3 \
+    python3-pip \
+    python3-venv; \
+  python3 -m venv /opt/cutout-venv; \
+  /opt/cutout-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}"; \
+  /opt/cutout-venv/bin/pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" \
+    pillow \
+    onnxruntime==1.18.1 \
+    rembg==2.0.66; \
+  rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
+ENV PATH=/opt/cutout-venv/bin:${PATH}
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
+ENV U2NET_HOME=/app/.u2net
 
 WORKDIR /app
 COPY --from=builder /build/dist ./dist
 COPY --from=builder /build/node_modules ./node_modules
 COPY service/package.json ./
+COPY service/scripts ./scripts
 COPY service/src/mock ./src/mock
 COPY public ./public
 
 RUN ln -sfn /app/src/mock /app/mock
-RUN mkdir -p static
+RUN mkdir -p static /app/.u2net
 
 EXPOSE 7001
 CMD ["node", "dist/server.js"]
