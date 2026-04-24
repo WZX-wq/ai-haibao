@@ -36,6 +36,7 @@ export default {
   KUNBI_USER_ALL_INFO: '/kunbi/user-all-info',
   KUNBI_RECHARGE_INFO: '/kunbi/recharge-info',
   KUNBI_CREATE_ORDER: '/kunbi/create-order',
+  KUNBI_ALIPAY_PAGE: '/kunbi/alipay-page',
   KUNBI_ORDER_PAY_STATUS: '/kunbi/order-pay-status',
   KUNBI_RECHARGE_RECORD: '/kunbi/recharge-record',
   KUNBI_DETAIL_RECORD: '/kunbi/detail-record',

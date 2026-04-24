@@ -745,25 +745,11 @@ async function startRechargePolling(orderSn: string) {
   }, 3000)
 }
 
-function submitPayHtmlInCurrentTab(html: string) {
-  const container = document.createElement('div')
-  container.style.display = 'none'
-  container.innerHTML = html
-  const form = container.querySelector('form') as HTMLFormElement | null
-  if (form) {
-    form.setAttribute('target', '_self')
-    document.body.appendChild(container)
-    form.submit()
-    return true
-  }
-  return false
-}
-
 function openPayTarget(target: string) {
   const url = String(target || '').trim()
   if (!url) return false
   if (/^data:image\//i.test(url)) return false
-  window.location.href = url
+  window.location.assign(url)
   return true
 }
 
@@ -785,9 +771,7 @@ function tryHandlePayData(payData: unknown) {
   if (typeof payData === 'string') {
     const trimmed = payData.trim()
     if (!trimmed) return false
-    if (trimmed.startsWith('<form') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
-      return submitPayHtmlInCurrentTab(trimmed)
-    }
+    if (trimmed.startsWith('<form') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) return false
     return openPayTarget(trimmed)
   }
 
@@ -795,21 +779,6 @@ function tryHandlePayData(payData: unknown) {
   const data = payData as Record<string, any>
   if (tryHandleWechatPay(data)) {
     return true
-  }
-  const htmlKeys = ['alipaysubmit_html', 'form_html', 'html', 'form']
-  for (const key of htmlKeys) {
-    const html = String(data[key] || '').trim()
-    if (html) {
-      return submitPayHtmlInCurrentTab(html)
-    }
-  }
-
-  for (const [key, value] of Object.entries(data)) {
-    const text = String(value || '').trim()
-    if (!text) continue
-    if ((key.toLowerCase().includes('html') || key.toLowerCase().includes('form')) && submitPayHtmlInCurrentTab(text)) {
-      return true
-    }
   }
 
   const urlKeys = ['pay_url', 'url', 'redirect_url', 'h5_url', 'mweb_url', 'deep_link', 'qr_code']
@@ -849,7 +818,7 @@ async function handleRechargePay(params: CreateRechargeOrderParams) {
             ? '订单已创建，请扫码完成微信支付'
             : '订单已创建，请继续完成支付'
           : opened
-            ? '订单已创建，正在跳转支付页面'
+            ? '订单已创建，正在跳转站内支付页'
             : '订单已创建，请继续完成支付',
       type: 'success',
       customClass: 'ac-top-message',
