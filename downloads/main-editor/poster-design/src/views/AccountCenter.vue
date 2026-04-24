@@ -668,7 +668,6 @@ function toastInfo(msg: string) {
     type: 'info',
     customClass: 'ac-top-message',
     offset: 24,
-    grouping: true,
   })
 }
 
@@ -912,7 +911,6 @@ async function handleRechargePay(params: CreateRechargeOrderParams) {
       type: 'success',
       customClass: 'ac-top-message',
       offset: 24,
-      grouping: true,
     })
     await startRechargePolling(data.order_sn)
   } catch (error: any) {
@@ -921,7 +919,6 @@ async function handleRechargePay(params: CreateRechargeOrderParams) {
       type: 'error',
       customClass: 'ac-top-message',
       offset: 24,
-      grouping: true,
     })
   }
 }

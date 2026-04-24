@@ -382,7 +382,21 @@ export async function getUserAllInfo(req: any, res: any) {
 
 export async function createRechargeOrder(req: any, res: any) {
   try {
-    const result = await postKunbiApi(req, '/user/create_recharge_order', req.body || {})
+    const body = req.body || {}
+    if (body.recharge_money !== undefined && body.recharge_money !== null && String(body.recharge_money).trim() !== '') {
+      const rawAmount = String(body.recharge_money).trim()
+      if (!/^[1-9]\d*$/.test(rawAmount)) {
+        send.error(res, '充值金额必须是大于0的整数')
+        return
+      }
+
+      const amount = Number(rawAmount)
+      if (amount > 1000) {
+        send.error(res, '单次充值金额不能超过1000元')
+        return
+      }
+    }
+    const result = await postKunbiApi(req, '/user/create_recharge_order', body)
     send.success(res, await maybeBuildAlipayRelayResult(result))
   } catch (error) {
     const err: any = error

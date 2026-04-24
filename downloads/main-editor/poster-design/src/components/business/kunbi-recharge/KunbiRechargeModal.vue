@@ -40,11 +40,12 @@
             <div class="custom-amount">
               <input
                 v-model="customAmount"
-                type="number"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
                 placeholder="请输入您的充值金额（1-1000元）"
-                min="0.01"
+                min="1"
                 max="1000"
-                step="0.01"
                 @focus="clearSelectedPackage"
                 @input="validateAmount"
               />
@@ -124,7 +125,6 @@ function showTopWarning(message: string) {
     type: 'warning',
     customClass: 'kunbi-top-message',
     offset: 24,
-    grouping: true,
   })
 }
 
@@ -148,7 +148,10 @@ function clearSelectedPackage() {
 
 function validateAmount() {
   if (!customAmount.value) return
-  const amount = parseFloat(customAmount.value)
+  customAmount.value = customAmount.value.replace(/\D/g, '')
+  if (!customAmount.value) return
+  customAmount.value = String(parseInt(customAmount.value, 10))
+  const amount = parseInt(customAmount.value, 10)
   if (amount > 1000) {
     showTopWarning('单次充值金额不能超过1000元')
     customAmount.value = '1000'
@@ -169,13 +172,13 @@ function handlePay(payType: 1 | 2) {
     return
   }
 
-  const amount = parseFloat(customAmount.value)
+  const amount = parseInt(customAmount.value, 10)
   if (Number.isNaN(amount)) {
     showTopWarning('请输入有效的充值金额')
     return
   }
   if (amount <= 0) {
-    showTopWarning('充值金额必须大于0元')
+    showTopWarning('充值金额必须大于等于1元')
     return
   }
   if (amount > 1000) {
@@ -183,14 +186,8 @@ function handlePay(payType: 1 | 2) {
     return
   }
 
-  const decimalPart = String(customAmount.value).split('.')[1]
-  if (decimalPart && decimalPart.length > 2) {
-    showTopWarning('充值金额最多保留2位小数')
-    return
-  }
-
   emit('pay', {
-    recharge_money: amount.toFixed(2),
+    recharge_money: String(amount),
     pay_type: payType,
   })
 }
