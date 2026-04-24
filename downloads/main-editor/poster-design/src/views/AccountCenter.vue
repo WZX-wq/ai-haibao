@@ -323,6 +323,24 @@
         <button type="button" class="ac-pay-dialog__btn" @click="closeWechatPayDialog">我知道了</button>
       </div>
     </div>
+    <div v-if="alipayPayVisible" class="ac-pay-overlay" @click="closeAlipayPayDialog">
+      <div class="ac-pay-dialog ac-pay-dialog--alipay" @click.stop>
+        <button type="button" class="ac-pay-dialog__close" @click="closeAlipayPayDialog">×</button>
+        <div class="ac-pay-dialog__title">支付宝支付</div>
+        <div class="ac-pay-dialog__desc">请使用支付宝扫一扫完成支付，支付成功后会自动刷新鲲币余额。</div>
+        <div class="ac-pay-dialog__qr-wrap ac-pay-dialog__qr-wrap--alipay">
+          <div v-if="alipayPayLoading" class="ac-pay-iframe__loading">正在加载支付宝二维码...</div>
+          <img v-else-if="alipayPayQrCode" :src="alipayPayQrCode" alt="支付宝支付二维码" class="ac-pay-dialog__qr" />
+        </div>
+        <div class="ac-pay-dialog__meta">
+          <span v-if="alipayPayAmountText">支付金额：{{ alipayPayAmountText }}</span>
+          <span v-if="alipayPayKunbiText">到账鲲币：{{ alipayPayKunbiText }}</span>
+        </div>
+        <button type="button" class="ac-pay-dialog__btn ac-pay-dialog__btn--blue" @click="closeAlipayPayDialog">
+          我知道了
+        </button>
+      </div>
+    </div>
   </teleport>
 </template>
 
@@ -383,6 +401,11 @@ const wechatPayVisible = ref(false)
 const wechatPayQrCode = ref('')
 const wechatPayAmountText = ref('')
 const wechatPayKunbiText = ref('')
+const alipayPayVisible = ref(false)
+const alipayPayQrCode = ref('')
+const alipayPayLoading = ref(false)
+const alipayPayAmountText = ref('')
+const alipayPayKunbiText = ref('')
 let rechargeStatusTimer: number | null = null
 let rechargePollCount = 0
 const rechargeApiConfig: KunbiApiConfig = {
@@ -668,6 +691,23 @@ function closeWechatPayDialog() {
   wechatPayVisible.value = false
 }
 
+function openAlipayPayDialog(payload: { qrCode: string; amount?: string; kunbi?: string }) {
+  const qrCode = String(payload.qrCode || '').trim()
+  if (!qrCode) return false
+  alipayPayAmountText.value = payload.amount || ''
+  alipayPayKunbiText.value = payload.kunbi || ''
+  alipayPayQrCode.value = qrCode
+  alipayPayLoading.value = false
+  alipayPayVisible.value = true
+  return true
+}
+
+function closeAlipayPayDialog() {
+  alipayPayVisible.value = false
+  alipayPayLoading.value = false
+  alipayPayQrCode.value = ''
+}
+
 async function loadRechargeInfo(showError = false) {
   if (!userStore.online) return
   try {
@@ -726,6 +766,7 @@ async function startRechargePolling(orderSn: string) {
         stopRechargePolling()
         rechargeVisible.value = false
         closeWechatPayDialog()
+        closeAlipayPayDialog()
         await Promise.all([loadRechargeInfo(), loadCenter(), loadRechargeHistory()])
         ElMessage.success('支付成功，鲲币余额已刷新')
         return
@@ -755,9 +796,20 @@ function openPayTarget(target: string) {
 
 function tryHandleWechatPay(data: Record<string, any>) {
   const qrCode = String(data.qrcode_img_url || data.qr_code_img_url || data.qr_code || '').trim()
-  if (!qrCode || /^https?:\/\//i.test(qrCode)) return false
-  if (!/^data:image\//i.test(qrCode)) return false
+  if (!qrCode) return false
+  if (!/^data:image\//i.test(qrCode) && !/^https?:\/\//i.test(qrCode)) return false
   openWechatPayDialog({
+    qrCode,
+    amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+    kunbi: data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim() ? `${String(data.buy_kunbi_count).trim()} 鲲币` : '',
+  })
+  return true
+}
+
+function tryHandleAlipayPay(data: Record<string, any>) {
+  const qrCode = String(data.alipay_qr_code || '').trim()
+  if (!qrCode) return false
+  openAlipayPayDialog({
     qrCode,
     amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
     kunbi: data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim() ? `${String(data.buy_kunbi_count).trim()} 鲲币` : '',
@@ -777,6 +829,9 @@ function tryHandlePayData(payData: unknown) {
 
   if (typeof payData !== 'object') return false
   const data = payData as Record<string, any>
+  if (tryHandleAlipayPay(data)) {
+    return true
+  }
   if (tryHandleWechatPay(data)) {
     return true
   }
@@ -807,6 +862,16 @@ async function handleRechargePay(params: CreateRechargeOrderParams) {
     }
 
     const opened =
+      (params.pay_type === 2 &&
+        data.alipay_qr_code &&
+        openAlipayPayDialog({
+          qrCode: String(data.alipay_qr_code),
+          amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+          kunbi:
+            data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim()
+              ? `${String(data.buy_kunbi_count).trim()} 鲲币`
+              : '',
+        })) ||
       (data.pay_url && openPayTarget(data.pay_url)) ||
       (data.pay_data && tryHandlePayData(data.pay_data)) ||
       tryHandlePayData(data)
@@ -818,7 +883,7 @@ async function handleRechargePay(params: CreateRechargeOrderParams) {
             ? '订单已创建，请扫码完成微信支付'
             : '订单已创建，请继续完成支付'
           : opened
-            ? '订单已创建，正在跳转站内支付页'
+            ? '订单已创建，请在弹层内完成支付宝支付'
             : '订单已创建，请继续完成支付',
       type: 'success',
       customClass: 'ac-top-message',
@@ -2015,6 +2080,10 @@ onBeforeUnmount(stopRechargePolling)
   text-align: center;
 }
 
+.ac-pay-dialog--alipay {
+  width: min(92vw, 380px);
+}
+
 .ac-pay-dialog__close {
   position: absolute;
   top: 10px;
@@ -2080,6 +2149,28 @@ onBeforeUnmount(stopRechargePolling)
   font-weight: 600;
   padding: 12px 16px;
   cursor: pointer;
+}
+
+.ac-pay-dialog__btn--blue {
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+}
+
+.ac-pay-dialog__qr-wrap--alipay {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f8fafc, #eef2ff);
+}
+
+.ac-pay-iframe__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.96);
+  color: #475569;
+  font-size: 15px;
+  z-index: 1;
 }
 
 :global(.ac-top-message) {

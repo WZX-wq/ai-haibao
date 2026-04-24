@@ -118,6 +118,16 @@ watch(
   { immediate: true },
 )
 
+function showTopWarning(message: string) {
+  ElMessage({
+    message,
+    type: 'warning',
+    customClass: 'kunbi-top-message',
+    offset: 24,
+    grouping: true,
+  })
+}
+
 function resetState() {
   selectedPackageId.value = null
   customAmount.value = ''
@@ -140,14 +150,14 @@ function validateAmount() {
   if (!customAmount.value) return
   const amount = parseFloat(customAmount.value)
   if (amount > 1000) {
-    ElMessage.warning('单次充值金额不能超过1000元')
+    showTopWarning('单次充值金额不能超过1000元')
     customAmount.value = '1000'
   }
 }
 
 function handlePay(payType: 1 | 2) {
   if (!selectedPackageId.value && !customAmount.value) {
-    ElMessage.warning('请选择充值套餐或输入金额')
+    showTopWarning('请选择充值套餐或输入金额')
     return
   }
 
@@ -161,21 +171,21 @@ function handlePay(payType: 1 | 2) {
 
   const amount = parseFloat(customAmount.value)
   if (Number.isNaN(amount)) {
-    ElMessage.warning('请输入有效的充值金额')
+    showTopWarning('请输入有效的充值金额')
     return
   }
   if (amount <= 0) {
-    ElMessage.warning('充值金额必须大于0元')
+    showTopWarning('充值金额必须大于0元')
     return
   }
   if (amount > 1000) {
-    ElMessage.warning('单次充值金额不能超过1000元')
+    showTopWarning('单次充值金额不能超过1000元')
     return
   }
 
   const decimalPart = String(customAmount.value).split('.')[1]
   if (decimalPart && decimalPart.length > 2) {
-    ElMessage.warning('充值金额最多保留2位小数')
+    showTopWarning('充值金额最多保留2位小数')
     return
   }
 
@@ -436,5 +446,9 @@ function handleHistory() {
   .payment-buttons {
     flex-direction: column;
   }
+}
+
+:global(.kunbi-top-message) {
+  z-index: 6000 !important;
 }
 </style>

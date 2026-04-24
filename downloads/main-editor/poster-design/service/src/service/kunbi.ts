@@ -42,6 +42,88 @@ function prepareAlipayRelayHtml(rawHtml: string) {
   return html
 }
 
+function getHtmlAttr(tag: string, attrName: string) {
+  const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = String(tag || '').match(new RegExp(`${escaped}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'))
+  return match ? String(match[2] || '') : ''
+}
+
+function parseAlipaySubmitForm(html: string) {
+  const formMatch = String(html || '').match(/<form\b[\s\S]*?<\/form>/i)
+  if (!formMatch) return null
+  const formHtml = formMatch[0]
+  const openTagMatch = formHtml.match(/<form\b[^>]*>/i)
+  const openTag = openTagMatch ? openTagMatch[0] : ''
+  const action = getHtmlAttr(openTag, 'action')
+  if (!action) return null
+
+  const body = new URLSearchParams()
+  const inputMatches = formHtml.match(/<input\b[^>]*>/gi) || []
+  inputMatches.forEach((tag) => {
+    const name = getHtmlAttr(tag, 'name')
+    if (!name) return
+    body.append(name, getHtmlAttr(tag, 'value'))
+  })
+
+  return {
+    action,
+    body,
+  }
+}
+
+function decodeHtmlBuffer(buffer: Buffer) {
+  try {
+    return new TextDecoder('gb18030').decode(buffer)
+  } catch {
+    return buffer.toString('utf8')
+  }
+}
+
+function extractInputValueById(html: string, id: string) {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = String(html || '').match(new RegExp(`<input\\b(?=[^>]*id=(['"])${escaped}\\1)[^>]*>`, 'i'))
+  return match ? getHtmlAttr(match[0], 'value').trim() : ''
+}
+
+function buildAlipayQrImageUrl(qrCodeOrImg: string) {
+  const value = String(qrCodeOrImg || '').trim()
+  if (!value) return ''
+  if (/^https?:\/\/mobilecodec\.alipay\.com\/show\.htm/i.test(value)) {
+    return value
+  }
+  const codeMatch = value.match(/(?:code=|qr\.alipay\.com\/)([A-Za-z0-9]+)/i)
+  if (!codeMatch?.[1]) return ''
+  return `https://mobilecodec.alipay.com/show.htm?code=${codeMatch[1]}`
+}
+
+async function fetchAlipayQrDataUrl(rawHtml: string) {
+  const form = parseAlipaySubmitForm(rawHtml)
+  if (!form) return ''
+
+  const pageResponse = await axios.post(form.action, form.body.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    responseType: 'arraybuffer',
+    maxRedirects: 5,
+    timeout: 30000,
+    validateStatus: (status) => status >= 200 && status < 400,
+  })
+
+  const finalHtml = decodeHtmlBuffer(Buffer.from(pageResponse.data))
+  const qrImgUrl =
+    extractInputValueById(finalHtml, 'J_qrImgUrl') || buildAlipayQrImageUrl(extractInputValueById(finalHtml, 'J_qrCode'))
+  if (!qrImgUrl) return ''
+
+  const imageResponse = await axios.get(qrImgUrl, {
+    responseType: 'arraybuffer',
+    timeout: 30000,
+    validateStatus: (status) => status >= 200 && status < 400,
+  })
+  const mimeType = String(imageResponse.headers['content-type'] || 'image/png').split(';')[0] || 'image/png'
+  return `data:${mimeType};base64,${Buffer.from(imageResponse.data).toString('base64')}`
+}
+
 function wrapAlipayRelayHtml(html: string) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -196,7 +278,7 @@ async function postKunbiApi(req: any, remotePath: string, params: Record<string,
   throw new Error(msg)
 }
 
-function maybeBuildAlipayRelayResult(result: any) {
+async function maybeBuildAlipayRelayResult(result: any) {
   const data = result && typeof result === 'object' ? { ...result } : result
   const html =
     typeof data?.alipaysubmit_html === 'string'
@@ -209,6 +291,28 @@ function maybeBuildAlipayRelayResult(result: any) {
   const orderSn = String(data?.order_sn || '').trim()
   if (!preparedHtml || !orderSn) {
     return result
+  }
+
+  try {
+    const qrCode = await fetchAlipayQrDataUrl(preparedHtml)
+    if (qrCode) {
+      const nextPayData =
+        data?.pay_data && typeof data.pay_data === 'object'
+          ? { ...data.pay_data }
+          : data?.pay_data
+      if (nextPayData && typeof nextPayData === 'object' && 'alipaysubmit_html' in nextPayData) {
+        delete nextPayData.alipaysubmit_html
+      }
+      delete data.alipaysubmit_html
+      data.alipay_qr_code = qrCode
+      data.qrcode_img_url = qrCode
+      if (nextPayData && typeof nextPayData === 'object') {
+        data.pay_data = nextPayData
+      }
+      return data
+    }
+  } catch (error) {
+    console.warn('[kunbi] extract alipay qr failed, fallback to relay page:', (error as Error)?.message || error)
   }
 
   cleanupExpiredAlipayRelay()
@@ -279,7 +383,7 @@ export async function getUserAllInfo(req: any, res: any) {
 export async function createRechargeOrder(req: any, res: any) {
   try {
     const result = await postKunbiApi(req, '/user/create_recharge_order', req.body || {})
-    send.success(res, maybeBuildAlipayRelayResult(result))
+    send.success(res, await maybeBuildAlipayRelayResult(result))
   } catch (error) {
     const err: any = error
     const status = Number(err?.response?.status || 0)
