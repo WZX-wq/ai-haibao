@@ -4,9 +4,44 @@ $rootDir = Split-Path -Parent $PSScriptRoot
 $runlogsDir = Join-Path $rootDir 'runlogs'
 $pidFile = Join-Path $runlogsDir 'dev-processes.json'
 $npmCmd = 'C:\Program Files\nodejs\npm.cmd'
-$frontendPort = 5173
+$envLocalPath = Join-Path $rootDir '.env.local'
+$envPath = Join-Path $rootDir '.env'
+
+function Read-SimpleEnvFile {
+  param([string]$FilePath)
+  $result = @{}
+  if (-not (Test-Path $FilePath)) {
+    return $result
+  }
+  foreach ($line in Get-Content -Path $FilePath) {
+    $trimmed = $line.Trim()
+    if (-not $trimmed -or $trimmed.StartsWith('#')) {
+      continue
+    }
+    $index = $trimmed.IndexOf('=')
+    if ($index -le 0) {
+      continue
+    }
+    $key = $trimmed.Substring(0, $index).Trim()
+    $value = $trimmed.Substring($index + 1).Trim().Trim("'`"")
+    $result[$key] = $value
+  }
+  return $result
+}
+
+$envMap = Read-SimpleEnvFile -FilePath $envPath
+$envLocalMap = Read-SimpleEnvFile -FilePath $envLocalPath
+foreach ($key in $envLocalMap.Keys) {
+  $envMap[$key] = $envLocalMap[$key]
+}
+
+$devHostname = [string]($envMap['VITE_DEV_HOSTNAME'])
+$frontendPort = if ($envMap.ContainsKey('VITE_DEV_PORT')) { [int]$envMap['VITE_DEV_PORT'] } elseif ($devHostname) { 443 } else { 5173 }
 $backendPort = 7001
-$frontendUrl = 'http://127.0.0.1:5173/'
+$frontendProtocol = if ($devHostname) { 'https' } else { 'http' }
+$frontendHost = if ($devHostname) { $devHostname } else { '127.0.0.1' }
+$defaultPort = if ($frontendProtocol -eq 'https') { 443 } else { 80 }
+$frontendUrl = if ($frontendPort -eq $defaultPort) { "${frontendProtocol}://${frontendHost}/" } else { "${frontendProtocol}://${frontendHost}:${frontendPort}/" }
 $backendUrl = 'http://127.0.0.1:7001/design/cate?type=1'
 
 New-Item -ItemType Directory -Force -Path $runlogsDir | Out-Null
@@ -32,7 +67,7 @@ function Wait-PortReady {
 function Test-EndpointReady {
   param([string]$Url)
   try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 3
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 3 -SkipCertificateCheck
     return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
   } catch {
     return $false
@@ -125,7 +160,7 @@ Stop-RecordedProcesses
 
 $existingOwners = Get-PortOwners -Ports @($frontendPort, $backendPort)
 if ($existingOwners.Count -gt 0) {
-  Write-Error "Ports 5173/7001 are already occupied. Please stop old dev processes first."
+  Write-Error "Ports $frontendPort/$backendPort are already occupied. Please stop old dev processes first."
 }
 
 $frontend = Start-DevProcess `
@@ -140,8 +175,8 @@ $backend = Start-DevProcess `
   -LogPath (Join-Path $runlogsDir 'backend.log') `
   -ErrPath (Join-Path $runlogsDir 'backend.err.log')
 
-$frontendReady = Wait-EndpointReady -Url $frontendUrl
-$backendReady = Wait-EndpointReady -Url $backendUrl
+$frontendReady = Wait-PortReady -Port $frontendPort
+$backendReady = Wait-PortReady -Port $backendPort
 
 if (-not ($frontendReady -and $backendReady)) {
   Write-Host 'Frontend log tail:'
@@ -183,6 +218,6 @@ if (-not ($frontendReady -and $backendReady)) {
 } | ConvertTo-Json -Depth 4 | Set-Content -Path $pidFile
 
 Write-Host 'Background dev servers are ready.'
-Write-Host 'Frontend: http://127.0.0.1:5173/'
+Write-Host "Frontend: $frontendUrl"
 Write-Host 'Backend:  http://127.0.0.1:7001/'
 Write-Host "Logs:     $runlogsDir"

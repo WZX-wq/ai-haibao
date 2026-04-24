@@ -4,6 +4,8 @@ let pool: any = null
 let schemaReady = false
 let userDesignsSchemaReady = false
 let permissionColumnsReady = false
+let userDesignsSourceTemplateReady = false
+let oauthIdentityColumnsReady = false
 
 function getEnvNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -79,6 +81,7 @@ export async function ensureAccountSchema() {
       provider_name VARCHAR(80) NOT NULL,
       provider_user_id VARCHAR(190) NOT NULL,
       access_token TEXT DEFAULT NULL,
+      api_web_token TEXT DEFAULT NULL,
       refresh_token TEXT DEFAULT NULL,
       token_type VARCHAR(40) DEFAULT NULL,
       expires_at DATETIME DEFAULT NULL,
@@ -92,6 +95,7 @@ export async function ensureAccountSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `)
 
+  await ensureOAuthIdentityColumns(db)
   await db.query(`
     CREATE TABLE IF NOT EXISTS account_permission_snapshots (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -139,6 +143,27 @@ export async function ensureAccountSchema() {
   schemaReady = true
 }
 
+async function ensureOAuthIdentityColumns(db: any) {
+  if (oauthIdentityColumnsReady) return
+  const needColumns = [
+    {
+      name: 'api_web_token',
+      ddl: "ALTER TABLE oauth_identities ADD COLUMN api_web_token TEXT DEFAULT NULL AFTER access_token",
+    },
+  ]
+  for (const col of needColumns) {
+    const [[row]]: any = await db.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'oauth_identities' AND COLUMN_NAME = ?`,
+      [col.name],
+    )
+    if (Number(row?.cnt) === 0) {
+      await db.query(col.ddl)
+    }
+  }
+  oauthIdentityColumnsReady = true
+}
+
 async function ensurePermissionSnapshotColumns(db: any) {
   if (permissionColumnsReady) return
   const needColumns = [
@@ -173,6 +198,33 @@ async function ensureUserDesignsComponentListKeyColumn(db: any) {
   }
 }
 
+async function ensureUserDesignsSourceTemplateColumn(db: any) {
+  if (userDesignsSourceTemplateReady) return
+  const [[colRow]]: any = await db.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_designs' AND COLUMN_NAME = 'source_template_id'`,
+  )
+  if (Number(colRow?.cnt) === 0) {
+    await db.query(`
+      ALTER TABLE user_designs
+      ADD COLUMN source_template_id VARCHAR(64) NULL DEFAULT NULL COMMENT '作品来源模板 id，用于避免同模板重复保存'
+      AFTER component_list_key
+    `)
+  }
+
+  const [[idxRow]]: any = await db.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_designs' AND INDEX_NAME = 'idx_user_designs_source_template'`,
+  )
+  if (Number(idxRow?.cnt) === 0) {
+    await db.query(`
+      CREATE INDEX idx_user_designs_source_template
+      ON user_designs (user_id, design_type, source_template_id)
+    `)
+  }
+  userDesignsSourceTemplateReady = true
+}
+
 /** 用户画布数据（与内置模板 id 区隔：AUTO_INCREMENT 从 1e9 起） */
 export async function ensureUserDesignsSchema() {
   await ensureAccountSchema()
@@ -188,6 +240,7 @@ export async function ensureUserDesignsSchema() {
       height INT UNSIGNED NOT NULL DEFAULT 0,
       cate INT NOT NULL DEFAULT 0,
       component_list_key VARCHAR(64) NULL DEFAULT NULL COMMENT 'design/list type=1 时的 cate，如 text/comp',
+      source_template_id VARCHAR(64) NULL DEFAULT NULL COMMENT '作品来源模板 id，用于避免同模板重复保存',
       state TINYINT NOT NULL DEFAULT 1,
       data_json LONGTEXT NOT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -205,6 +258,7 @@ export async function ensureUserDesignsSchema() {
     userDesignsSchemaReady = true
   }
   await ensureUserDesignsComponentListKeyColumn(db)
+  await ensureUserDesignsSourceTemplateColumn(db)
 }
 
 let userUsageDailySchemaReady = false

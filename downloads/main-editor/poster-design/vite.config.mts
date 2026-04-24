@@ -5,7 +5,8 @@
  * @LastEditors: ShawnPhang <site: book.palxp.com>
  * @LastEditTime: 2023-08-01 10:46:59
  */
-import { defineConfig, type Plugin } from 'vite'
+import fs from 'fs'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import viteCompression from 'vite-plugin-compression'
@@ -63,70 +64,109 @@ function manualChunks(id: string) {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
-  plugins: [
-    devDisableConditionalRequests(),
-    vue(),
-    viteCompression({
-      verbose: true,
-      disable: false,
-      threshold: 10240,
-      algorithm: 'gzip',
-      ext: '.gz',
-    }),
-    ElementPlus({}),
-  ],
-  build: {
-    minify: 'terser',
-    chunkSizeWarningLimit: 900,
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
-    rollupOptions: {
-      output: {
-        manualChunks,
-      },
-      onwarn(warning, warn) {
-        if (warning.code === 'INVALID_ANNOTATION') {
-          return
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const devHostname = String(env.VITE_DEV_HOSTNAME || '').trim()
+  const localDomainMode = command === 'serve' && !!devHostname
+  const devPort = Number(env.VITE_DEV_PORT || (localDomainMode ? 443 : 5173))
+  const backendTarget = String(env.VITE_DEV_BACKEND_TARGET || 'http://127.0.0.1:7001').trim()
+  const pfxPath = String(env.VITE_DEV_HTTPS_PFX_PATH || '').trim()
+  const pfxPassphrase = String(env.VITE_DEV_HTTPS_PFX_PASSPHRASE || '').trim()
+  const resolvedPfxPath = pfxPath ? resolve(pfxPath) : ''
+  const httpsOptions =
+    localDomainMode && resolvedPfxPath && fs.existsSync(resolvedPfxPath)
+      ? {
+          pfx: fs.readFileSync(resolvedPfxPath),
+          passphrase: pfxPassphrase || undefined,
         }
-        warn(warning)
-      },
-    },
-  },
-  resolve: {
-    alias: [
-      { find: '@', replacement: resolve('src') },
-      { find: '~data', replacement: resolve('src/assets/data') },
-      // Keep the more specific workspace subpath alias first so Vite
-      // doesn't rewrite `@palxp/color-picker/comps/*` through index.ts.
-      { find: /^@palxp\/color-picker\/comps/, replacement: resolve('packages/color-picker/comps') },
-      { find: /^@palxp\/color-picker$/, replacement: resolve('packages/color-picker/index.ts') },
-      { find: /^@palxp\/image-extraction$/, replacement: resolve('packages/image-extraction/index.ts') },
+      : undefined
+
+  const proxy = localDomainMode
+    ? {
+        '/auth': { target: backendTarget, changeOrigin: true, secure: false },
+        '/kunbi': { target: backendTarget, changeOrigin: true, secure: false },
+        '/design': { target: backendTarget, changeOrigin: true, secure: false },
+        '/usage': { target: backendTarget, changeOrigin: true, secure: false },
+        '/admin': { target: backendTarget, changeOrigin: true, secure: false },
+        '/ai': { target: backendTarget, changeOrigin: true, secure: false },
+        '/api': { target: backendTarget, changeOrigin: true, secure: false },
+        '/static': { target: backendTarget, changeOrigin: true, secure: false },
+        '/store': { target: backendTarget, changeOrigin: true, secure: false },
+      }
+    : undefined
+
+  return {
+    plugins: [
+      devDisableConditionalRequests(),
+      vue(),
+      viteCompression({
+        verbose: true,
+        disable: false,
+        threshold: 10240,
+        algorithm: 'gzip',
+        ext: '.gz',
+      }),
+      ElementPlus({}),
     ],
-  },
-  css: {
-    preprocessorOptions: {
-      less: {
-        modifyVars: {
-          color: `true; @import "./src/assets/styles/color.less";`,
+    build: {
+      minify: 'terser',
+      chunkSizeWarningLimit: 900,
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+      },
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
+        onwarn(warning, warn) {
+          if (warning.code === 'INVALID_ANNOTATION') {
+            return
+          }
+          warn(warning)
         },
       },
     },
-  },
-  define: {
-    'process.env': process.env,
-  },
-  server: {
-    hmr: { overlay: false },
-    host: '127.0.0.1',
-    /** 避免 Chrome 对 304 + 磁盘缓存出现 net::ERR_CACHE_READ_FAILURE（开发态无需强缓存） */
-    ...(command === 'serve'
-      ? { headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } }
-      : {}),
-  },
-}))
-
+    resolve: {
+      alias: [
+        { find: '@', replacement: resolve('src') },
+        { find: '~data', replacement: resolve('src/assets/data') },
+        { find: /^@palxp\/color-picker\/comps/, replacement: resolve('packages/color-picker/comps') },
+        { find: /^@palxp\/color-picker$/, replacement: resolve('packages/color-picker/index.ts') },
+        { find: /^@palxp\/image-extraction$/, replacement: resolve('packages/image-extraction/index.ts') },
+      ],
+    },
+    css: {
+      preprocessorOptions: {
+        less: {
+          modifyVars: {
+            color: `true; @import "./src/assets/styles/color.less";`,
+          },
+        },
+      },
+    },
+    define: {
+      'process.env': process.env,
+    },
+    server: {
+      host: '0.0.0.0',
+      port: Number.isFinite(devPort) && devPort > 0 ? devPort : 5173,
+      https: httpsOptions,
+      hmr: localDomainMode
+        ? {
+            overlay: false,
+            host: devHostname,
+            protocol: 'wss',
+            clientPort: Number.isFinite(devPort) && devPort > 0 ? devPort : 443,
+          }
+        : { overlay: false },
+      proxy,
+      allowedHosts: localDomainMode ? [devHostname] : undefined,
+      ...(command === 'serve'
+        ? { headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } }
+        : {}),
+    },
+  }
+})

@@ -22,6 +22,10 @@ type NormalizedRemoteUser = {
   rawUser: any
 }
 
+type RemoteTokenExtras = {
+  apiWebToken: string
+}
+
 const oauthStateStore = new Map<string, OAuthStateRecord>()
 const STATE_EXPIRE_MS = 10 * 60 * 1000
 
@@ -136,6 +140,19 @@ function getBearerToken(req: any) {
 function getSessionExpireDays() {
   const days = Number(process.env.SESSION_EXPIRE_DAYS || 7)
   return Number.isFinite(days) && days > 0 ? days : 7
+}
+
+function looksLikeJwt(token: string) {
+  return !!token && token.includes('.') && token.split('.').length >= 3
+}
+
+function pickApiWebToken(...values: unknown[]) {
+  for (const value of values) {
+    const token = String(value || '').trim()
+    if (!token || looksLikeJwt(token)) continue
+    return token
+  }
+  return ''
 }
 
 function buildPermissionSnapshot(record?: any) {
@@ -307,7 +324,7 @@ async function exchangeCodeForToken(code: string, redirectUri: string) {
   throw new Error(String((payload as any).message || 'Token 接口未返回 data（缺少 access_token）'))
 }
 
-async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayload: any) {
+async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayload: any, tokenExtras: RemoteTokenExtras) {
   const db = await getMysqlPool()
   await ensureAccountSchema()
 
@@ -346,11 +363,12 @@ async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayl
   const expiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000) : null
   await db.query(
     `INSERT INTO oauth_identities
-      (user_id, provider_name, provider_user_id, access_token, refresh_token, token_type, expires_at, scope_text, raw_user_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, provider_name, provider_user_id, access_token, api_web_token, refresh_token, token_type, expires_at, scope_text, raw_user_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        user_id = VALUES(user_id),
        access_token = VALUES(access_token),
+       api_web_token = VALUES(api_web_token),
        refresh_token = VALUES(refresh_token),
        token_type = VALUES(token_type),
        expires_at = VALUES(expires_at),
@@ -361,6 +379,7 @@ async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayl
       getOAuthConfig().providerName,
       remoteUser.providerUserId,
       String(tokenPayload.access_token || ''),
+      tokenExtras.apiWebToken || null,
       String(tokenPayload.refresh_token || ''),
       String(tokenPayload.token_type || ''),
       expiresAt,
@@ -384,6 +403,20 @@ async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayl
   }
 
   return userId
+}
+
+function extractApiWebToken(req: any, tokenPayload: any) {
+  return pickApiWebToken(
+    req.body?.api_web_token,
+    req.body?.apiWebToken,
+    req.body?.kq_token,
+    req.body?.token,
+    tokenPayload?.api_web_token,
+    tokenPayload?.apiWebToken,
+    tokenPayload?.kq_token,
+    tokenPayload?.token,
+    tokenPayload?.user_token,
+  )
 }
 
 async function createSession(req: any, userId: number) {
@@ -451,6 +484,10 @@ async function resolveSession(req: any) {
     },
     permissions: buildPermissionSnapshot(record),
   }
+}
+
+export async function getCurrentSession(req: any) {
+  return resolveSession(req)
 }
 
 /** 供设计接口等非抛错场景解析登录态；失败返回 null */
@@ -571,9 +608,12 @@ export async function handleOAuthCallback(req: any, res: any) {
     if (!accessToken) {
       throw new Error('OAuth token 返回缺少 access_token')
     }
+    const apiWebToken = extractApiWebToken(req, tokenPayload)
     const remoteUserPayload = await fetchRemoteUser(accessToken)
     const remoteUser = normalizeRemoteUser(tokenPayload, remoteUserPayload)
-    const userId = await ensureUserAndIdentity(remoteUser, tokenPayload)
+    const userId = await ensureUserAndIdentity(remoteUser, tokenPayload, {
+      apiWebToken,
+    })
     const sessionInfo = await createSession(req, userId)
     const sessionData = await resolveSession({
       ...req,
@@ -592,6 +632,7 @@ export async function handleOAuthCallback(req: any, res: any) {
       user: sessionData.user,
       permissions: sessionData.permissions,
       downloads_today_used: downloadsTodayUsed,
+      has_api_web_token: !!apiWebToken,
     })
   } catch (error) {
     console.error(error)

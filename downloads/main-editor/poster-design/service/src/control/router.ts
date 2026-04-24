@@ -23,6 +23,7 @@ import {
 } from '../service/design'
 import aiService from '../service/ai'
 import accountService, { tryResolveSession } from '../service/account'
+import kunbiService from '../service/kunbi'
 import usageService from '../service/usage'
 import { consumeAiQuotaByUserId } from '../service/usage'
 import { isMysqlConfigured } from '../utils/mysql'
@@ -88,6 +89,14 @@ rRouter.post(api.AUTH_CALLBACK, accountService.handleOAuthCallback)
 rRouter.get(api.AUTH_ME, accountService.getCurrentUser)
 rRouter.get(api.AUTH_ACCOUNT_CENTER, accountService.getAccountCenter)
 rRouter.post(api.AUTH_LOGOUT, accountService.logout)
+rRouter.post(api.KUNBI_USER_HOME, kunbiService.getUserHome)
+rRouter.post(api.KUNBI_USER_INFO, kunbiService.getUserInfo)
+rRouter.post(api.KUNBI_USER_ALL_INFO, kunbiService.getUserAllInfo)
+rRouter.post(api.KUNBI_RECHARGE_INFO, kunbiService.getRechargeInfo)
+rRouter.post(api.KUNBI_CREATE_ORDER, kunbiService.createRechargeOrder)
+rRouter.post(api.KUNBI_ORDER_PAY_STATUS, kunbiService.checkRechargeOrderPayStatus)
+rRouter.post(api.KUNBI_RECHARGE_RECORD, kunbiService.getRechargeRecord)
+rRouter.post(api.KUNBI_DETAIL_RECORD, kunbiService.getDetailRecord)
 rRouter.post(api.USAGE_DOWNLOAD_CONSUME, usageService.consumeDownloadQuota)
 rRouter.post(api.USAGE_AI_CONSUME, usageService.consumeAiQuota)
 rRouter.get(api.ADMIN_USERS, accountService.adminListUsers)

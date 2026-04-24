@@ -3,6 +3,7 @@ import { sanitizeLoopbackApiBase } from '@/utils/publicMediaUrl'
 
 const host = typeof window !== 'undefined' ? window.location.hostname : ''
 const viteDev = typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.DEV)
+const nonLoopbackDevHost = viteDev && !!host && host !== '127.0.0.1' && host !== 'localhost' && host !== '0.0.0.0'
 /**
  * 用于 UI 行为（如是否监听 beforeunload），与「是否直连本机 7001 接口」分离。
  * 生产包用 127.0.0.1:8080 访问 Docker 时若把 API 指到 127.0.0.1:7001，而宿主机未映射 7001，侧栏素材/文字/图库接口会全部失败。
@@ -34,9 +35,16 @@ export default {
   /** 画布默认水印文案（与品牌名分离） */
   WATERMARK_DEFAULT_TEXT: '鲲穹海报',
   COPYRIGHT: 'ShawnPhang - Design.palxp.cn',
-  API_URL: envApiUrl || (viteDev ? devDefaultApi : ''),
-  SCREEN_URL: screenBaseUrl,
-  IMG_URL: envImgUrl || (screenBaseUrl ? `${screenBaseUrl.replace(/\/$/, '')}/static/` : '/static/'),
+  API_URL: envApiUrl !== undefined ? envApiUrl : nonLoopbackDevHost ? '' : viteDev ? devDefaultApi : '',
+  SCREEN_URL: envScreenUrl !== undefined ? envScreenUrl : nonLoopbackDevHost ? '' : screenBaseUrl,
+  IMG_URL:
+    envImgUrl !== undefined
+      ? envImgUrl
+      : nonLoopbackDevHost
+        ? '/static/'
+        : screenBaseUrl
+          ? `${screenBaseUrl.replace(/\/$/, '')}/static/`
+          : '/static/',
   ICONFONT_URL: 'https://at.alicdn.com/t/font_2717063_ypy8vprc3b.css?display=swap',
   ICONFONT_EXTRA: 'https://at.alicdn.com/t/c/font_3228074_xojoer6zhp.css',
   QINIUYUN_PLUGIN: 'https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/qiniu-js/2.5.5/qiniu.min.js',

@@ -25,18 +25,14 @@
         <span v-else>{{ userInitial }}</span>
       </div>
       <div class="ac-sidebar-username">{{ displayUser.name || '用户' }}</div>
-      <button type="button" class="ac-sidebar-upgrade" @click="toastInfo('会员开通请联系管理员')">
+      <button type="button" class="ac-sidebar-upgrade" @click="openRechargeCenter">
         <el-icon :size="14"><Star /></el-icon>
-        升级会员
+        充值鲲币
       </button>
-      <ul class="ac-sidebar-nav">
-        <li>
-          <a href="#ac-section-stats" class="is-active" @click.prevent="scrollToId('ac-section-stats')">
-            <el-icon :size="20"><DataBoard /></el-icon>
-            额度与权益
-          </a>
-        </li>
-      </ul>
+      <div class="ac-sidebar-kunbi">
+        <span class="ac-sidebar-kunbi__label">鲲币余额</span>
+        <span class="ac-sidebar-kunbi__value">{{ kunbiBalance }}</span>
+      </div>
     </aside>
 
     <div class="ac-main-wrap">
@@ -47,6 +43,7 @@
         </div>
         <div class="ac-page-header__right">
           <div class="ac-pills">
+            <span class="ac-pill ac-pill--blue">鲲币 {{ kunbiBalance }}</span>
             <span class="ac-pill ac-pill--gray">等级 {{ vipLevelText }}</span>
             <span class="ac-pill ac-pill--green">{{ sessionStatusText }}</span>
           </div>
@@ -295,11 +292,43 @@
       </main>
     </div>
   </div>
+  <KunbiRechargeModal
+    v-model="rechargeVisible"
+    :balance="kunbiBalance"
+    :packages="rechargePackages"
+    :api-config="rechargeApiConfig"
+    @pay="handleRechargePay"
+    @history="handleRechargeHistory"
+  />
+  <KunbiHistoryDrawer
+    v-model="historyVisible"
+    v-model:active-tab="historyActiveTab"
+    :loading="historyLoading"
+    :recharge-items="rechargeHistory"
+    :detail-items="kunbiDetailHistory"
+  />
+  <teleport to="body">
+    <div v-if="wechatPayVisible" class="ac-pay-overlay" @click="closeWechatPayDialog">
+      <div class="ac-pay-dialog" @click.stop>
+        <button type="button" class="ac-pay-dialog__close" @click="closeWechatPayDialog">×</button>
+        <div class="ac-pay-dialog__title">微信扫码支付</div>
+        <div class="ac-pay-dialog__desc">请使用微信扫一扫完成支付，支付成功后会自动刷新鲲币余额。</div>
+        <div class="ac-pay-dialog__qr-wrap">
+          <img v-if="wechatPayQrCode" :src="wechatPayQrCode" alt="微信支付二维码" class="ac-pay-dialog__qr" />
+        </div>
+        <div class="ac-pay-dialog__meta">
+          <span v-if="wechatPayAmountText">支付金额：{{ wechatPayAmountText }}</span>
+          <span v-if="wechatPayKunbiText">到账鲲币：{{ wechatPayKunbiText }}</span>
+        </div>
+        <button type="button" class="ac-pay-dialog__btn" @click="closeWechatPayDialog">我知道了</button>
+      </div>
+    </div>
+  </teleport>
 </template>
 
 <script lang="ts" setup>
 import type { Component } from 'vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -307,7 +336,6 @@ import {
   Clock,
   Document,
   EditPen,
-  DataBoard,
   House,
   Lock,
   MagicStick,
@@ -320,15 +348,47 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 import * as accountApi from '@/api/account'
+import {
+  checkRechargeOrderStatus,
+  createRechargeOrder,
+  getKunbiDetailRecord,
+  getKunbiRechargeInfo,
+  getKunbiRechargeRecord,
+  type CreateRechargeOrderParams,
+  type KunbiApiConfig,
+  type KunbiDetailRecordItem,
+  type KunbiRechargePackage,
+  type KunbiRechargeRecordItem,
+} from '@/api/kunbi'
 import useUserStore from '@/store/base/user'
 import useNotification from '@/common/methods/notification'
 import type { AccountCenterResult, AccountPermissions } from '@/api/account'
+import KunbiHistoryDrawer from '@/components/business/kunbi-recharge/KunbiHistoryDrawer.vue'
+import KunbiRechargeModal from '@/components/business/kunbi-recharge/KunbiRechargeModal.vue'
 
 type QuickAction = { label: string; path: string }
 
 const router = useRouter()
 const userStore = useUserStore()
 const center = ref<AccountCenterResult | null>(null)
+const rechargeVisible = ref(false)
+const historyVisible = ref(false)
+const historyActiveTab = ref<'recharge' | 'detail'>('recharge')
+const historyLoading = ref(false)
+const kunbiBalance = ref(0)
+const rechargePackages = ref<KunbiRechargePackage[]>([])
+const rechargeHistory = ref<KunbiRechargeRecordItem[]>([])
+const kunbiDetailHistory = ref<KunbiDetailRecordItem[]>([])
+const wechatPayVisible = ref(false)
+const wechatPayQrCode = ref('')
+const wechatPayAmountText = ref('')
+const wechatPayKunbiText = ref('')
+let rechargeStatusTimer: number | null = null
+let rechargePollCount = 0
+const rechargeApiConfig: KunbiApiConfig = {
+  baseUrl: '',
+  kunbiIcon: '/images/kunbi.png',
+}
 
 const ringR = 32
 const ringC = 2 * Math.PI * ringR
@@ -580,7 +640,232 @@ function openPath(path: string) {
 }
 
 function toastInfo(msg: string) {
-  ElMessage.info(msg)
+  ElMessage({
+    message: msg,
+    type: 'info',
+    customClass: 'ac-top-message',
+    offset: 24,
+    grouping: true,
+  })
+}
+
+function stopRechargePolling() {
+  if (rechargeStatusTimer != null) {
+    window.clearInterval(rechargeStatusTimer)
+    rechargeStatusTimer = null
+  }
+  rechargePollCount = 0
+}
+
+function openWechatPayDialog(payload: { qrCode: string; amount?: string; kunbi?: string }) {
+  wechatPayQrCode.value = payload.qrCode
+  wechatPayAmountText.value = payload.amount || ''
+  wechatPayKunbiText.value = payload.kunbi || ''
+  wechatPayVisible.value = true
+}
+
+function closeWechatPayDialog() {
+  wechatPayVisible.value = false
+}
+
+async function loadRechargeInfo(showError = false) {
+  if (!userStore.online) return
+  try {
+    const data = await getKunbiRechargeInfo()
+    kunbiBalance.value = Number(data?.kunbi_balance ?? 0)
+    rechargePackages.value = Array.isArray(data?.recharge_packages) ? data.recharge_packages : []
+  } catch (error: any) {
+    if (showError) {
+      ElMessage.error(error?.message || '获取充值信息失败')
+    }
+  }
+}
+
+async function openRechargeCenter() {
+  if (!userStore.online) {
+    go('/login')
+    return
+  }
+  await loadRechargeInfo(true)
+  rechargeVisible.value = true
+}
+
+async function loadRechargeHistory(showError = false) {
+  if (!userStore.online) return
+  historyLoading.value = true
+  try {
+    const [rechargeData, detailData] = await Promise.all([
+      getKunbiRechargeRecord(1, 20),
+      getKunbiDetailRecord(1, 30, 0),
+    ])
+    rechargeHistory.value = Array.isArray(rechargeData?.list) ? rechargeData.list : []
+    kunbiDetailHistory.value = Array.isArray(detailData?.list) ? detailData.list : []
+  } catch (error: any) {
+    if (showError) {
+      ElMessage.error(error?.message || '获取充值记录失败')
+    }
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function handleRechargeHistory() {
+  historyActiveTab.value = 'recharge'
+  historyVisible.value = true
+  await loadRechargeHistory(true)
+}
+
+async function startRechargePolling(orderSn: string) {
+  stopRechargePolling()
+
+  const poll = async () => {
+    rechargePollCount += 1
+    try {
+      const status = await checkRechargeOrderStatus(orderSn)
+      if (Number(status?.pay_status) === 1) {
+        stopRechargePolling()
+        rechargeVisible.value = false
+        closeWechatPayDialog()
+        await Promise.all([loadRechargeInfo(), loadCenter(), loadRechargeHistory()])
+        ElMessage.success('支付成功，鲲币余额已刷新')
+        return
+      }
+    } catch {
+      // 轮询期间静默重试，避免打断支付流程
+    }
+
+    if (rechargePollCount >= 20) {
+      stopRechargePolling()
+    }
+  }
+
+  void poll()
+  rechargeStatusTimer = window.setInterval(() => {
+    void poll()
+  }, 3000)
+}
+
+function submitPayHtmlInCurrentTab(html: string) {
+  const container = document.createElement('div')
+  container.style.display = 'none'
+  container.innerHTML = html
+  const form = container.querySelector('form') as HTMLFormElement | null
+  if (form) {
+    form.setAttribute('target', '_self')
+    document.body.appendChild(container)
+    form.submit()
+    return true
+  }
+  return false
+}
+
+function openPayTarget(target: string) {
+  const url = String(target || '').trim()
+  if (!url) return false
+  if (/^data:image\//i.test(url)) return false
+  window.location.href = url
+  return true
+}
+
+function tryHandleWechatPay(data: Record<string, any>) {
+  const qrCode = String(data.qrcode_img_url || data.qr_code_img_url || data.qr_code || '').trim()
+  if (!qrCode || /^https?:\/\//i.test(qrCode)) return false
+  if (!/^data:image\//i.test(qrCode)) return false
+  openWechatPayDialog({
+    qrCode,
+    amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+    kunbi: data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim() ? `${String(data.buy_kunbi_count).trim()} 鲲币` : '',
+  })
+  return true
+}
+
+function tryHandlePayData(payData: unknown) {
+  if (!payData) return false
+
+  if (typeof payData === 'string') {
+    const trimmed = payData.trim()
+    if (!trimmed) return false
+    if (trimmed.startsWith('<form') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+      return submitPayHtmlInCurrentTab(trimmed)
+    }
+    return openPayTarget(trimmed)
+  }
+
+  if (typeof payData !== 'object') return false
+  const data = payData as Record<string, any>
+  if (tryHandleWechatPay(data)) {
+    return true
+  }
+  const htmlKeys = ['alipaysubmit_html', 'form_html', 'html', 'form']
+  for (const key of htmlKeys) {
+    const html = String(data[key] || '').trim()
+    if (html) {
+      return submitPayHtmlInCurrentTab(html)
+    }
+  }
+
+  for (const [key, value] of Object.entries(data)) {
+    const text = String(value || '').trim()
+    if (!text) continue
+    if ((key.toLowerCase().includes('html') || key.toLowerCase().includes('form')) && submitPayHtmlInCurrentTab(text)) {
+      return true
+    }
+  }
+
+  const urlKeys = ['pay_url', 'url', 'redirect_url', 'h5_url', 'mweb_url', 'deep_link', 'qr_code']
+  for (const key of urlKeys) {
+    if (data[key] && openPayTarget(String(data[key]))) {
+      return true
+    }
+  }
+
+  for (const [key, value] of Object.entries(data)) {
+    const text = String(value || '').trim()
+    if (!text) continue
+    if ((key.toLowerCase().includes('url') || key.toLowerCase().includes('link')) && openPayTarget(text)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function handleRechargePay(params: CreateRechargeOrderParams) {
+  try {
+    const data = await createRechargeOrder(params)
+    if (!data?.order_sn) {
+      throw new Error('订单创建成功，但未返回订单号')
+    }
+
+    const opened =
+      (data.pay_url && openPayTarget(data.pay_url)) ||
+      (data.pay_data && tryHandlePayData(data.pay_data)) ||
+      tryHandlePayData(data)
+
+    ElMessage({
+      message:
+        params.pay_type === 1
+          ? opened
+            ? '订单已创建，请扫码完成微信支付'
+            : '订单已创建，请继续完成支付'
+          : opened
+            ? '订单已创建，正在跳转支付页面'
+            : '订单已创建，请继续完成支付',
+      type: 'success',
+      customClass: 'ac-top-message',
+      offset: 24,
+      grouping: true,
+    })
+    await startRechargePolling(data.order_sn)
+  } catch (error: any) {
+    ElMessage({
+      message: error?.message || '创建充值订单失败',
+      type: 'error',
+      customClass: 'ac-top-message',
+      offset: 24,
+      grouping: true,
+    })
+  }
 }
 
 async function loadCenter() {
@@ -608,7 +893,11 @@ async function logout() {
   }
 }
 
-onMounted(loadCenter)
+onMounted(async () => {
+  await Promise.all([loadCenter(), loadRechargeInfo()])
+})
+
+onBeforeUnmount(stopRechargePolling)
 </script>
 
 <style scoped lang="less">
@@ -741,6 +1030,29 @@ onMounted(loadCenter)
   }
 }
 
+.ac-sidebar-kunbi {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(29, 78, 216, 0.1), rgba(15, 118, 110, 0.12));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ac-sidebar-kunbi__label {
+  font-size: 12px;
+  color: var(--ac-text-2);
+}
+
+.ac-sidebar-kunbi__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f766e;
+}
+
 .ac-sidebar-nav {
   list-style: none;
   width: 100%;
@@ -832,6 +1144,11 @@ onMounted(loadCenter)
 .ac-pill--green {
   background: var(--ac-success-light);
   color: var(--ac-success);
+}
+
+.ac-pill--blue {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
 }
 
 .ac-header-btns {
@@ -1569,6 +1886,10 @@ onMounted(loadCenter)
       border-radius: 14px;
     }
 
+    .ac-sidebar-kunbi {
+      margin-top: 2px;
+    }
+
     .ac-sidebar-nav {
       margin-top: 4px;
       gap: 8px;
@@ -1703,5 +2024,96 @@ onMounted(loadCenter)
   .ac-info-item__val {
     font-size: 12px;
   }
+}
+
+:global(.ac-pay-overlay) {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4200;
+}
+
+.ac-pay-dialog {
+  position: relative;
+  width: min(92vw, 380px);
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px 24px 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.ac-pay-dialog__close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.ac-pay-dialog__title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ac-pay-dialog__desc {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ac-pay-dialog__qr-wrap {
+  margin: 20px auto 16px;
+  width: 236px;
+  height: 236px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fafc, #eef2ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ac-pay-dialog__qr {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ac-pay-dialog__meta {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: #334155;
+}
+
+.ac-pay-dialog__btn {
+  margin-top: 18px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+:global(.ac-top-message) {
+  z-index: 5000 !important;
 }
 </style>

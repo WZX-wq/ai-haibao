@@ -1,4 +1,7 @@
 import fs from 'node:fs'
+import http from 'node:http'
+import https from 'node:https'
+import net from 'node:net'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -11,12 +14,37 @@ const pidFile = path.join(runlogsDir, 'dev-processes.json')
 const isWin = process.platform === 'win32'
 const npmCmd = isWin ? 'npm.cmd' : 'npm'
 
+function readSimpleEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {}
+  const out = {}
+  const content = fs.readFileSync(filePath, 'utf8')
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const index = trimmed.indexOf('=')
+    if (index <= 0) continue
+    out[trimmed.slice(0, index).trim()] = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, '')
+  }
+  return out
+}
+
+const localEnv = {
+  ...readSimpleEnvFile(path.join(rootDir, '.env.local')),
+  ...readSimpleEnvFile(path.join(rootDir, '.env')),
+}
+const devHostname = String(localEnv.VITE_DEV_HOSTNAME || '').trim()
+const frontendPort = Number(localEnv.VITE_DEV_PORT || (devHostname ? 443 : 5173))
+const frontendUrl =
+  devHostname && frontendPort === 443
+    ? `https://${devHostname}/`
+    : `${devHostname ? 'https' : 'http'}://${devHostname || '127.0.0.1'}:${frontendPort}/`
+
 const targets = [
   {
     name: 'frontend',
     cwd: rootDir,
-    port: 5173,
-    url: 'http://127.0.0.1:5173/',
+    port: frontendPort,
+    url: frontendUrl,
     command: npmCmd,
     args: ['run', 'dev'],
     stdout: path.join(runlogsDir, 'frontend.log'),
@@ -44,13 +72,57 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+async function checkTcpPort(target) {
+  return await new Promise((resolve) => {
+    const url = new URL(target.url)
+    const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80))
+    const socket = net.createConnection(
+      {
+        host: url.hostname,
+        port,
+      },
+      () => {
+        socket.destroy()
+        resolve(true)
+      },
+    )
+    socket.on('error', () => resolve(false))
+    socket.setTimeout(3000, () => {
+      socket.destroy()
+      resolve(false)
+    })
+  })
+}
+
 async function checkTarget(target) {
-  try {
-    const response = await fetch(target.url, { method: 'GET' })
-    return response.ok
-  } catch {
-    return false
-  }
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(target.url)
+      const transport = url.protocol === 'https:' ? https : http
+      const req = transport.request(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
+          path: url.pathname + url.search,
+          method: 'GET',
+          rejectUnauthorized: false,
+        },
+        (res) => {
+          res.resume()
+          resolve(Boolean(res.statusCode && res.statusCode < 500))
+        },
+      )
+      req.on('error', async () => resolve(await checkTcpPort(target)))
+      req.setTimeout(3000, () => {
+        req.destroy()
+        checkTcpPort(target).then(resolve)
+      })
+      req.end()
+    } catch {
+      checkTcpPort(target).then(resolve)
+    }
+  })
 }
 
 async function waitForTarget(target, timeoutMs = 30000) {
