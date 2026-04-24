@@ -721,6 +721,15 @@ async function loadRechargeInfo(showError = false) {
   }
 }
 
+async function refreshKunbiData(options: { showHistoryError?: boolean } = {}) {
+  if (!userStore.online) return
+  await Promise.all([
+    loadRechargeInfo(),
+    loadCenter(),
+    loadRechargeHistory(!!options.showHistoryError),
+  ])
+}
+
 async function openRechargeCenter() {
   if (!userStore.online) {
     go('/login')
@@ -738,7 +747,22 @@ async function loadRechargeHistory(showError = false) {
       getKunbiRechargeRecord(1, 20),
       getKunbiDetailRecord(1, 30, 0),
     ])
-    rechargeHistory.value = Array.isArray(rechargeData?.list) ? rechargeData.list : []
+    const rechargeList = Array.isArray(rechargeData?.list) ? rechargeData.list : []
+    rechargeHistory.value = await Promise.all(
+      rechargeList.map(async (item: any) => {
+        let payStatus = item?.pay_status
+        if ((payStatus === undefined || payStatus === null || payStatus === '') && item?.order_sn) {
+          try {
+            const statusData = await checkRechargeOrderStatus(String(item.order_sn))
+            payStatus = statusData?.pay_status
+          } catch {
+            // 保持静默，列表仍展示订单本身信息
+          }
+        }
+
+        return { ...item, pay_status: Number(payStatus ?? 0) }
+      }),
+    )
     kunbiDetailHistory.value = Array.isArray(detailData?.list) ? detailData.list : []
   } catch (error: any) {
     if (showError) {
@@ -767,7 +791,7 @@ async function startRechargePolling(orderSn: string) {
         rechargeVisible.value = false
         closeWechatPayDialog()
         closeAlipayPayDialog()
-        await Promise.all([loadRechargeInfo(), loadCenter(), loadRechargeHistory()])
+        await refreshKunbiData()
         ElMessage.success('支付成功，鲲币余额已刷新')
         return
       }
