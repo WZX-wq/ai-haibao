@@ -108,8 +108,8 @@ function resolvePageGradient(seed: TemplateSeed): string {
 }
 
 function allowRemoteTemplateHeroes() {
-  // 默认关闭外链实拍图，避免离线/跨域导致列表和画布都“丢图”
-  return String(process.env.TEMPLATE_HERO_REMOTE || 'cache') // cache | direct | false
+  // 预构建部署默认不依赖本地缓存目录，避免 /static/template-hero/*.jpg 在新环境中 404。
+  return String(process.env.TEMPLATE_HERO_REMOTE || 'direct') // cache | direct | false
 }
 
 const HERO_CACHE_DIR = path.join(process.cwd(), 'static', 'template-hero')
@@ -1259,8 +1259,8 @@ export function getTemplateList() {
   return templateSeeds.map((seed) => ({
     id: seed.id,
     cover: makePreviewSvg(seed),
-    // thumb 用真实渲染截图，cover 保留为 SVG 兜底
-    thumb: makeTemplateCoverScreenshotUrl(seed),
+    // 列表卡片避免依赖截图接口；直接复用稳定的 SVG 预览，防止 /api/screenshots 500 导致整列封面报错
+    thumb: makePreviewSvg(seed),
     title: seed.fullTitle,
     width: seed.width,
     height: seed.height,

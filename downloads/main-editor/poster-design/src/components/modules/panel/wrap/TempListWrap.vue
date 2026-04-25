@@ -28,6 +28,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import api from '@/api'
 import _config from '@/config'
 import { deepNormalizeLoopbackMediaUrls, normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
+import { getStaticTemplateCoverUrl } from '@/utils/templateStaticCover'
 import { LocationQueryValue, useRoute, useRouter } from 'vue-router'
 import searchHeader from './components/searchHeader.vue'
 import useConfirm from '@/common/methods/confirm'
@@ -104,6 +105,40 @@ function buildScreenshotThumb(
   return `${base}/api/screenshots?tempid=${tempId}&width=${w}&height=${h}&type=file&index=0&force=${force}${bust}`
 }
 
+function isScreenshotCoverUrl(value: string) {
+  return /\/api\/screenshots(?:\?|$)/i.test(value)
+}
+
+function resolveTemplateCover(
+  item: Partial<IGetTempListData> & { id?: number | string },
+  opts?: { force?: number; bust?: boolean },
+) {
+  const id = Number(item.id) || 0
+  const staticCover = getStaticTemplateCoverUrl(id)
+  if (staticCover) {
+    return {
+      preferred: staticCover,
+      fallback: staticCover,
+    }
+  }
+
+  const width = Number(item.width) || 1242
+  const height = Number(item.height) || 1660
+  const normalizedThumb = normalizeLoopbackMediaUrl(String(item.thumb || '').trim())
+  const normalizedCover = normalizeLoopbackMediaUrl(String(item.cover || '').trim())
+  const rawThumb = isScreenshotCoverUrl(normalizedThumb) ? '' : normalizedThumb
+  const rawCover = isScreenshotCoverUrl(normalizedCover) ? '' : normalizedCover
+  const screenshotCover = id > 0 ? buildScreenshotThumb(id, { ...opts, width, height }) : ''
+  const localFallback = id > 0 ? `/template-cover-${(id % 2) + 1}.png` : '/template-cover-1.png'
+  const preferred = rawThumb || rawCover || localFallback
+  const fallback = rawCover || rawThumb || localFallback
+
+  return {
+    preferred,
+    fallback,
+  }
+}
+
 function buildPinnedListItem(
   tid: number,
   detail: Record<string, unknown>,
@@ -111,15 +146,24 @@ function buildPinnedListItem(
 ): IGetTempListData {
   const w = Number(detail.width) || 1242
   const h = Number(detail.height) || 1660
-  const coverRaw = normalizeLoopbackMediaUrl(String(detail.cover || detail.thumb || '').trim())
-  const cover = coverRaw || buildScreenshotThumb(tid, { ...thumbOpts, width: w, height: h })
+  const { preferred, fallback } = resolveTemplateCover(
+    {
+      id: tid,
+      width: w,
+      height: h,
+      cover: String(detail.cover || ''),
+      thumb: String(detail.thumb || ''),
+    },
+    thumbOpts,
+  )
+  const cover = preferred || buildScreenshotThumb(tid, { ...thumbOpts, width: w, height: h })
   return {
     id: tid,
     title: String(detail.title || '当前模板'),
     width: w,
     height: h,
     state: Number(detail.state) || 1,
-    cover: cover || '/template-cover-1.png',
+    cover: fallback || cover || '/template-cover-1.png',
     thumb: cover || undefined,
     url: cover || '/template-cover-1.png',
     isDelect: false,
@@ -330,7 +374,15 @@ const load = async (init: boolean = false, stat?: string, retryAttempt: number =
 
   try {
     const res = await api.home.getTempList({ search: state.searchKeyword, ...pageOptions })
-    const nextList = res.list || []
+    const nextList = (res.list || []).map((item) => {
+      const { preferred, fallback } = resolveTemplateCover(item)
+      return {
+        ...item,
+        thumb: preferred || item.thumb,
+        url: preferred || item.url || fallback,
+        cover: fallback || preferred || item.cover,
+      }
+    })
     if (nextList.length <= 0) {
       state.loadDone = true
     } else {
@@ -490,6 +542,7 @@ function setTempId(tempId: number | string) {
     path: '/home',
     query: {
       ...rest,
+      section: 'template',
       tempid: String(tempId),
     },
     replace: true,

@@ -42,6 +42,7 @@
               class="list__img-thumb"
               :src="item.cover"
               fit="contain"
+              loading="lazy"
             />
           </div>
         </div>
@@ -55,7 +56,7 @@
       :infinite-scroll-distance="150"
     >
       <classHeader :is-back="true" @back="back">{{ state.currentCategory.name }}</classHeader>
-      <el-space fill wrap :fillRatio="30" direction="horizontal" class="list">
+      <div class="list">
         <div
           v-for="(item, i) in state.list"
           :key="i + 'i'"
@@ -106,9 +107,10 @@
             class="list__img"
             :src="item.cover"
             fit="contain"
+            loading="lazy"
           />
         </div>
-      </el-space>
+      </div>
       <div v-show="state.loading" class="loading"><i class="el-icon-loading"></i> {{ loadingText }}</div>
       <div v-show="state.loadDone" class="loading">{{ loadDoneText }}</div>
     </ul>
@@ -162,17 +164,6 @@ const defaultPreviewColor = '#1f2937'
 const loadingText = '\u6b63\u5728\u52a0\u8f7d\u4e2d...'
 const loadDoneText = '\u5df2\u7ecf\u5230\u5e95\u4e86'
 const previewLimit = 6
-const compTextFallbackById: Record<number, string> = {
-  4: '\u597d\u7269\u63a8\u8350',
-  5: '\u4eca\u65e5\u63a2\u5e97',
-  6: '\u4eca\u65e5\u4e0a\u65b0',
-}
-const compTextFallbackByRaw: Record<string, string> = {
-  '\u6fc2\u754c\u58bf\u93ba\u3128\u5d18': '\u597d\u7269\u63a8\u8350',
-  '\u6d60\u5a43\u68e9\u93ba\u3220\u7c35': '\u4eca\u65e5\u63a2\u5e97',
-  '\u6d60\u5a43\u68e9\u6d93\u5a43\u67ca': '\u4eca\u65e5\u4e0a\u65b0',
-  'm60Z43he9m93Z43gca': '\u4eca\u65e5\u4e0a\u65b0',
-}
 const dragHelper = new DragHelper()
 let isAlive = true
 let isDrag = false
@@ -222,19 +213,20 @@ onMounted(async () => {
         { cate: 'text', name: '\u7279\u6548\u6587\u5b57' },
         { cate: 'comp', name: '\u7ec4\u5408\u6a21\u677f' },
       ]
-      const nextShowList: TCompPreviewItem[][] = []
-      for (const iterator of state.types) {
-        try {
-          const { list = [] } = await api.home.getCompList({
-            type: 1,
-            cate: iterator.cate,
-          })
-          nextShowList.push((await enrichPreviewList(list, iterator.cate)).slice(0, previewLimit))
-        } catch (error) {
-          console.error(`Failed to load component category: ${iterator.cate}`, error)
-          nextShowList.push([])
-        }
-      }
+      const nextShowList = await Promise.all(
+        state.types.map(async (iterator) => {
+          try {
+            const { list = [] } = await api.home.getCompList({
+              type: 1,
+              cate: iterator.cate,
+            })
+            return (await enrichPreviewList(list, iterator.cate)).slice(0, previewLimit)
+          } catch (error) {
+            console.error(`Failed to load component category: ${iterator.cate}`, error)
+            return []
+          }
+        }),
+      )
       if (isAlive) {
         state.showList = nextShowList
       }
@@ -417,35 +409,43 @@ async function enrichPreviewList(list: TGetCompListResult[], cate?: string) {
     return list as TCompPreviewItem[]
   }
 
-  return Promise.all(
-    list.map(async (item) => {
+  const previewList = await Promise.all(list.map(async (item) => {
+    if (cate === 'text') {
+      let detail: TTempDetail | null = null
       try {
-        const detail = await getCompDetail({ id: item.id, type: 1 })
-        return {
-          ...item,
-          ...(cate === 'text' ? extractTextPreview(detail) : extractCompPreview(item, detail)),
-        }
+        detail = await getCompDetail({ id: item.id, type: 1 })
       } catch (error) {
-        console.error(`Failed to enrich ${cate} preview: ${item.id}`, error)
-        return {
-          ...item,
-          ...(cate === 'text'
-            ? {
-                previewText: cleanupPreviewText(item.title || item.name),
-                previewColor: defaultPreviewColor,
-                previewStrokeColor: '',
-              }
-            : {
-                previewName: cleanupPreviewText(item.title || item.name),
-                previewText: cleanupPreviewText(item.title || item.name),
-                previewSecondaryText: '',
-                previewColor: defaultPreviewColor,
-                previewStrokeColor: '',
-              }),
-        }
+        console.error(`Failed to prepare text preview: ${item.id}`, error)
       }
-    }),
-  )
+
+      const preview = extractTextPreview(detail)
+      return {
+        ...item,
+        previewText: preview.previewText,
+        previewColor: preview.previewColor,
+        previewStrokeColor: preview.previewStrokeColor,
+      }
+    }
+
+    let detail: TTempDetail | null = null
+    try {
+      detail = await getCompDetail({ id: item.id, type: 1 })
+    } catch (error) {
+      console.error(`Failed to prepare component preview: ${item.id}`, error)
+    }
+
+    const preview = extractCompPreview(item, detail)
+    return {
+      ...item,
+      previewName: preview.previewName,
+      previewText: preview.previewText,
+      previewSecondaryText: preview.previewSecondaryText,
+      previewColor: preview.previewColor,
+      previewStrokeColor: preview.previewStrokeColor,
+    }
+  }))
+
+  return previewList
 }
 
 function getPreviewText(item: TCompPreviewItem) {
@@ -473,7 +473,7 @@ function isCompCategory(index: number) {
 
 function normalizeCompText(value?: string) {
   const cleaned = cleanupPreviewText(value)
-  return compTextFallbackByRaw[cleaned] || cleaned
+  return cleaned
 }
 
 function isReadablePreviewText(value?: string) {
@@ -524,13 +524,14 @@ function extractCompPreview(item: TGetCompListResult, detail: TTempDetail | null
   const primary = sortedLayers[0]
   const secondary = sortedLayers.find((layer) => layer.text !== primary?.text)
   const previewName = cleanupPreviewText(decodeTextIfNeeded(item.title || item.name || primary?.text || '\u7ec4\u5408\u6a21\u677f'))
-  const fallbackText = compTextFallbackById[Number(item.id)] || ''
-  const previewText = fallbackText || (isReadablePreviewText(primary?.text) ? primary?.text || '' : '')
+  const readablePrimary = isReadablePreviewText(primary?.text) ? primary?.text || '' : ''
+  const readableAny = sortedLayers.find((layer) => isReadablePreviewText(layer.text))?.text || ''
+  const previewText = readablePrimary || readableAny
   const previewSecondaryText = isReadablePreviewText(secondary?.text) ? secondary?.text || '' : ''
 
   return {
     previewName,
-    previewText: previewText || cleanupPreviewText(item.title || item.name || fallbackText),
+    previewText: previewText || cleanupPreviewText(item.title || item.name),
     previewSecondaryText,
     previewColor: primary?.color || defaultPreviewColor,
     previewStrokeColor: primary?.strokeColor || '',
@@ -740,17 +741,18 @@ defineExpose({
 }
 
 .list {
-  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   padding: 3.35rem 0.75rem 0 0.9rem;
-  gap: 0 !important;
+  gap: 10px;
 
   &__item {
+    width: 100%;
     overflow: hidden;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 18px;
-    margin-bottom: 10px;
-    margin-right: 10px;
     box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   }
@@ -834,10 +836,11 @@ defineExpose({
 }
 
 .text-preview-card--large {
-  width: 142px;
-  min-height: 142px;
-  padding: 14px 12px;
+  width: 100%;
+  min-height: 136px;
+  padding: 12px 10px;
   align-items: flex-start;
+  box-sizing: border-box;
 }
 
 .text-preview-card__sample {
@@ -853,7 +856,7 @@ defineExpose({
 }
 
 .text-preview-card__sample--large {
-  font-size: 28px;
+  font-size: 24px;
   text-align: left;
 }
 
@@ -894,9 +897,10 @@ defineExpose({
 }
 
 .comp-preview-card--large {
-  width: 142px;
-  min-height: 142px;
-  padding: 14px 12px;
+  width: 100%;
+  min-height: 136px;
+  padding: 12px 10px;
+  box-sizing: border-box;
 }
 
 .comp-preview-card__title {
@@ -928,7 +932,7 @@ defineExpose({
 
 .comp-preview-card__headline--large {
   align-items: flex-start;
-  font-size: 24px;
+  font-size: 22px;
   text-align: left;
 }
 
@@ -938,5 +942,27 @@ defineExpose({
   color: #7c695b;
   white-space: normal;
   word-break: break-word;
+}
+
+@media (max-width: 540px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 3.2rem 0.55rem 0 0.7rem;
+  }
+
+  .text-preview-card--large,
+  .comp-preview-card--large {
+    min-height: 126px;
+    padding: 10px 9px;
+  }
+
+  .text-preview-card__sample--large {
+    font-size: 20px;
+  }
+
+  .comp-preview-card__headline--large {
+    font-size: 19px;
+  }
 }
 </style>

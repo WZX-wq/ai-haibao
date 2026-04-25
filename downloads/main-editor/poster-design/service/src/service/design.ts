@@ -5,10 +5,21 @@ import { send, randomCode } from '../utils/tools'
 import { ensureUserDesignsSchema, getMysqlPool, isMysqlConfigured } from '../utils/mysql'
 import { tryResolveSession } from './account'
 import { getTemplateCategories, getTemplateDetail, getTemplateList } from './templateCatalog'
-import { getClientStaticBaseUrl, internalApiUrl } from '../utils/clientPublicUrl'
+import { getClientSiteRootUrl, getClientStaticBaseUrl, internalApiUrl } from '../utils/clientPublicUrl'
 import { mockPath, mockRel } from '../utils/mockRoot'
 /** 与内置模板 id 区分；大于等于此值的 id 仅走 user_designs */
 const USER_DESIGN_ID_MIN = 1000000000
+
+function setPublicJsonCache(res: any, maxAgeSeconds: number, staleWhileRevalidateSeconds = maxAgeSeconds * 3) {
+  res.setHeader(
+    'Cache-Control',
+    `public, max-age=${Math.max(0, Math.round(maxAgeSeconds))}, stale-while-revalidate=${Math.max(0, Math.round(staleWhileRevalidateSeconds))}`,
+  )
+}
+
+function setPrivateNoStore(res: any) {
+  res.setHeader('Cache-Control', 'private, no-store')
+}
 
 function isUserDesignId(id: unknown): boolean {
   const n = Number(id)
@@ -28,6 +39,12 @@ function listCoverUrl(id: number | string, width: number, height: number) {
   return `${getClientStaticBaseUrl()}${id}-screenshot-vp-${cw}x${ch}.png`
 }
 
+function publicScreenshotUrl(pathAndQuery: string) {
+  const root = getClientSiteRootUrl()
+  const path = pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`
+  return root.endsWith('/') ? `${root}${path.slice(1)}` : `${root}${path}`
+}
+
 function listWorkPreviewUrl(id: number | string, width: number, height: number, version?: Date | string | number | null) {
   const cw = Math.max(1, Math.round(Number(width)))
   const ch = Math.max(1, Math.round(Number(height)))
@@ -44,12 +61,16 @@ function listWorkPreviewUrl(id: number | string, width: number, height: number, 
       q.set('v', String(Math.round(Number(dt))))
     }
   }
-  return internalApiUrl(`api/screenshots?${q.toString()}`)
+  return publicScreenshotUrl(`api/screenshots?${q.toString()}`)
 }
 
-function rowToDetailPayload(row: Record<string, any>, cover: string) {
-  const dataStr =
-    typeof row.data_json === 'string' ? row.data_json : JSON.stringify(row.data_json ?? '')
+function rowToDetailPayload(row: Record<string, any>, cover: string, dataStr?: string) {
+  const normalizedData =
+    typeof dataStr === 'string'
+      ? dataStr
+      : typeof row.data_json === 'string'
+        ? row.data_json
+        : JSON.stringify(row.data_json ?? '')
   return {
     id: Number(row.id),
     title: row.title || '',
@@ -57,7 +78,7 @@ function rowToDetailPayload(row: Record<string, any>, cover: string) {
     height: Number(row.height) || 0,
     cate: Number(row.cate) || 0,
     category: Number(row.cate) || 0,
-    data: dataStr,
+    data: normalizedData,
     cover,
     created_time: formatSqlDateTime(row.created_at),
     updated_time: formatSqlDateTime(row.updated_at),
@@ -80,10 +101,11 @@ async function saveWorkToMysql(req: any, res: any) {
   const userId = session.userId
   let id = String(req.body.id || '').trim()
   const title = String(req.body.title || '')
-  const dataJson = typeof req.body.data === 'string' ? req.body.data : JSON.stringify(req.body.data ?? null)
   const width = Number(req.body.width) || 0
   const height = Number(req.body.height) || 0
   const cate = Number(req.body.cate || 0) || 0
+  const tempId = String(req.body.temp_id || '').trim()
+  const dataJson = normalizeStoredDesignData(req.body.data, tempId || null)
 
   if (id) {
     const [ownRows] = await db.query(
@@ -95,20 +117,40 @@ async function saveWorkToMysql(req: any, res: any) {
       id = String(ownedList[0].id)
       await db.query(
         `UPDATE user_designs
-         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, updated_at = NOW()
+         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, source_template_id = COALESCE(?, source_template_id), updated_at = NOW()
          WHERE id = ? AND user_id = ? AND design_type = 0`,
-        [title, width, height, cate, dataJson, id, userId],
+        [title, width, height, cate, dataJson, tempId || null, id, userId],
       )
     } else {
       id = ''
     }
   }
 
+  if (!id && tempId) {
+    const [existingRows] = await db.query(
+      `SELECT id FROM user_designs
+       WHERE user_id = ? AND design_type = 0 AND source_template_id = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [userId, tempId],
+    )
+    const existingList = existingRows as { id: number | string }[]
+    if (existingList?.length) {
+      id = String(existingList[0].id)
+      await db.query(
+        `UPDATE user_designs
+         SET title = ?, width = ?, height = ?, cate = ?, data_json = ?, source_template_id = ?, updated_at = NOW()
+         WHERE id = ? AND user_id = ? AND design_type = 0`,
+        [title, width, height, cate, dataJson, tempId, id, userId],
+      )
+    }
+  }
+
   if (!id) {
     const [ins] = await db.query(
-      `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
-       VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
-      [userId, title, width, height, cate, dataJson],
+      `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, source_template_id, state, data_json)
+       VALUES (?, 0, ?, ?, ?, ?, ?, 1, ?)`,
+      [userId, title, width, height, cate, tempId || null, dataJson],
     )
     id = String((ins as { insertId?: number | string }).insertId ?? '')
   }
@@ -242,7 +284,7 @@ function getTemplateScreenshotUrl(id: number | string, version?: number | string
 function getTemplatePreviewUrl(id: number | string, savedTemplatePath: string, width: number, height: number) {
   const savedStats = fs.statSync(savedTemplatePath)
   if (width > 0 && height > 0) {
-    return internalApiUrl(
+    return publicScreenshotUrl(
       `api/screenshots?tempid=${id}&width=${width}&height=${height}&type=file&index=0&force=1&v=${savedStats.mtimeMs}`,
     )
   }
@@ -296,6 +338,103 @@ function normalizeTemplatePayload(data: any) {
   return data
 }
 
+function isTemplateHeroStaticUrl(url: unknown): boolean {
+  return /^\/static\/template-hero\/[^/?#]+\.(jpg|jpeg|png|webp)(?:[?#].*)?$/i.test(String(url || '').trim())
+}
+
+const TEMPLATE_HERO_HASH_FALLBACKS: Record<string, string> = {
+  '013a74d42821c48b': 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1400&q=80',
+  '061a60708faf4288': 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1400&q=80',
+  '4ad3e3b46a84de70': 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1400&q=80',
+  'ff3f7a7cd920d447': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1400&q=80',
+}
+
+function resolveTemplateHeroDiskPath(url: string): string {
+  const clean = String(url || '').trim().replace(/^[a-z]+:\/\/[^/]+/i, '')
+  const rel = clean.replace(/^\/static\//i, '').split(/[?#]/)[0]
+  return path.resolve(__dirname, '../../static', rel)
+}
+
+function getTemplateHeroHash(url: string): string {
+  const match = String(url || '').trim().match(/\/static\/template-hero\/([a-f0-9]{16})\.(jpg|jpeg|png|webp)(?:[?#].*)?$/i)
+  return match?.[1]?.toLowerCase() || ''
+}
+
+function getTemplateHeroFallbackByHash(url: string): string {
+  const hash = getTemplateHeroHash(url)
+  return TEMPLATE_HERO_HASH_FALLBACKS[hash] || ''
+}
+
+function findFallbackImageUrl(layer: any, fallbackLayers: any[]) {
+  const byUuid = fallbackLayers.find((candidate: any) => candidate?.uuid === layer?.uuid && candidate?.imgUrl)
+  if (byUuid?.imgUrl) return String(byUuid.imgUrl)
+
+  const byName = fallbackLayers.find((candidate: any) =>
+    candidate?.type === layer?.type &&
+    candidate?.name === layer?.name &&
+    candidate?.imgUrl,
+  )
+  if (byName?.imgUrl) return String(byName.imgUrl)
+
+  const byHero = fallbackLayers.find((candidate: any) =>
+    candidate?.type === layer?.type &&
+    String(candidate?.uuid || '').startsWith('hero_') &&
+    candidate?.imgUrl,
+  )
+  if (byHero?.imgUrl) return String(byHero.imgUrl)
+
+  return ''
+}
+
+function repairMissingTemplateHeroAssets(data: any, fallbackData?: any) {
+  const parsed = normalizeTemplatePayload(data)
+  if (!parsed) return data
+
+  const fallbackParsed = normalizeTemplatePayload(fallbackData)
+  const pages = Array.isArray(parsed)
+    ? parsed
+    : parsed?.page && Array.isArray(parsed?.widgets)
+      ? [{ global: parsed.page, layers: parsed.widgets }]
+      : []
+  const fallbackPages = Array.isArray(fallbackParsed)
+    ? fallbackParsed
+    : fallbackParsed?.page && Array.isArray(fallbackParsed?.widgets)
+      ? [{ global: fallbackParsed.page, layers: fallbackParsed.widgets }]
+      : []
+
+  let changed = false
+
+  pages.forEach((page: any, pageIndex: number) => {
+    if (!Array.isArray(page?.layers)) return
+    const fallbackLayers = Array.isArray(fallbackPages[pageIndex]?.layers) ? fallbackPages[pageIndex].layers : []
+    page.layers.forEach((layer: any) => {
+      const currentUrl = String(layer?.imgUrl || '').trim()
+      if (!isTemplateHeroStaticUrl(currentUrl)) return
+      if (fs.existsSync(resolveTemplateHeroDiskPath(currentUrl))) return
+      const fallbackUrl = findFallbackImageUrl(layer, fallbackLayers) || getTemplateHeroFallbackByHash(currentUrl)
+      if (!fallbackUrl || fallbackUrl === currentUrl) return
+      layer.imgUrl = fallbackUrl
+      changed = true
+    })
+  })
+
+  if (!changed) return data
+  return typeof data === 'string' ? JSON.stringify(parsed) : parsed
+}
+
+function getTemplateFallbackData(templateId: unknown) {
+  if (templateId === undefined || templateId === null || templateId === '') return null
+  const detail = getTemplateDetail(templateId as number | string)
+  return detail?.data || null
+}
+
+function normalizeStoredDesignData(data: any, fallbackTemplateId?: unknown) {
+  const fallbackData = getTemplateFallbackData(fallbackTemplateId)
+  const repaired = repairMissingTemplateHeroAssets(data, fallbackData)
+  if (typeof repaired === 'string') return repaired
+  return JSON.stringify(repaired ?? null)
+}
+
 function buildTemplateTitle(currentTitle: string, headline: string) {
   if (!headline) return currentTitle
   if (currentTitle?.includes(headline)) return currentTitle
@@ -341,7 +480,7 @@ function enrichTemplateListWithSavedDetails(list: any[]) {
 
     const width = Number(savedDetail.width || item.width)
     const height = Number(savedDetail.height || item.height)
-    const screenshotUrl = getTemplatePreviewUrl(item.id, savedTemplatePath, width, height) || getTemplateScreenshotFallback(item.id)
+    const stableCover = getTemplateScreenshotFallback(item.id)
     const headline = extractTemplateHeadline(savedDetail.data)
     return {
       ...item,
@@ -349,8 +488,8 @@ function enrichTemplateListWithSavedDetails(list: any[]) {
       width,
       height,
       cate: typeof savedDetail.cate === 'number' ? savedDetail.cate : item.cate,
-      thumb: screenshotUrl || item.thumb,
-      cover: screenshotUrl || item.cover,
+      thumb: stableCover || item.thumb,
+      cover: stableCover || item.cover,
     }
   }).filter(Boolean)
 }
@@ -370,6 +509,7 @@ function filterTemplateList(list: any[], query: any) {
 }
 
 export async function getTemplates(req: any, res: any) {
+  setPrivateNoStore(res)
   const type = Number(req.query.type || 0)
   if (type === 1) {
     const cate = req.query.cate || 'text'
@@ -418,6 +558,7 @@ export async function getDetail(req: any, res: any) {
   const id = req.query.id
   if (type === 1) {
     if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
+      setPrivateNoStore(res)
       const session = await tryResolveSession(req)
       if (!session) {
         send.error(res, 'template not found')
@@ -436,7 +577,8 @@ export async function getDetail(req: any, res: any) {
       }
       const cover =
         getTemplateScreenshotFallback(row.id) || listCoverUrl(row.id, row.width, row.height)
-      send.success(res, rowToDetailPayload(row, cover))
+      const normalizedData = normalizeStoredDesignData(row.data_json, row.source_template_id)
+      send.success(res, rowToDetailPayload(row, cover, normalizedData))
       return
     }
 
@@ -446,11 +588,13 @@ export async function getDetail(req: any, res: any) {
       send.error(res, 'template not found')
       return
     }
+    setPublicJsonCache(res, 600, 3600)
     send.success(res, detail)
     return
   }
 
   if (id != null && id !== '' && isUserDesignId(id) && isMysqlConfigured()) {
+    setPrivateNoStore(res)
     const session = await tryResolveSession(req)
     if (!session) {
       send.error(res, 'template not found')
@@ -469,7 +613,8 @@ export async function getDetail(req: any, res: any) {
     }
     const cover =
       getTemplateScreenshotFallback(row.id) || listCoverUrl(row.id, row.width, row.height)
-    send.success(res, rowToDetailPayload(row, cover))
+    const normalizedData = normalizeStoredDesignData(row.data_json, row.source_template_id)
+    send.success(res, rowToDetailPayload(row, cover, normalizedData))
     return
   }
 
@@ -478,13 +623,18 @@ export async function getDetail(req: any, res: any) {
   if (fs.existsSync(savedTemplatePath)) {
     const savedDetail = parseJsonFile(savedTemplatePath)
     if (isRenderableTemplateData(savedDetail?.data)) {
+      setPrivateNoStore(res)
       const meta = findMergedTemplateMeta(id)
+      const normalizedData = repairMissingTemplateHeroAssets(savedDetail.data, catalogDetail?.data)
       const withCate =
-        meta && typeof meta.cate === 'number' ? { ...savedDetail, cate: meta.cate } : { ...savedDetail }
+        meta && typeof meta.cate === 'number'
+          ? { ...savedDetail, cate: meta.cate, data: normalizedData }
+          : { ...savedDetail, data: normalizedData }
       send.success(res, withCate)
       return
     }
     if (catalogDetail) {
+      setPrivateNoStore(res)
       const meta = findMergedTemplateMeta(id)
       const payload =
         meta && typeof meta.cate === 'number' ? { ...(catalogDetail as Record<string, unknown>), cate: meta.cate } : catalogDetail
@@ -496,6 +646,7 @@ export async function getDetail(req: any, res: any) {
   }
 
   if (catalogDetail) {
+    setPrivateNoStore(res)
     const meta = findMergedTemplateMeta(id)
     const payload =
       meta && typeof meta.cate === 'number' ? { ...(catalogDetail as Record<string, unknown>), cate: meta.cate } : catalogDetail
@@ -507,6 +658,7 @@ export async function getDetail(req: any, res: any) {
 }
 
 export async function getCategories(req: any, res: any) {
+  setPublicJsonCache(res, 3600, 86400)
   const type = Number(req.query.type || 1)
   if (type === 1) {
     send.success(res, getTemplateCategories())
@@ -516,6 +668,7 @@ export async function getCategories(req: any, res: any) {
 }
 
 export async function getMyDesigns(req: any, res: any) {
+  setPrivateNoStore(res)
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 10)
 
@@ -574,11 +727,15 @@ export async function getMyDesigns(req: any, res: any) {
 }
 
 export async function getWorkDetail(req: any, res: any) {
+  setPrivateNoStore(res)
   if (!isMysqlConfigured()) {
     const id = req.query.id
     const detail = readJsonIfExists(getSavedWorkPath(id), null)
     if (detail) {
-      send.success(res, detail)
+      send.success(res, {
+        ...detail,
+        data: normalizeStoredDesignData(detail.data, detail.temp_id || null),
+      })
       return
     }
   }
@@ -586,6 +743,7 @@ export async function getWorkDetail(req: any, res: any) {
 }
 
 export async function getMaterial(req: any, res: any) {
+  setPublicJsonCache(res, 600, 3600)
   const cate = req.query.cate
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 20)
@@ -594,6 +752,7 @@ export async function getMaterial(req: any, res: any) {
 }
 
 export async function getPhotos(req: any, res: any) {
+  setPublicJsonCache(res, 600, 3600)
   const cate = req.query.cate
   const page = Number(req.query.page || 1)
   const pageSize = Number(req.query.pageSize || 30)
@@ -686,7 +845,7 @@ export async function saveTemplate(req: any, res: any) {
       const designType = type === 1 ? 1 : 0
       const compListKey =
         designType === 1 ? String(req.body.comp_cate || '').trim() || 'text' : null
-      const dataJson = typeof data === 'string' ? data : JSON.stringify(data ?? null)
+      const normalizedDataJson = normalizeStoredDesignData(data, req.body.temp_id || null)
       const numCate = Number(req.body.cate || 0) || 0
 
       let targetId: string
@@ -707,7 +866,7 @@ export async function saveTemplate(req: any, res: any) {
                 Number(width) || 0,
                 Number(height) || 0,
                 numCate,
-                dataJson,
+                normalizedDataJson,
                 compListKey,
                 targetId,
                 userId,
@@ -722,7 +881,7 @@ export async function saveTemplate(req: any, res: any) {
                 Number(width) || 0,
                 Number(height) || 0,
                 cate,
-                dataJson,
+                normalizedDataJson,
                 targetId,
                 userId,
               ],
@@ -740,7 +899,7 @@ export async function saveTemplate(req: any, res: any) {
                 Number(height) || 0,
                 numCate,
                 compListKey,
-                dataJson,
+                normalizedDataJson,
               ],
             )
             targetId = String((ins as { insertId?: number | string }).insertId ?? '')
@@ -748,7 +907,7 @@ export async function saveTemplate(req: any, res: any) {
             const [ins] = await db.query(
               `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
                VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
-              [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, dataJson],
+              [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, normalizedDataJson],
             )
             targetId = String((ins as { insertId?: number | string }).insertId ?? '')
           }
@@ -764,7 +923,7 @@ export async function saveTemplate(req: any, res: any) {
             Number(height) || 0,
             numCate,
             compListKey,
-            dataJson,
+            normalizedDataJson,
           ],
         )
         targetId = String((ins as { insertId?: number | string }).insertId ?? '')
@@ -772,7 +931,7 @@ export async function saveTemplate(req: any, res: any) {
         const [ins] = await db.query(
           `INSERT INTO user_designs (user_id, design_type, title, width, height, cate, state, data_json)
            VALUES (?, 0, ?, ?, ?, ?, 1, ?)`,
-          [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, dataJson],
+          [userId, String(title || ''), Number(width) || 0, Number(height) || 0, cate, normalizedDataJson],
         )
         targetId = String((ins as { insertId?: number | string }).insertId ?? '')
       }
@@ -833,6 +992,15 @@ export async function saveWork(req: any, res: any) {
     const width = Number(req.body.width) || 0
     const height = Number(req.body.height) || 0
     const cate = Number(req.body.cate || 0) || 0
+    let tempId = String(req.body.temp_id || '').trim()
+
+    if (!id && tempId) {
+      const list = getMockPosterList()
+      const existing = list.find((item: any) => String(item.temp_id || '').trim() === tempId)
+      if (existing?.id) {
+        id = String(existing.id)
+      }
+    }
 
     const isAdd = !id
     if (!id) {
@@ -840,7 +1008,12 @@ export async function saveWork(req: any, res: any) {
     }
 
     const detailPath = getSavedWorkPath(id)
-    const detailPayload = { id, data, title, width, height, cate }
+    if (!tempId && fs.existsSync(detailPath)) {
+      const existingDetail = readJsonIfExists(detailPath, null)
+      tempId = String(existingDetail?.temp_id || '').trim()
+    }
+    const normalizedData = normalizeStoredDesignData(data, tempId || null)
+    const detailPayload = { id, data: normalizedData, title, width, height, cate, temp_id: tempId || '' }
     writeJsonFile(detailPath, detailPayload)
 
     const size = width > height ? 640 : 320
@@ -861,6 +1034,7 @@ export async function saveWork(req: any, res: any) {
       width,
       height,
       cate,
+      temp_id: tempId || '',
       state: 1,
       isDelect: false,
       fail: false,

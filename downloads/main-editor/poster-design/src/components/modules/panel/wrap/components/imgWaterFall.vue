@@ -18,8 +18,7 @@
           :height="Math.max(1, Math.round(item.height || state.width))"
           sizes="154px"
           alt="template-cover"
-          loading="eager"
-          fetchpriority="high"
+          :fetchpriority="getFetchPriority(i, item)"
           decoding="async"
           @error="loadError(item, i, $event)"
           @load="loadSuccess(item, i, $event)"
@@ -35,8 +34,7 @@
         :height="Math.max(1, Math.round(item.height || state.width))"
         sizes="154px"
         alt="template-cover"
-        loading="eager"
-        fetchpriority="high"
+        :fetchpriority="getFetchPriority(i, item)"
         decoding="async"
         @error="loadError(item, i, $event)"
         @load="loadSuccess(item, i, $event)"
@@ -133,11 +131,23 @@ const getCardImage = (item: IGetTempListData) => {
   return normalized || '/template-cover-1.png'
 }
 
+const getFetchPriority = (index: number, item: IGetTempListData) => {
+  if (isActiveItem(item) || index < 2) return 'high'
+  return 'low'
+}
+
 const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cover-1.png' : '/template-cover-2.png')
 
 const withRetryParam = (raw: string, key = 'retry') => {
   if (!raw) return raw
   return `${raw}${raw.includes('?') ? '&' : '?'}${key}=${Date.now()}`
+}
+
+const isStaticTemplateAsset = (raw?: string) => {
+  const value = String(raw || '').trim()
+  if (!value) return false
+  if (/\/api\/screenshots\b/i.test(value)) return false
+  return /(?:^|\/)(?:src\/assets|assets)\//i.test(value) && /\.(webp|jpg|jpeg|png)(?:[?#].*)?$/i.test(value)
 }
 
 const looksLikeBlankCover = (img: HTMLImageElement) => {
@@ -213,7 +223,10 @@ const loadSuccess = (item: IGetTempListData, index: number, event?: Event) => {
     return
   }
 
-  if (target && looksLikeBlankCover(target)) {
+  const currentSrc = target?.currentSrc || target?.src || getCardImage(item)
+  const shouldSkipBlankCheck = isStaticTemplateAsset(currentSrc) || isStaticTemplateAsset(item.thumb) || isStaticTemplateAsset(item.url)
+
+  if (target && !shouldSkipBlankCheck && looksLikeBlankCover(target)) {
     const meta = item as IGetTempListData & { __blankRetryCount?: number }
     const blankRetryCount = Number(meta.__blankRetryCount || 0)
 
