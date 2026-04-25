@@ -2,14 +2,37 @@
  * Single-browser screenshot utility for low-resource environments.
  */
 const isDev = process.env.NODE_ENV === 'development'
-const puppeteer = require('puppeteer')
+const puppeteer = require('puppeteer-core')
 const images = require('images')
 const { executablePath } = require('../configs.ts')
+const fs = require('fs')
 import { ensureScreenshotFonts } from './screenshot-font'
 
 const forceTimeOut = 60
 const maxPXs = 4211840
 const maximum = 5000
+
+function resolveBrowserExecutablePath() {
+  const configured = String(executablePath || '').trim()
+  if (configured && fs.existsSync(configured)) return configured
+
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  ]
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const item = candidates[i]
+    if (typeof item === 'string' && item && fs.existsSync(item)) {
+      return item
+    }
+  }
+
+  return undefined
+}
 
 export const saveScreenshot = async (
   url: string,
@@ -78,9 +101,10 @@ export const saveScreenshot = async (
     }, forceTimeOut * 1000)
 
     try {
+      const browserExecutablePath = resolveBrowserExecutablePath()
       browser = await puppeteer.launch({
         headless: true,
-        executablePath,
+        executablePath: browserExecutablePath,
         ignoreHTTPSErrors: true,
         args: puppeteerArgs.old,
         defaultViewport: null,

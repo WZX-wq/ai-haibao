@@ -3,9 +3,21 @@
  * 默认相对路径 /static/、站点根 /，避免 JSON 里出现 127.0.0.1 导致公网用户 ERR_CONNECTION_REFUSED。
  */
 
+function getFrontendPublicBaseUrl(): string {
+  const raw = String(
+    process.env.SERVICE_PUBLIC_BASE_URL ||
+    process.env.FRONTEND_PUBLIC_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    '',
+  ).trim()
+  return raw ? raw.replace(/\/$/, '') : ''
+}
+
 export function getClientStaticBaseUrl(): string {
   const raw = String(process.env.SERVICE_STATIC_BASE_URL || '').trim()
   if (raw) return raw.replace(/\/?$/, '/')
+  const publicBase = getFrontendPublicBaseUrl()
+  if (publicBase) return `${publicBase}/static/`
   if (String(process.env.NODE_ENV || '').toLowerCase() !== 'production') {
     return `${getInternalApiOrigin()}/static/`
   }
@@ -16,6 +28,8 @@ export function getClientStaticBaseUrl(): string {
 export function getClientSiteRootUrl(): string {
   const raw = String(process.env.SERVICE_SCREENSHOT_LIST_BASE || '').trim()
   if (raw) return raw.replace(/\/?$/, '/')
+  const publicBase = getFrontendPublicBaseUrl()
+  if (publicBase) return `${publicBase}/`
   return '/'
 }
 

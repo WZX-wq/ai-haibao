@@ -7,10 +7,22 @@
  */
 import { saveScreenshot } from '../utils/download-single'
 import uuid from '../utils/uuid'
-import { filePath, upperLimit, drawLink } from '../configs'
+import { filePath, upperLimit, getDrawLink } from '../configs'
 import { queueRun, queueList } from '../utils/node-queue'
 import fs from 'fs'
 // const path = require('path')
+
+function setScreenshotResponseHeaders(res: any, file: string, type: string) {
+  const stat = fs.existsSync(file) ? fs.statSync(file) : null
+  res.setHeader('Content-Type', type === 'file' ? 'image/png' : 'image/jpg')
+  res.setHeader('Cache-Control', type === 'file'
+    ? 'private, max-age=86400, stale-while-revalidate=604800'
+    : 'public, max-age=604800, stale-while-revalidate=2592000')
+  if (stat) {
+    res.setHeader('Last-Modified', stat.mtime.toUTCString())
+    res.setHeader('Content-Length', stat.size)
+  }
+}
 
 /**
  * @api {get} api/screenshots 截图
@@ -32,7 +44,7 @@ export async function screenshots(req: any, res: any) {
   let { id, tempid, tempType, width, height, screenshot_url, type = 'file', size, quality, index = 0, force, r } = req.query
   const useInjectedCapture = !(req.query.prevent === '0' || req.query.prevent === 0 || req.query.prevent === 'false')
   id == 'undefined' && (id = null)
-  const url = (screenshot_url || drawLink) + `${id ? '?id=' : '?tempid='}`
+    const url = (screenshot_url || getDrawLink()) + `${id ? '?id=' : '?tempid='}`
   id = id || tempid
   /** type=file 为侧栏/列表视口缩略图：仅截视口并单独缓存，避免 fullPage 整页图被前端当成异常竖条换成默认封面 */
   const isViewportFile = type === 'file'
@@ -47,7 +59,7 @@ export async function screenshots(req: any, res: any) {
   if (id && width && height) {
     // 命中缓存直接返回，避免重复跑 puppeteer；带 r/force 时强制重算。
     if (!shouldBypassCache && type === 'file' && fs.existsSync(path)) {
-      res.setHeader('Content-Type', 'image/png')
+      setScreenshotResponseHeaders(res, path, type)
       res.sendFile(path)
       return
     }
@@ -74,8 +86,9 @@ export async function screenshots(req: any, res: any) {
     })
       .then(() => {
         if (res.headersSent) return
-        res.setHeader('Content-Type', type === 'file' ? 'image/png' : 'image/jpg')
-        type === 'file' ? res.sendFile(path) : res.sendFile(thumbPath as string)
+        const targetPath = type === 'file' ? path : (thumbPath as string)
+        setScreenshotResponseHeaders(res, targetPath, type)
+        res.sendFile(targetPath)
       })
       .catch(() => {
         if (res.headersSent) return

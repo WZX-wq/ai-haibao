@@ -5,8 +5,6 @@
  * @LastEditors: ShawnPhang <https://m.palxp.cn>
  * @LastEditTime: 2024-08-12 05:13:19
  */
-const isDev = process.env.NODE_ENV === 'development'
-
 // 服务器常用修改项
 const serviceComfig = {
     port: 7001, // 端口号
@@ -35,11 +33,17 @@ export const servicePort = serviceComfig.port
 /**
  * 前端绘制页地址
  */
-export const drawLink = isDev ? 'http://127.0.0.1:5173/draw' : `${editorDrawBaseUrl()}/draw`
+export function getDrawLink() {
+  return `${editorDrawBaseUrl()}/draw`
+}
+
+export const drawLink = getDrawLink()
 
 /**
  * 图片缓存目录位置，根据实际情况调整
  */
+const isDev = process.env.NODE_ENV === 'development'
+
 export const filePath = isDev
   ? process.cwd() + `/static/`
   : String(process.env.FILE_STORAGE_PATH || serviceComfig.filePath).replace(/\/?$/, '/') 

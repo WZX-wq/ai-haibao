@@ -10,8 +10,6 @@ import app_config, { LocalStorageKey } from '@/config.ts'
 import { useBaseStore, useUserStore } from '@/store/index.ts';
 
 axios.defaults.timeout = 240000
-// axios.defaults.headers.authorization = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6MTAwMDEsImV4cCI6MTc4ODU3NDc1MDU4NX0.L_t6DFD48Dm6rUPfgIgOWJkz18En1m_-hhMHcpbxliY';
-const defaultToken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6MTAwMDEsImV4cCI6MTc4ODU3NDc1MDU4NX0.L_t6DFD48Dm6rUPfgIgOWJkz18En1m_-hhMHcpbxliY';
 // const version = app_config.VERSION;
 const baseUrl = app_config.API_URL
 
@@ -145,7 +143,7 @@ const fetch = <T = any> (
     // store.commit('loading', '加载中..');
   }
 
-  const token = localStorage.getItem(LocalStorageKey.tokenKey) || defaultToken
+  const token = localStorage.getItem(LocalStorageKey.tokenKey)
   const headerObject: Record<string, any> = {}
   token && (headerObject.Authorization = token)
   

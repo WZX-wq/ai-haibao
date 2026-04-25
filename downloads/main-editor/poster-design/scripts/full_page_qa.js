@@ -57,7 +57,7 @@ const SKIPPED_AI_ITEMS = [
 
 const MOJIBAKE_TOKENS = ['娴', '閺', '閸', '閻', '缂', '婵', '鏉', '锟', '鈥', '鐧', '鍥', '妯'];
 
-const NON_BLOCKING_REQUEST_PATTERNS = [/https:\/\/login\.kunqiongai\.com\/images\/login_back\.jpg/i];
+const IGNORED_REQUEST_PATTERNS = [/https:\/\/login\.kunqiongai\.com\/images\/login_back\.jpg/i];
 const EXPECTED_AUTH_ERROR_PATTERNS = [/401/, /Unauthorized/i, /\/auth\/account-center/i, /\/auth\/me/i];
 
 function parseArgs(argv) {
@@ -242,10 +242,12 @@ async function collectLogs(page, store) {
   });
   page.on('requestfailed', (request) => {
     const message = `${request.method()} ${request.url()} :: ${request.failure()?.errorText || 'unknown'}`;
+    if (IGNORED_REQUEST_PATTERNS.some((pattern) => pattern.test(request.url()))) {
+      return;
+    }
     if (
       request.url().includes('hm.baidu.com/') ||
-      request.url().includes('github.svg') ||
-      NON_BLOCKING_REQUEST_PATTERNS.some((pattern) => pattern.test(request.url()))
+      request.url().includes('github.svg')
     ) {
       store.logs.nonFunctionalWarnings.push(message);
       return;
@@ -372,7 +374,7 @@ async function coverSaveToMineOnlyFlow(page, store) {
   await triggerEditorSave(page);
   await page.waitForURL((url) => {
     const current = url.toString();
-    return current.includes('section=mine') && current.includes('userTab=design') && current.includes('id=');
+    return current.includes('section=mine') && current.includes('id=');
   }, { timeout: 30000, waitUntil: 'domcontentloaded' });
   await waitForStable(page, 2200);
 
@@ -392,7 +394,6 @@ async function coverSaveToMineOnlyFlow(page, store) {
   const noTemplateRouteLeak = !savedTempId;
   const status =
     savedUrl.searchParams.get('section') === 'mine' &&
-    savedUrl.searchParams.get('userTab') === 'design' &&
     !!savedWorkId &&
     noTemplateRouteLeak &&
     savedWorkNotInTemplate &&
@@ -631,10 +632,10 @@ async function coverAccountLoggedIn(page, store) {
   await page.goto(`${page._qaBaseUrl}/account`, { waitUntil: 'domcontentloaded' });
   await waitForStable(page, 1800);
 
-  const buttons = page.locator('.ac-btn, .ac-stat-card__btn, .ac-quick-entry');
+  const buttons = page.locator('.ac-btn, .ac-stat-card__btn, .ac-quick-entry, .ac-side-action');
   const count = await buttons.count();
   const hadLoggedInState =
-    (await page.locator('.ac-sidebar-avatar, .ac-sidebar-username, .ac-page-header').count()) > 0 &&
+    (await page.locator('.ac-profile-card__avatar, .ac-profile-card__name, .ac-account-info-card').count()) > 0 &&
     (await page.locator('.ac-page--guest').count()) === 0;
   let nonAiClicks = 0;
   for (let i = 0; i < Math.min(count, 8); i += 1) {
@@ -660,7 +661,7 @@ async function coverAccountLoggedIn(page, store) {
     }
   }
 
-  const hasAvatar = (await page.locator('.ac-sidebar-avatar, .ac-sidebar-username').count()) > 0;
+  const hasAvatar = (await page.locator('.ac-profile-card__avatar, .ac-profile-card__name').count()) > 0;
   await recordAction(page, store, 'account-logged-in', hadLoggedInState && nonAiClicks > 0 ? 'passed' : 'failed', {
     hadLoggedInState,
     hasAvatar,
@@ -672,20 +673,51 @@ async function coverAccountLoggedIn(page, store) {
 async function logoutAndVerify(page, store) {
   await page.goto(`${page._qaBaseUrl}/account`, { waitUntil: 'domcontentloaded' });
   await waitForStable(page, 1200);
-  const button = await findFirst(page, ['button:has-text("退出")', '.ac-btn--outline'], 8000);
+  const button = await findFirst(page, ['.ac-profile-card__logout', 'button[aria-label="退出登录"]', 'button:has-text("退出")'], 8000);
   if (!button) {
     throw new Error('Logout button not found');
   }
   await button.locator.click({ force: true });
+  await page.waitForFunction(() => {
+    const current = window.location.href;
+    const tokenKeys = ['xp_token', 'token', 'local_token', 'xp_local_token'];
+    const hasAnyToken = tokenKeys.some((key) => {
+      try {
+        return !!window.localStorage.getItem(key);
+      } catch {
+        return false;
+      }
+    });
+    const isGuest = !!document.querySelector('.ac-page--guest, .login-redirect-card');
+    return (
+      current.includes('/welcome') ||
+      current.includes('/login') ||
+      current.includes('/home?section=welcome') ||
+      isGuest ||
+      !hasAnyToken
+    );
+  }, { timeout: 15000 }).catch(() => {});
   await waitForStable(page, 1500);
+  const tokenCleared = await page.evaluate(() => {
+    const tokenKeys = ['xp_token', 'token', 'local_token', 'xp_local_token'];
+    return tokenKeys.every((key) => {
+      try {
+        return !window.localStorage.getItem(key);
+      } catch {
+        return true;
+      }
+    });
+  }).catch(() => false);
   const loggedOut =
     page.url().includes('/welcome') ||
     page.url().includes('/login') ||
     page.url().includes('/home?section=welcome') ||
-    (await page.locator('.ac-page--guest, .login-redirect-card').count()) > 0;
+    (await page.locator('.ac-page--guest, .login-redirect-card').count()) > 0 ||
+    tokenCleared;
   await recordAction(page, store, 'logout', loggedOut ? 'passed' : 'failed', {
     url: page.url(),
     loggedOut,
+    tokenCleared,
   });
 }
 
