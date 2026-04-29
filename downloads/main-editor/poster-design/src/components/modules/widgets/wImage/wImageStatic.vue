@@ -19,13 +19,13 @@
   >
     <div :style="{ transform: params.flip ? `rotate${params.flip}(180deg)` : undefined, borderRadius: params.radius + 'px', '-webkit-mask-image': getMaskStyleValue(params.mask), 'mask-image': getMaskStyleValue(params.mask) }" :class="['img__box', { mask: params.mask }]">
       <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${safeImgUrl}') ${params.sliceData.left} round` }"></div>
-      <img v-else ref="targetRef" class="target" style="transform-origin: center" :src="safeImgUrl" />
+      <img v-else ref="targetRef" class="target" style="transform-origin: center" :src="safeImgUrl" @error="handleImageError" />
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { CSSProperties, computed, reactive, ref } from 'vue'
+import { CSSProperties, computed, reactive, ref, watch } from 'vue'
 import setting from "./wImageSetting"
 import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
@@ -51,7 +51,8 @@ type TState = {
 }
 
 const props = defineProps<TProps>()
-const safeImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
+const sourceImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
+const safeImgUrl = ref(sourceImgUrl.value)
 const state = reactive<TState>({
   position: 'absolute', // 'absolute'relative
   editBoxStyle: {
@@ -78,6 +79,41 @@ function getMaskStyleValue(mask?: string) {
   const n = normalizeLoopbackMediaUrl(mask)
   return `url(${n.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
 }
+
+function isRetryableExternalUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+function appendRetryParam(url: string): string {
+  try {
+    const nextUrl = new URL(url, window.location.origin)
+    nextUrl.searchParams.set('_img_retry', `${Date.now()}`)
+    return nextUrl.toString()
+  } catch {
+    const connector = url.includes('?') ? '&' : '?'
+    return `${url}${connector}_img_retry=${Date.now()}`
+  }
+}
+
+let imageRetried = false
+
+function handleImageError() {
+  const currentUrl = sourceImgUrl.value
+  if (!currentUrl || imageRetried || !isRetryableExternalUrl(currentUrl)) {
+    return
+  }
+  imageRetried = true
+  safeImgUrl.value = appendRetryParam(currentUrl)
+}
+
+watch(
+  sourceImgUrl,
+  (value) => {
+    imageRetried = false
+    safeImgUrl.value = value
+  },
+  { immediate: true }
+)
 
 </script>
 

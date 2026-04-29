@@ -1,4 +1,4 @@
-import type { PosterDesignPlan, PosterGenerateInput, PosterGenerateResult, PosterPalette } from '@/api/ai'
+import type { PosterCopyDeck, PosterDesignPlan, PosterGenerateInput, PosterGenerateResult, PosterPalette } from '@/api/ai'
 import type { TdWidgetData } from '@/store/design/widget'
 
 export type SizePreset = { key: string; name: string; width: number; height: number }
@@ -8,6 +8,7 @@ export function dedupePosterTitleSlogan(title: string, slogan: string): { title:
 export function stripInternalPromptEcho(text: string): string
 export const layoutFamilies: readonly string[]
 export function normalizeLayoutFamily(raw: string): string
+export function getPosterCopyDeck(input: PosterGenerateInput, result: PosterGenerateResult): PosterCopyDeck
 export function buildPosterLayout(params: {
   input: PosterGenerateInput
   result: PosterGenerateResult & { designPlan?: PosterDesignPlan }
@@ -18,5 +19,9 @@ export function buildPosterLayout(params: {
 }
 export function replacePosterTexts(widgets: TdWidgetData[], input: PosterGenerateInput, result: PosterGenerateResult): TdWidgetData[]
 export function applyPosterPalette(widgets: TdWidgetData[], palette: PosterPalette): TdWidgetData[]
-export function replaceHeroImage(widgets: TdWidgetData[], imageUrl: string): TdWidgetData[]
+export function replaceHeroImage(
+  widgets: TdWidgetData[],
+  imageUrl: string,
+  page?: { width?: number; height?: number }
+): TdWidgetData[]
 export function getPosterGradient(palette: PosterPalette): string

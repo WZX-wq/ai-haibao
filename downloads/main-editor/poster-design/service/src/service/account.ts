@@ -142,6 +142,101 @@ function getSessionExpireDays() {
   return Number.isFinite(days) && days > 0 ? days : 7
 }
 
+function isLocalDevAuthBypassEnabled() {
+  return process.env.ALLOW_LOCAL_DEV_AUTH_BYPASS === '1' || process.env.NODE_ENV !== 'production'
+}
+
+function getLocalDevAuthToken() {
+  return String(process.env.LOCAL_DEV_AUTH_TOKEN || 'local-test-token').trim()
+}
+
+function buildLocalDevSession(token: string) {
+  const expireAt = new Date(Date.now() + getSessionExpireDays() * 24 * 60 * 60 * 1000).toISOString()
+  return {
+    token,
+    session: {
+      id: 0,
+      user_id: 999999,
+      session_status: 'dev-bypass',
+      expired_at: expireAt,
+      last_seen_at: new Date().toISOString(),
+    },
+    user: {
+      id: 999999,
+      name: 'Local Dev',
+      avatar: '',
+      email: 'local@test.local',
+      provider: 'local-dev',
+      provider_user_id: 'local-dev',
+    },
+    permissions: {
+      is_vip: true,
+      vip_level: 9,
+      vip_expire_time: null,
+      daily_limit_count: 999,
+      max_file_size: 52428800,
+      allow_batch: true,
+      allow_no_watermark: true,
+      allow_ai_tools: true,
+      allow_template_manage: true,
+    },
+  }
+}
+
+async function ensureLocalDevBypassUser() {
+  await ensureAccountSchema()
+  const db = await getMysqlPool()
+  const providerName = 'local-dev'
+  const providerUserId = 'local-dev'
+  const [rows]: any = await db.query(
+    `SELECT id
+       FROM app_users
+      WHERE provider_name = ? AND provider_user_id = ?
+      LIMIT 1`,
+    [providerName, providerUserId],
+  )
+  const existingId = Number(rows?.[0]?.id || 0)
+  if (existingId > 0) {
+    await db.query(
+      `INSERT INTO account_permission_snapshots
+        (user_id, is_vip, vip_level, daily_limit_count, max_file_size, allow_batch, allow_no_watermark, allow_ai_tools, allow_download, allow_template_manage, daily_download_limit, daily_ai_limit)
+       VALUES (?, 1, 9, 999, 52428800, 1, 1, 1, 1, 1, 999, 999)
+       ON DUPLICATE KEY UPDATE
+         is_vip = VALUES(is_vip),
+         vip_level = VALUES(vip_level),
+         daily_limit_count = VALUES(daily_limit_count),
+         max_file_size = VALUES(max_file_size),
+         allow_batch = VALUES(allow_batch),
+         allow_no_watermark = VALUES(allow_no_watermark),
+         allow_ai_tools = VALUES(allow_ai_tools),
+         allow_download = VALUES(allow_download),
+         allow_template_manage = VALUES(allow_template_manage),
+         daily_download_limit = VALUES(daily_download_limit),
+         daily_ai_limit = VALUES(daily_ai_limit)`,
+      [existingId],
+    )
+    return existingId
+  }
+
+  const [insertResult]: any = await db.query(
+    `INSERT INTO app_users
+      (display_name, avatar_url, email, provider_name, provider_user_id, profile_json, last_login_at)
+     VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+    ['Local Dev', '', 'local@test.local', providerName, providerUserId, JSON.stringify({ devBypass: true })],
+  )
+  const userId = Number(insertResult?.insertId || 0)
+  if (!userId) {
+    throw new Error('创建本地开发测试账号失败')
+  }
+  await db.query(
+    `INSERT INTO account_permission_snapshots
+      (user_id, is_vip, vip_level, daily_limit_count, max_file_size, allow_batch, allow_no_watermark, allow_ai_tools, allow_download, allow_template_manage, daily_download_limit, daily_ai_limit)
+     VALUES (?, 1, 9, 999, 52428800, 1, 1, 1, 1, 1, 999, 999)`,
+    [userId],
+  )
+  return userId
+}
+
 function looksLikeJwt(token: string) {
   return !!token && token.includes('.') && token.split('.').length >= 3
 }
@@ -445,6 +540,13 @@ async function resolveSession(req: any) {
   const token = getBearerToken(req)
   if (!token) {
     throw new Error('未登录')
+  }
+  if (isLocalDevAuthBypassEnabled() && token === getLocalDevAuthToken()) {
+    const userId = isMysqlConfigured() ? await ensureLocalDevBypassUser() : 999999
+    const devSession = buildLocalDevSession(token)
+    devSession.session.user_id = userId
+    devSession.user.id = userId
+    return devSession
   }
   const db = await getMysqlPool()
   await ensureAccountSchema()

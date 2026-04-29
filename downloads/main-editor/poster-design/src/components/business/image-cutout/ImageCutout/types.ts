@@ -1,3 +1,5 @@
+import type { CutoutProviderMode } from '@/api/ai'
+
 export type TImageCutoutState = {
   show: boolean
   rawImage: string
@@ -9,4 +11,6 @@ export type TImageCutoutState = {
   toolModel: boolean
   loading: boolean
   providerTip: string
+  providerLabel: string
+  providerMode: CutoutProviderMode
 }

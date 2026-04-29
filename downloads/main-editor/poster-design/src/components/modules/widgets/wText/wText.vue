@@ -239,12 +239,33 @@ function updateText(e?: Event) {
 function writingText(e?: Event) {
   // updateText(e)
   // TODO: 修正文字选框高度
+  const widgetName = String(props.params.name || '')
+  const preserveFixedBlockHeight =
+    props.params.editable === false &&
+    (widgetName === 'ai_text_panel' ||
+      widgetName === 'ai_course_bar' ||
+      widgetName.startsWith('ai_deco_'))
+  if (preserveFixedBlockHeight) {
+    return
+  }
+  const preserveRenderedEffectHeight =
+    !state.editable &&
+    Array.isArray(props.params.textEffects) &&
+    props.params.textEffects.length > 0
+  if (preserveRenderedEffectHeight) {
+    return
+  }
   const el = editWrap.value || widget.value
   if (!el) return
+  const measuredHeight = Math.max(
+    el.offsetHeight,
+    (el as HTMLElement).scrollHeight || 0,
+    Math.round(props.params.fontSize * props.params.lineHeight),
+  )
   widgetStore.updateWidgetData({
     uuid: String(props.params.uuid),
     key: 'height',
-    value: el.offsetHeight,
+    value: measuredHeight,
   })
   forceStore.setUpdateRect()
   // store.commit('updateRect')

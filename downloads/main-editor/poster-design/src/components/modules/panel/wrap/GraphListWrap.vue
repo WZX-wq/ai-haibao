@@ -13,7 +13,7 @@
       <template v-slot="{ index }">
         <div class="list-wrap">
           <div v-for="(item, i) in state.showList[index]" :key="i + 'sl'" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" />
+            <el-image class="list__img-thumb" :src="item.thumb" fit="contain" loading="lazy" />
           </div>
         </div>
       </template>
@@ -23,7 +23,7 @@
       <classHeader :is-back="true" @back="back">{{ state.currentCategory.name }}</classHeader>
       <el-space fill wrap :fillRatio="30" direction="horizontal" class="list">
         <div v-for="(item, i) in state.list" :key="i + 'i'" class="list__item" draggable="false" @mousedown="dragStart($event, item)" @mousemove="mousemove" @mouseup="mouseup" @click.stop="selectItem(item)" @dragstart="dragStart($event, item)">
-          <el-image class="list__img" :src="item.thumb" fit="contain" />
+          <el-image class="list__img" :src="item.thumb" fit="contain" loading="lazy" />
         </div>
       </el-space>
       <div v-show="state.loading" class="loading"><i class="el-icon-loading" /> 加载中...</div>
@@ -118,16 +118,17 @@ onMounted(async () => {
         { cate: 'svg', name: 'SVG矢量元素' },
         { cate: 'mask', name: '图像蒙版' },
       ]
-      const nextShowList: TGetListData[][] = []
-      for (const iterator of state.types) {
-        try {
-          const { list = [] } = await api.material.getList({ cate: iterator.cate })
-          nextShowList.push(list.map((item) => normalizeMaterialMedia(item)).slice(0, previewLimit))
-        } catch (error) {
-          console.error(`Failed to load material category: ${iterator.cate}`, error)
-          nextShowList.push([])
-        }
-      }
+      const nextShowList = await Promise.all(
+        state.types.map(async (iterator) => {
+          try {
+            const { list = [] } = await api.material.getList({ cate: iterator.cate, pageSize: previewLimit })
+            return list.map((item) => normalizeMaterialMedia(item)).slice(0, previewLimit)
+          } catch (error) {
+            console.error(`Failed to load material category: ${iterator.cate}`, error)
+            return []
+          }
+        }),
+      )
       if (isAlive) {
         state.showList = nextShowList
       }

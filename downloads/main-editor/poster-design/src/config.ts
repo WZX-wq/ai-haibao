@@ -32,8 +32,8 @@ export default {
   BASE_URL,
   VERSION: version,
   APP_NAME: '鲲穹海报',
-  /** 画布默认水印文案（与品牌名分离） */
-  WATERMARK_DEFAULT_TEXT: '鲲穹海报',
+  /** 画布默认无水印；如需恢复可在界面内主动设置 */
+  WATERMARK_DEFAULT_TEXT: '',
   COPYRIGHT: 'ShawnPhang - Design.palxp.cn',
   API_URL: envApiUrl !== undefined ? envApiUrl : nonLoopbackDevHost ? '' : viteDev ? devDefaultApi : '',
   SCREEN_URL: envScreenUrl !== undefined ? envScreenUrl : nonLoopbackDevHost ? '' : screenBaseUrl,

@@ -18,6 +18,9 @@ axios.interceptors.request.use(
   (config: AxiosRequestConfig) => {
     const url = config.url ?? ""
     const values = {}
+    if (url.includes('ai/poster/cutout')) {
+      config.timeout = Math.max(config.timeout || 0, 600000)
+    }
     if (url.includes('ai/poster/')) {
       config.timeout = Math.max(config.timeout || 0, 240000)
     }

@@ -10,7 +10,6 @@
     </template>
     <el-button v-else-if="showWorkSaveAction" plain type="primary" @click="save">保存</el-button>
     <el-button v-else-if="canEnterTemplateEdit" @click="jump2Edit">修改模板</el-button>
-    <watermark-option />
     <slot />
     <button
       class="account-entry"
@@ -48,8 +47,6 @@ import { useControlStore, useCanvasStore, useUserStore, useWidgetStore } from '@
 import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 import eventBus from '@/utils/plugins/eventBus'
 import { storeToRefs } from 'pinia'
-import watermarkOption from './Watermark.vue'
-
 type TProps = {
   modelValue?: boolean
 }
@@ -107,15 +104,17 @@ const state = reactive<TState>({
 const userAvatar = computed(() => userStore.user.avatar || '')
 const userInitial = computed(() => (userStore.user.name || '我').slice(0, 1))
 const accountEntryLabel = computed(() => (userStore.online ? '个人中心' : '登录'))
+const currentSection = computed(() => String(route.query.section ?? '').trim())
 const isTemplateRoute = computed(() => {
   const tempId = String(route.query.tempid ?? '').trim()
   const id = String(route.query.id ?? '').trim()
   return Boolean(tempId) && !id
 })
 const isWorkRoute = computed(() => Boolean(String(route.query.id ?? '').trim()))
+const isAiPosterRoute = computed(() => currentSection.value === 'ai-poster')
 const showTemplateEditActions = computed(() => isTemplateRoute.value && tempEditing.value)
 const canEnterTemplateEdit = computed(() => isTemplateRoute.value && !tempEditing.value)
-const showWorkSaveAction = computed(() => isWorkRoute.value)
+const showWorkSaveAction = computed(() => isWorkRoute.value || isAiPosterRoute.value)
 
 let currentDownloadPreviewUrl = ''
 let activeDownloadXhr: XMLHttpRequest | null = null
@@ -282,6 +281,7 @@ async function save(opts?: TSaveTempOpts) {
     const res = await api.home.saveWorks(
       {
         ...(currentId ? { id: currentId } : {}),
+        ...(sourceTempId ? { temp_id: sourceTempId } : {}),
         title: payload.title,
         data: payload.data,
         width: payload.width,

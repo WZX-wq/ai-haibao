@@ -84,6 +84,41 @@ def merge_mask(raw_path, mask_path, output_path):
     )
 
 
+def optimize_upload(input_path, output_path, max_side=2048, jpeg_quality=88):
+    ensure_parent(output_path)
+    image = Image.open(input_path)
+    source_mode = image.mode
+    width, height = image.size
+    scale = min(1.0, float(max_side) / float(max(width, height, 1)))
+    target_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+
+    if target_size != image.size:
+        image = image.resize(target_size, Image.Resampling.LANCZOS)
+
+    has_alpha = "A" in image.getbands()
+    ext = os.path.splitext(output_path)[1].lower()
+
+    if has_alpha or ext == ".png":
+        image = image.convert("RGBA")
+        image.save(output_path, "PNG", optimize=True)
+        output_format = "PNG"
+    else:
+        image = image.convert("RGB")
+        image.save(output_path, "JPEG", quality=jpeg_quality, optimize=True)
+        output_format = "JPEG"
+
+    print_result(
+        {
+            "ok": True,
+            "source_mode": source_mode,
+            "mode": image.mode,
+            "size": list(image.size),
+            "output_path": output_path,
+            "format": output_format,
+        }
+    )
+
+
 def main():
     if len(sys.argv) < 3:
         raise SystemExit("usage: cutout_worker.py <command> <args...>")
@@ -104,6 +139,14 @@ def main():
         if len(sys.argv) < 5:
             raise SystemExit("usage: cutout_worker.py merge-mask <raw> <mask> <output>")
         merge_mask(sys.argv[2], sys.argv[3], sys.argv[4])
+        return
+
+    if command == "optimize-upload":
+        if len(sys.argv) < 4:
+            raise SystemExit("usage: cutout_worker.py optimize-upload <input> <output> [max_side] [quality]")
+        max_side = int(sys.argv[4]) if len(sys.argv) > 4 else 2048
+        quality = int(sys.argv[5]) if len(sys.argv) > 5 else 88
+        optimize_upload(sys.argv[2], sys.argv[3], max_side, quality)
         return
 
     raise SystemExit(f"unknown command: {command}")

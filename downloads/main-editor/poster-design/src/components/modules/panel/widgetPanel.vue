@@ -1,5 +1,5 @@
 <template>
-  <div id="widget-panel">
+  <div id="widget-panel" :style="panelStyle">
     <div class="widget-classify">
       <div class="brand-block">
         <img :src="brandLogo" :alt="ui.brand" class="brand-block__logo" />
@@ -77,6 +77,11 @@
     </div>
 
     <div v-show="showMaterialPanel" class="side-wrap">
+      <div
+        class="side-resize-zone"
+        :class="{ 'is-dragging': state.isDraggingResize }"
+        @mousedown="startResize"
+      />
       <el-tooltip :show-after="300" :hide-after="0" effect="dark" :content="ui.collapse" placement="right">
         <div class="pack__up" @click="state.active = false"></div>
       </el-tooltip>
@@ -87,7 +92,7 @@
 <script lang="ts" setup>
 import widgetClassifyListData from '@/assets/data/WidgetClassifyList'
 import brandLogo from '@/assets/branding/design.png'
-import { computed, nextTick, onMounted, reactive, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -125,17 +130,28 @@ const ui = {
   languageTip: '\u5f53\u524d\u754c\u9762\u5df2\u4f7f\u7528\u7b80\u4f53\u4e2d\u6587',
 } as const
 
+const NAV_WIDTH = 104
+const DEFAULT_PANEL_WIDTH = 328
+const MIN_PANEL_WIDTH = 300
+const MAX_PANEL_WIDTH = 560
+
 const state = reactive({
   widgetClassifyList: widgetClassifyListData,
   activeWidgetClassify: 0,
   active: false,
   panelMode: 'material' as 'material' | 'setting',
+  panelWidth: DEFAULT_PANEL_WIDTH,
+  isDraggingResize: false,
 })
 
 const currentSection = computed(() => String(route.query.section || 'welcome'))
 const showMaterialPanel = computed(() => currentSection.value !== 'welcome' && state.active)
 const materialTabLabel = computed(() => state.widgetClassifyList[state.activeWidgetClassify]?.name || ui.material)
 const accountLabel = computed(() => ui.login)
+const panelStyle = computed(() => ({
+  '--widget-panel-width': `${state.panelWidth}px`,
+  '--widget-side-handle-left': `${NAV_WIDTH + state.panelWidth}px`,
+}))
 const accountAvatarUrl = computed(() => String(userStore.user?.avatar || '').trim())
 const accountAvatarFallback = computed(() => {
   if (!userStore.online) return ''
@@ -160,8 +176,39 @@ function setPanelMode(mode: 'material' | 'setting') {
   controlStore.setLeftPanelMode(mode)
 }
 
+function clampPanelWidth(width: number) {
+  return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, Math.round(width)))
+}
+
+function handleResizeMove(event: MouseEvent) {
+  state.panelWidth = clampPanelWidth(event.clientX - NAV_WIDTH)
+}
+
+function stopResize() {
+  state.isDraggingResize = false
+  window.removeEventListener('mousemove', handleResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+}
+
+function startResize(event: MouseEvent) {
+  event.preventDefault()
+  state.isDraggingResize = true
+  window.addEventListener('mousemove', handleResizeMove)
+  window.addEventListener('mouseup', stopResize)
+}
+
 function clickClassify(index: number) {
   const section = indexToSection[index] || 'welcome'
+  if (section === 'welcome') {
+    void router.replace({
+      path: '/home',
+      query: {
+        section: 'welcome',
+      },
+    })
+    applySection(section)
+    return
+  }
   const nextQuery = { ...route.query, section } as Record<string, string>
   if (section !== 'ai-poster') {
     delete nextQuery.aiAutoGenerate
@@ -186,6 +233,10 @@ onMounted(async () => {
     return
   }
   applySection(String(route.query.section || 'welcome'))
+})
+
+onBeforeUnmount(() => {
+  stopResize()
 })
 
 watch(
@@ -233,6 +284,8 @@ defineExpose({
 @color1: #3e4651;
 
 #widget-panel {
+  --widget-panel-width: 328px;
+  --widget-side-handle-left: 401px;
   transition: all 0.3s ease;
   color: @color1;
   display: flex;
@@ -455,7 +508,7 @@ defineExpose({
   }
 
   .widget-wrap {
-    width: 328px;
+    width: var(--widget-panel-width);
     transition: all 0.3s;
     background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
     flex: 1;
@@ -505,16 +558,50 @@ defineExpose({
 
   .side-wrap {
     position: absolute;
-    left: 401px;
-    pointer-events: none;
+    left: var(--widget-side-handle-left);
     z-index: 99;
-    width: 15px;
+    width: 32px;
     height: 100%;
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-direction: column;
+
+    .side-resize-zone {
+      position: absolute;
+      left: -12px;
+      top: 0;
+      bottom: 0;
+      width: 24px;
+      cursor: ew-resize;
+      z-index: 2;
+    }
+
+    .side-resize-zone::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 11px;
+      transform: translateY(-50%);
+      width: 2px;
+      height: 74px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.38);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.68);
+      opacity: 0;
+      transition: opacity 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .side-resize-zone:hover::after,
+    .side-resize-zone.is-dragging::after {
+      opacity: 1;
+      background: rgba(37, 99, 235, 0.5);
+      box-shadow: 0 0 0 1px rgba(219, 234, 254, 0.9);
+    }
 
     .pack__up {
-      pointer-events: all;
+      position: relative;
+      z-index: 1;
       border-radius: 0 100% 100% 0;
       cursor: pointer;
       width: 20px;

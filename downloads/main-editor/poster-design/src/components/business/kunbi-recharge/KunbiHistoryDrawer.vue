@@ -113,7 +113,9 @@ function detailTypeText(type: number) {
 }
 
 function detailAmountText(type: number, amount: number | string) {
-  const value = String(amount ?? '0')
+  const value = String(amount ?? '0').trim()
+  if (!value) return '0'
+  if (value.startsWith('+') || value.startsWith('-')) return value
   return Number(type) === 1 ? `-${value}` : `+${value}`
 }
 

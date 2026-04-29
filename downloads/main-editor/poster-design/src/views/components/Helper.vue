@@ -6,8 +6,8 @@
  * @LastEditTime: 2024-04-05 04:46:03
 -->
 <template>
-  <el-dropdown ref="dropdownRef" max-height="70vh" :hide-on-click="false" trigger="click" size="large" placement="bottom-start">
-    <span class="el-dropdown-link">
+  <el-dropdown ref="dropdownRef" max-height="70vh" :hide-on-click="false" trigger="click" size="large" placement="bottom-start" @visible-change="handleDropdownVisibleChange">
+    <span ref="triggerRef" class="el-dropdown-link" tabindex="0">
       <slot />
     </span>
     <template #dropdown>
@@ -31,13 +31,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import scKeyCodes from '@/mixins/scKeyCodes'
 const emit = defineEmits()
 
 const type = ref('menu')
 const dropdownRef = ref()
+const triggerRef = ref<HTMLElement | null>(null)
 
 const openTour = () => {
   emit('select', 'openTour')
@@ -46,6 +47,26 @@ const openTour = () => {
 
 const openIssues = () => {
   window.open('https://github.com/palxiao/poster-design/issues', '_blank')
+}
+
+const handleDropdownVisibleChange = (visible: boolean) => {
+  if (visible || typeof document === 'undefined') return
+  nextTick(() => {
+    const active = document.activeElement as HTMLElement | null
+    const triggerEl = triggerRef.value
+    if (triggerEl && active && !triggerEl.contains(active)) {
+      triggerEl.focus?.()
+      return
+    }
+    if (!active) {
+      triggerEl?.focus?.()
+      return
+    }
+    const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
+    if (insideDropdown) {
+      triggerEl?.focus?.()
+    }
+  })
 }
 </script>
 

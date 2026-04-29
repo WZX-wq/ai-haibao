@@ -9,7 +9,6 @@
         <design-board ref="designBoardRef" class="page-design-wrap" pageDesignCanvasId="page-design-canvas">
           <div class="shelter" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
           <div class="shelter-bg transparent-bg" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
-          <template #bottom><multipleBoards /></template>
         </design-board>
 
         <div class="editor-action-dock">
@@ -58,15 +57,21 @@
             </HeaderOptions>
           </div>
         </div>
+
+        <multipleBoards />
       </div>
     </div>
 
-    <button v-if="state.isMobile && !isWelcomeMode" class="mobile-panel-toggle" @click="toggleMobilePanel" :aria-label="state.mobilePanelOpen ? '关闭面板' : '打开面板'">
-      <i v-if="state.mobilePanelOpen" class="icon sd-quxiao"></i>
-      <i v-else class="iconfont icon-ego-caidan"></i>
+    <button
+      class="mobile-panel-toggle"
+      @click="toggleMobilePanel"
+      :aria-label="state.mobilePanelOpen ? '关闭侧栏' : '打开侧栏'"
+    >
+      <span v-if="state.mobilePanelOpen" class="mobile-panel-toggle__fallback">关闭</span>
+      <span v-else class="mobile-panel-toggle__fallback">侧栏</span>
     </button>
 
-    <div v-if="state.isMobile && state.mobilePanelOpen && !isWelcomeMode" class="mobile-panel-overlay" @click="closeMobilePanel"></div>
+    <div v-if="state.isMobile && state.mobilePanelOpen" class="mobile-panel-overlay" @click="closeMobilePanel"></div>
 
     <line-guides v-if="!isWelcomeMode" :show="state.showLineGuides" />
     <zoom-control v-if="!isWelcomeMode" ref="zoomControlRef" />
@@ -92,7 +97,7 @@ import _config from '../config'
 import {
   computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, Ref, watch,
 } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import RightClickMenu from '@/components/business/right-click-menu/RcMenu.vue'
@@ -116,6 +121,7 @@ import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 
 useHistory()
 const route = useRoute()
+const router = useRouter()
 
 const pageDesignIndex = ref<HTMLElement | null>(null)
 const ref2 = ref<any>()
@@ -223,6 +229,38 @@ function loadData() {
   })
 }
 
+async function normalizeWelcomeRoute() {
+  if (!isWelcomeMode.value) return
+  const nextQuery = { ...route.query } as Record<string, string | string[] | undefined>
+  let changed = false
+  const removableKeys = [
+    'id',
+    'tempid',
+    'tempType',
+    'cate',
+    'aiTheme',
+    'aiPrompt',
+    'aiAutoGenerate',
+    'aiPurpose',
+    'aiIndustry',
+    'aiStyle',
+    'aiSizeKey',
+    'aiQrUrl',
+    'aiContent',
+    'preset',
+  ]
+
+  removableKeys.forEach((key) => {
+    if (key in nextQuery) {
+      delete nextQuery[key]
+      changed = true
+    }
+  })
+
+  if (!changed) return
+  await router.replace({ path: '/home', query: nextQuery, replace: true })
+}
+
 async function forcePosterZoom(value: number) {
   const apply = () => {
     zoomControlRef.value?.setZoomValue?.(value)
@@ -322,10 +360,13 @@ watch(
 watch(
   () => isWelcomeMode.value,
   (welcome) => {
-    if (!welcome) {
-      void nextTick(() => loadData())
+    if (welcome) {
+      void normalizeWelcomeRoute()
+      return
     }
+    void nextTick(() => loadData())
   },
+  { immediate: true },
 )
 
 onBeforeUnmount(() => {
@@ -543,42 +584,6 @@ defineExpose({
   height: 30px;
 }
 
-.editor-action-dock :deep(.watermark-switch-wrap) {
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
-}
-
-.editor-action-dock :deep(.watermark-switch-wrap .el-switch) {
-  height: 22px;
-  line-height: 22px;
-  --el-switch-height: 22px;
-  --el-switch-width: 38px;
-  --el-switch-button-size: 18px;
-}
-
-.editor-action-dock :deep(.watermark-switch-wrap .el-switch__label) {
-  font-size: 12px;
-  color: #475569;
-  font-weight: 600;
-}
-
-.editor-action-dock :deep(.watermark-switch-wrap .el-switch__label.is-active) {
-  color: #1d4ed8;
-}
-
-.editor-action-dock :deep(.watermark-switch-wrap .el-switch__label.is-inactive) {
-  color: #64748b;
-}
-
-.editor-action-dock :deep(.watermark-switch-wrap .el-switch.is-text) {
-  gap: 6px;
-}
-
 .editor-action-dock :deep(.account-entry) {
   display: none;
 }
@@ -635,17 +640,26 @@ defineExpose({
   .mobile-panel-toggle {
     display: flex;
     position: fixed;
-    left: 16px;
-    bottom: 18px;
-    z-index: 30;
-    width: 52px;
-    height: 52px;
-    border: none;
-    border-radius: 50%;
+    right: 12px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 1300;
+    min-width: 64px;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 999px;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+    background: linear-gradient(135deg, #6d5efc 0%, #5b4cf5 100%);
+    box-shadow: 0 12px 30px rgba(88, 76, 245, 0.45);
+  }
+
+  .mobile-panel-toggle__fallback {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.02em;
+    line-height: 1;
   }
 
   .mobile-panel-overlay {
@@ -655,5 +669,6 @@ defineExpose({
     z-index: 24;
     background: rgba(15, 23, 42, 0.4);
   }
+
 }
 </style>

@@ -17,16 +17,47 @@
         </div>
       </el-collapse-item>
       <el-collapse-item title="设置" name="2">
-        <!-- <el-button size="mini" style="width: 100%; margin-top: 0.5rem" plain @click="openCropper">替换图片</el-button> -->
-        <el-button style="width: 100%; margin-bottom: 12px" plain @click="openPicBox">替换图片</el-button>
         <div class="options">
-          <el-button v-if="state.innerElement.cropEdit" plain type="primary" @click="imgCrop(false)">完成</el-button>
-          <el-button v-else plain type="primary" @click="imgCrop(true)"><i class="icon sd-caijian" /> 裁剪</el-button>
-          <el-button plain @click="openImageCutout"><i class="icon sd-AIkoutu" /> 抠图</el-button>
-          <!-- <uploader class="options__upload" @done="uploadImgDone">
-            <el-button size="small" plain>替换图片</el-button>
-          </uploader> -->
-          <el-button size="small" plain @click="openCropper">美化</el-button>
+          <div class="action-button-grid">
+            <button type="button" class="image-action-card" @click="openPicBox">
+              <span class="image-action-card__icon">
+                <el-icon><PictureFilled /></el-icon>
+              </span>
+              <span class="image-action-card__content">
+                <span class="image-action-card__title">替换图片</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="image-action-card"
+              :class="{ 'image-action-card--active': state.innerElement.cropEdit }"
+              @click="imgCrop(!state.innerElement.cropEdit)"
+            >
+              <span class="image-action-card__icon">
+                <el-icon><Crop /></el-icon>
+              </span>
+              <span class="image-action-card__content">
+                <span class="image-action-card__title">{{ state.innerElement.cropEdit ? '完成裁剪' : '裁剪图片' }}</span>
+              </span>
+            </button>
+            <button type="button" class="image-action-card" @click="openImageCutout('local')">
+              <span class="image-action-card__icon">
+                <el-icon><Scissor /></el-icon>
+              </span>
+              <span class="image-action-card__content">
+                <span class="image-action-card__title">本地抠图</span>
+              </span>
+              <span class="image-action-card__cost image-action-card__cost--free">免费</span>
+            </button>
+            <button type="button" class="image-action-card" @click="openCropper">
+              <span class="image-action-card__icon">
+                <el-icon><MagicStick /></el-icon>
+              </span>
+              <span class="image-action-card__content">
+                <span class="image-action-card__title">美化裁剪</span>
+              </span>
+            </button>
+          </div>
         </div>
         <container-wrap @change="changeContainer" />
         <div class="slide-wrap">
@@ -60,6 +91,7 @@
 // const NAME = 'w-image-style'
 import { nextTick, reactive, ref, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Crop, MagicStick, PictureFilled, Scissor } from '@element-plus/icons-vue'
 
 import numberInput from '../../settings/numberInput.vue'
 import iconItemSelect, { TIconItemSelectData } from '../../settings/iconItemSelect.vue'
@@ -70,6 +102,7 @@ import ContainerWrap from '../../settings/EffectSelect/ContainerWrap.vue'
 // import uploader from '@/components/common/Uploader/index.vue'
 import { getImage } from '@/common/methods/getImgDetail'
 import api from '@/api'
+import type { CutoutProviderMode } from '@/api/ai'
 import layerIconList from '@/assets/data/LayerIconList'
 import alignIconList from '@/assets/data/AlignListData'
 import picBox from '@/components/business/picture-selector'
@@ -437,7 +470,7 @@ function buildCutoutFileName(blob: Blob) {
   return `${baseName}.${extension}`
 }
 
-async function openImageCutout() {
+async function openImageCutout(mode: CutoutProviderMode = 'local') {
   if (!state.innerElement.imgUrl) {
     ElMessage.warning('当前图片为空，暂时无法抠图')
     return
@@ -451,7 +484,7 @@ async function openImageCutout() {
         type: finalBlob.type || blob.type || 'image/png',
       })
       if (imageCutoutRef.value) {
-        imageCutoutRef.value.open(file)
+        imageCutoutRef.value.open(mode, file)
       }
     })
     .catch((error) => {
@@ -491,15 +524,118 @@ async function cutImageDone(url: string) {
   width: 100%;
 }
 .options {
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.6rem;
+  .action-button-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+  }
   &__upload {
     width: auto;
     margin-left: 10px;
     display: inline-block;
   }
-  .icon {
-    margin-right: 0.3em;
-  }
+}
+
+.image-action-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid #d9e7f7;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fcfeff 0%, #eef5ff 100%);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.image-action-card:hover {
+  border-color: #92bbe9;
+  box-shadow: 0 8px 18px rgba(63, 114, 194, 0.1);
+  transform: translateY(-1px);
+}
+
+.image-action-card--active {
+  border-color: #5f97dc;
+  background: linear-gradient(180deg, #f3f8ff 0%, #e4f0ff 100%);
+  box-shadow: 0 8px 18px rgba(63, 114, 194, 0.14);
+}
+
+.image-action-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(67, 126, 209, 0.12);
+  color: #2f6fbe;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.image-action-card__icon :deep(.el-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.image-action-card__content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  min-height: 20px;
+}
+
+.image-action-card__title {
+  color: #17365f;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-action-card__meta {
+  color: #5d6f86;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.image-action-card__cost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(23, 125, 91, 0.12);
+  color: #177d5b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.image-action-card__cost--free {
+  background: rgba(23, 125, 91, 0.12);
+  color: #177d5b;
 }
 
 .slide-wrap {

@@ -101,7 +101,7 @@ function layerChange(newLayer: TdWidgetData[]) {
   flex-direction: column;
   height: 100%;
   position: relative;
-  width: 280px;
+  width: 400px;
 
   .style-tab {
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);

@@ -51,6 +51,28 @@ type TemplateSeed = {
   /** 画布渐变，CSS linear-gradient；缺省由主题色生成 */
   pageGradient?: string
 }
+type SmartTemplateContext = {
+  theme?: string
+  purpose?: string
+  style?: string
+  sizeKey?: string
+  content?: string
+  industry?: string
+  presetKey?: string
+}
+
+function normalizeSeedLayoutToEngine(layout?: TemplateSeed['layout']) {
+  const raw = String(layout || '').trim()
+  const map: Record<string, string> = {
+    hero: 'hero-left',
+    split: 'split-editorial',
+    cards: 'grid-product',
+    price: 'premium-offer',
+    collage: 'festive-frame',
+    editorial: 'magazine-cover',
+  }
+  return map[raw] || 'hero-left'
+}
 
 /** Unsplash 可外链图，按行业轮换，接近成熟模板库的“主视觉”层次 */
 const DEFAULT_HERO_BY_CATE: Record<number, string[]> = {
@@ -1292,52 +1314,207 @@ export function getTemplateDetail(id: number | string): TemplateDetail | null {
 }
 
 export function getTemplateSuggestionByIndustry(industry: string) {
-  const mapping: Record<string, number[]> = {
-    '电商': [401, 101, 201, 301],
-    '招聘': [402, 102, 202, 302],
-    '活动': [403, 103, 203, 208, 303],
-    '课程': [404, 104, 204, 304],
-    '节日': [405, 105, 205, 305],
-    '健身': [406, 106, 206, 306],
-    '餐饮': [407, 107, 207, 307],
-    '小红书': [408, 308, 101, 201],
-    '小红书封面': [408, 308, 101, 201],
-  }
-  const candidates = mapping[industry] || [103, 203, 303]
+  const candidates = resolveTemplateIdsByIndustry(industry)
   const matchedId = candidates[Math.floor(Math.random() * candidates.length)] || 103
   const detail = getTemplateDetail(matchedId)
   const listItem = getTemplateList().find((item) => item.id === matchedId) || null
   return { detail, listItem }
 }
 
-export function getTemplateCandidatesByIndustry(industry: string, limit = 3) {
-  const mapping: Record<string, number[]> = {
-    '电商': [401, 101, 201, 301],
-    '招聘': [402, 102, 202, 302],
-    '活动': [403, 103, 203, 208, 303],
-    '课程': [404, 104, 204, 304],
-    '节日': [405, 105, 205, 305],
-    '健身': [406, 106, 206, 306],
-    '餐饮': [407, 107, 207, 307],
-    '小红书': [408, 308, 101, 201],
-    '小红书封面': [408, 308, 101, 201],
+const presetTemplateMapping: Record<string, number[]> = {
+  campaign: [403, 208, 303, 203],
+  recruitment: [402, 302, 202, 102],
+  commerce: [401, 301, 201, 101],
+  course: [404, 304, 204, 104],
+  fitness: [406, 306, 206, 106],
+  food: [407, 307, 207, 107],
+  festival: [405, 305, 205, 105],
+  xiaohongshu: [408, 308, 101, 201],
+}
+
+const industryTemplateMapping: Record<string, number[]> = {
+  '电商': [401, 101, 201, 301],
+  '招聘': [402, 102, 202, 302],
+  '活动': [403, 103, 203, 208, 303],
+  '课程': [404, 104, 204, 304],
+  '节日': [405, 105, 205, 305],
+  '健身': [406, 106, 206, 306],
+  '餐饮': [407, 107, 207, 307],
+  '小红书': [408, 308, 101, 201],
+  '小红书封面': [408, 308, 101, 201],
+}
+
+const smartTemplateFallbackIds = [403, 401, 404, 405, 406, 407, 408, 301, 302, 304, 305, 307]
+
+function resolveTemplateIdsByIndustry(industry: string) {
+  return industryTemplateMapping[industry] || [103, 203, 303]
+}
+
+function resolveTemplateIdsByPreset(presetKey: string, industry: string) {
+  const presetIds = presetTemplateMapping[String(presetKey || '').trim()]
+  if (presetIds?.length) return presetIds
+  return resolveTemplateIdsByIndustry(industry)
+}
+
+function makeTemplateCandidate(seed: TemplateSeed, industry: string, reason: string, score: number) {
+  return {
+    familyId: `seed-${seed.id}`,
+    seedId: seed.id,
+    title: seed.fullTitle,
+    industry,
+    layoutFamily: normalizeSeedLayoutToEngine(seed.layout),
+    tone: seed.tag,
+    score,
+    reason,
+    cover: makePreviewSvg(seed),
   }
-  const ids = (mapping[industry] || [103, 203, 303]).slice(0, Math.max(1, limit))
+}
+function scoreTemplateSeed(seed: TemplateSeed, context: SmartTemplateContext = {}) {
+  const joined = `${context.theme || ''} ${context.purpose || ''} ${context.style || ''} ${context.content || ''} ${context.industry || ''} ${context.presetKey || ''}`.trim()
+  const layoutFamily = normalizeSeedLayoutToEngine(seed.layout)
+  const reasons: string[] = []
+  let score = 0.62
+  const presetIds = resolveTemplateIdsByPreset(String(context.presetKey || ''), String(context.industry || ''))
+  const industryIds = resolveTemplateIdsByIndustry(String(context.industry || ''))
+  if (presetIds.includes(seed.id)) {
+    score += 0.16
+    reasons.push('贴近前端所选模板方向')
+  }
+  if (industryIds.includes(seed.id)) {
+    score += 0.12
+    reasons.push('行业气质匹配')
+  }
+  if ((context.sizeKey === 'wechat-cover' && seed.width > seed.height) || ((context.sizeKey === 'moments' || context.sizeKey === 'xiaohongshu' || context.sizeKey === 'flyer') && seed.height >= seed.width) || (context.sizeKey === 'ecommerce' && Math.abs(seed.width - seed.height) <= 260)) {
+    score += 0.08
+    reasons.push('尺寸比例更合适')
+  }
+  if (/促销|抢购|折扣|立减|优惠|套餐|券后|到手价|上新|新品/.test(joined) && ['premium-offer', 'grid-product', 'hero-center'].includes(layoutFamily)) {
+    score += 0.12
+    reasons.push('适合利益点和价格块')
+  }
+  if (/招聘|招募|岗位|面试|投递|入职/.test(joined) && ['list-recruitment', 'hero-left', 'magazine-cover'].includes(layoutFamily)) {
+    score += 0.13
+    reasons.push('适合招聘信息分层')
+  }
+  if (/课程|培训|试听|公开课|训练营|报名/.test(joined) && ['clean-course', 'split-editorial', 'hero-left'].includes(layoutFamily)) {
+    score += 0.12
+    reasons.push('适合课程说明与行动按钮')
+  }
+  if (/节日|活动|庆典|市集|展会|露营|音乐节|邀请函/.test(joined) && ['festive-frame', 'magazine-cover', 'hero-center'].includes(layoutFamily)) {
+    score += 0.12
+    reasons.push('适合氛围主视觉成片')
+  }
+  if (/小红书|封面|笔记|种草|攻略|合集/.test(joined) && ['xiaohongshu-note', 'magazine-cover', 'hero-center'].includes(layoutFamily)) {
+    score += 0.14
+    reasons.push('适合社媒封面表达')
+  }
+  if (/杂志|大片|轻奢|高级|法式|黑金|封面|campaign/i.test(joined) && ['magazine-cover', 'hero-center', 'split-editorial'].includes(layoutFamily)) {
+    score += 0.1
+    reasons.push('风格更接近成品主视觉')
+  }
+  if (/卡通|插画|涂鸦|年轻|活力|贴纸/.test(joined) && ['festive-frame', 'hero-center', 'xiaohongshu-note'].includes(layoutFamily)) {
+    score += 0.08
+    reasons.push('适合年轻化视觉')
+  }
+  if ((context.content || '').length > 56 && ['split-editorial', 'clean-course', 'list-recruitment', 'grid-product'].includes(layoutFamily)) {
+    score += 0.1
+    reasons.push('更能承接较多信息')
+  }
+  if ((context.content || '').length < 28 && ['magazine-cover', 'hero-center', 'festive-frame'].includes(layoutFamily)) {
+    score += 0.06
+    reasons.push('更适合精简强视觉表达')
+  }
+  return {
+    score: Math.max(0.58, Math.min(0.98, Number(score.toFixed(3)))),
+    reason: reasons.length ? reasons.slice(0, 3).join('，') : '兼顾前端选项与成片排版稳定性',
+  }
+}
+
+function buildCandidatesByIds(ids: number[], industry: string, reasonFactory: (seed: TemplateSeed) => string) {
   return ids
+    .map((id, index) => {
+      const seed = templateSeeds.find((item) => item.id === id)
+      if (!seed) return null
+      return makeTemplateCandidate(seed, industry, reasonFactory(seed), Math.max(0.72, 0.94 - index * 0.04))
+    })
+    .filter(Boolean)
+}
+
+function pickDiversifiedTemplateIds(ids: number[], limit: number) {
+  const uniqueIds = Array.from(new Set(ids.map((id) => Number(id)).filter(Boolean)))
+  const byLayout = new Set<string>()
+  const picked: number[] = []
+  uniqueIds.forEach((id) => {
+    if (picked.length >= limit) return
+    const seed = templateSeeds.find((item) => item.id === id)
+    if (!seed) return
+    const layout = normalizeSeedLayoutToEngine(seed.layout)
+    if (byLayout.has(layout)) return
+    byLayout.add(layout)
+    picked.push(id)
+  })
+  uniqueIds.forEach((id) => {
+    if (picked.length >= limit) return
+    if (!picked.includes(id)) picked.push(id)
+  })
+  return picked.slice(0, Math.max(1, limit))
+}
+function diversifyRankedCandidates(candidates: any[], limit: number) {
+  const result: any[] = []
+  const layoutSeen = new Set<string>()
+  candidates.forEach((item) => {
+    if (!item || result.length >= limit) return
+    const family = String(item.layoutFamily || '').trim()
+    if (!family || layoutSeen.has(family)) return
+    layoutSeen.add(family)
+    result.push(item)
+  })
+  candidates.forEach((item) => {
+    if (!item || result.length >= limit) return
+    if (!result.includes(item)) result.push(item)
+  })
+  return result.slice(0, Math.max(1, limit))
+}
+
+export function getTemplateSuggestionByPreset(presetKey: string, industry: string) {
+  const candidates = resolveTemplateIdsByPreset(presetKey, industry)
+  const matchedId = candidates[Math.floor(Math.random() * candidates.length)] || candidates[0] || 103
+  const detail = getTemplateDetail(matchedId)
+  const listItem = getTemplateList().find((item) => item.id === matchedId) || null
+  return { detail, listItem }
+}
+
+export function getTemplateCandidatesByIndustry(industry: string, limit = 3) {
+  const ids = resolveTemplateIdsByPreset('', industry).slice(0, Math.max(1, limit))
+  return buildCandidatesByIds(ids, industry, () => `匹配${industry}常见场景`)
+}
+
+export function getTemplateCandidatesByPreset(presetKey: string, industry: string, limit = 4) {
+  const ids = resolveTemplateIdsByPreset(presetKey, industry).slice(0, Math.max(1, limit))
+  return buildCandidatesByIds(ids, industry, () => presetKey ? `匹配${presetKey}专属模板场景` : `匹配${industry}常见场景`)
+}
+
+export function getTemplateCandidatesSmart(presetKey: string, industry: string, limit = 6, context: SmartTemplateContext = {}) {
+  const presetIds = resolveTemplateIdsByPreset(presetKey, industry)
+  const industryIds = resolveTemplateIdsByIndustry(industry)
+  const diversified = pickDiversifiedTemplateIds([...presetIds, ...industryIds, ...smartTemplateFallbackIds], Math.max(limit * 2, 8))
+  const ranked = diversified
     .map((id) => {
       const seed = templateSeeds.find((item) => item.id === id)
       if (!seed) return null
-      return {
-        familyId: `seed-${seed.id}`,
-        seedId: seed.id,
-        title: seed.fullTitle,
-        industry,
-        layoutFamily: seed.layout || 'hero',
-        tone: seed.tag,
-        score: 0.86,
-        reason: `匹配${industry}常见场景`,
-        cover: makePreviewSvg(seed),
-      }
+      const scored = scoreTemplateSeed(seed, { ...context, industry, presetKey })
+      return makeTemplateCandidate(seed, industry, scored.reason, scored.score)
     })
     .filter(Boolean)
+    .sort((a: any, b: any) => Number(b.score || 0) - Number(a.score || 0))
+  return diversifyRankedCandidates(ranked, limit)
+}
+
+export function getTemplateSuggestionSmart(presetKey: string, industry: string, context: SmartTemplateContext = {}) {
+  const candidates = getTemplateCandidatesSmart(presetKey, industry, 6, context)
+  const picked = candidates[0] || getTemplateCandidatesByIndustry(industry, 1)[0] || null
+  const matchedId = Number((picked as any)?.seedId || 103)
+  const detail = getTemplateDetail(matchedId)
+  const listItem = getTemplateList().find((item) => item.id === matchedId) || null
+  return { detail, listItem }
 }

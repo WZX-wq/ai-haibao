@@ -12,7 +12,25 @@ export default async (req: any, res: any, next: any) => {
   /** Puppeteer 截图常超过 30s；原全局超时会在截图未完成时先发 408 JSON，随后 sendFile 导致重复响应 → 上游异常、Nginx 502 */
   const isScreenshot =
     rawPath.includes('/screenshots') || rawPath.includes('/printscreen')
-  const time = isScreenshot ? 180000 : 30000
+  const isAiPoster = rawPath.includes('/ai/poster/')
+  const isAiPosterHeavy =
+    rawPath.includes('/ai/poster/generate') ||
+    rawPath.includes('/ai/poster/background') ||
+    rawPath.includes('/ai/poster/replace-image') ||
+    rawPath.includes('/ai/poster/cutout')
+  const isAiPosterMedium =
+    rawPath.includes('/ai/poster/copy') ||
+    rawPath.includes('/ai/poster/palette') ||
+    rawPath.includes('/ai/poster/relayout')
+  const time = isScreenshot
+    ? 180000
+    : isAiPosterHeavy
+      ? 600000
+      : isAiPosterMedium
+        ? 180000
+        : isAiPoster
+          ? 180000
+          : 30000
   res.setTimeout(time, () => {
     const statusCode = 408
     const index = queueList.findIndex((x: any) => x.sign === req._queueSign)

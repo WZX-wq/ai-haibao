@@ -1,7 +1,7 @@
 <template>
   <div class="search__wrap">
-    <el-dropdown v-if="type !== 'none'" placement="bottom-start" @visible-change="handleDropdownVisibleChange">
-      <div class="search__type" @click="ensureCategoriesLoaded">
+    <el-dropdown ref="dropdownRef" v-if="type !== 'none'" placement="bottom-start" @visible-change="handleDropdownVisibleChange">
+      <div ref="triggerRef" class="search__type" @click="ensureCategoriesLoaded">
         <i class="iconfont icon-ego-caidan" />
       </div>
       <template #dropdown>
@@ -35,7 +35,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onBeforeUnmount, reactive, watch } from 'vue'
+import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import { useRoute } from 'vue-router'
 import api from '@/api'
@@ -63,6 +63,8 @@ type TState = {
 const props = defineProps<TProps>()
 const emit = defineEmits<TEmits>()
 const route = useRoute()
+const dropdownRef = ref()
+const triggerRef = ref<HTMLElement | null>(null)
 
 const state = reactive<TState>({
   searchValue: '',
@@ -77,14 +79,22 @@ let requestSeq = 0
 
 function handleDropdownVisibleChange(visible: boolean) {
   if (visible || typeof document === 'undefined') return
-  setTimeout(() => {
+  nextTick(() => {
     const active = document.activeElement as HTMLElement | null
-    if (!active) return
+    const triggerEl = triggerRef.value
+    if (triggerEl && active && !triggerEl.contains(active)) {
+      triggerEl.focus?.()
+      return
+    }
+    if (!active) {
+      triggerEl?.focus?.()
+      return
+    }
     const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
     if (insideDropdown) {
-      active.blur()
+      triggerEl?.focus?.()
     }
-  }, 0)
+  })
 }
 
 function clearRetryTimer() {

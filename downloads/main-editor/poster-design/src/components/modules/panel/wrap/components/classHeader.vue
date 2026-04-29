@@ -141,7 +141,7 @@ defineExpose({ select, back })
       left: 0;
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.94));
       border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-      width: 320px;
+      width: 440px;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
       .icon-right {
         transform: rotate(180deg);

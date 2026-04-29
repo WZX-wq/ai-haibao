@@ -6,7 +6,7 @@
  * @LastEditTime: 2024-04-18 17:12:34
 -->
 <template>
-  <div :style="{ position, bottom: -1 * st + 'px', left: sl + 'px' }" :class="['artboards', isFold ? 'fold' : 'unfold']">
+  <div :style="{ position }" :class="['artboards', isFold ? 'fold' : 'unfold']">
     <div ref="listRef" class="wrap">
       <div v-if="isFold" v-show="dLayouts.length > 0" class="btn" @click="isFold = !isFold">画板 {{ index + 1 }}/{{ dLayouts.length }} <i class="icon sd-zhankai" /></div>
       <div class="list" v-else>
@@ -52,8 +52,6 @@ const widgetStore = useWidgetStore()
 const controlStore = useControlStore()
 const position: Ref = ref('absolute') // sticky
 const isFold = ref(true)
-const st = ref(0)
-const sl = ref(0)
 const listRef: Ref<HTMLElement | null> = ref(null)
 const index = computed(() => canvasStore.dCurrentPage)
 const { dZoom, dPage } = storeToRefs(canvasStore)
@@ -87,10 +85,6 @@ let mainEl: any = null
 onMounted(async () => {
   await nextTick()
   mainEl = document.getElementById('main')
-  mainEl.addEventListener('scroll', function (e: any) {
-    st.value = mainEl.scrollTop
-    sl.value = mainEl.scrollLeft
-  })
 
   listRef.value?.addEventListener('wheel', (event) => {
     event.preventDefault()
@@ -166,9 +160,10 @@ function removePoster(removeIndex: number) {
 
 <style lang="less" scoped>
 .artboards {
-  left: 0;
+  bottom: 18px;
+  left: 18px;
   z-index: 99;
-  padding: 0 12px;
+  padding: 0;
   font-size: 14px;
   color: #666666;
   font-weight: 600;
@@ -257,7 +252,7 @@ function removePoster(removeIndex: number) {
   }
 }
 .unfold {
-  width: calc(100% - 155px);
+  max-width: min(520px, calc(100vw - 260px));
   height: 90px;
   .wrap {
     padding: 10px 10px 10px 0;
@@ -321,5 +316,16 @@ function removePoster(removeIndex: number) {
   overflow: hidden;
   position: absolute;
   transform-origin: 0 0;
+}
+
+@media (max-width: 1023px) {
+  .artboards {
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    left: 12px;
+  }
+
+  .unfold {
+    max-width: calc(100vw - 24px);
+  }
 }
 </style>

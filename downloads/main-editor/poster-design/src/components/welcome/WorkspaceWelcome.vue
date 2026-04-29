@@ -15,7 +15,12 @@
             placeholder="描述你的海报主题，例如：夏季健身房招新海报"
             @keydown.enter.exact.prevent="generateFromPrompt"
           />
-          <button class="hero-input__button" type="button" @click="generateFromPrompt">立即生成</button>
+          <button class="hero-input__button ai-entry-button" type="button" @click="generateFromPrompt">
+            <span class="ai-entry-button__content">
+              <span class="ai-entry-button__title">生成海报</span>
+              <span class="ai-entry-button__meta">10鲲币</span>
+            </span>
+          </button>
         </div>
       </section>
 
@@ -177,7 +182,12 @@
           placeholder="描述你的海报主题，例如：夏季健身房招新海报"
           @keydown.enter.exact.prevent="generateFromStickyPrompt"
         />
-        <button class="floating-entry__button" type="button" @click="generateFromStickyPrompt">立即生成</button>
+        <button class="floating-entry__button ai-entry-button ai-entry-button--compact" type="button" @click="generateFromStickyPrompt">
+          <span class="ai-entry-button__content">
+            <span class="ai-entry-button__title">生成海报</span>
+            <span class="ai-entry-button__meta">10鲲币</span>
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -861,19 +871,45 @@ onBeforeUnmount(() => {
   color: #a0abc0;
 }
 
-.hero-input__button,
-.floating-entry__button {
-  border: none;
-  min-width: 108px;
-  height: 42px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #9b72ff 0%, #8b5cf6 100%);
+.ai-entry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 156px;
+  min-height: 50px;
+  padding: 10px 16px;
+  border: 1px solid #2f58ad;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #4d78cf 0%, #2e56aa 100%);
   color: #fff;
+  cursor: pointer;
+  box-shadow: 0 14px 30px rgba(54, 94, 175, 0.28);
+  transition: 0.2s ease;
+}
+
+.ai-entry-button__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.ai-entry-button__title {
+  display: block;
   font-size: 14px;
   font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 12px 26px rgba(145, 103, 255, 0.3);
-  transition: 0.2s ease;
+  line-height: 1.15;
+}
+
+.ai-entry-button__meta {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .hero-input__button {
@@ -882,9 +918,22 @@ onBeforeUnmount(() => {
   bottom: 16px;
 }
 
+.floating-entry__button {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+}
+
+.ai-entry-button--compact {
+  min-width: 132px;
+  min-height: 46px;
+  padding: 8px 14px;
+}
+
 .hero-input__button:hover,
 .floating-entry__button:hover {
   transform: translateY(-1px);
+  filter: saturate(0.98);
 }
 
 .category-strip {
@@ -1316,12 +1365,6 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
-.floating-entry__button {
-  position: absolute;
-  right: 16px;
-  bottom: 14px;
-}
-
 @media (max-width: 1280px) {
   .poster-grid--five {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1344,7 +1387,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .welcome-scroll {
-    padding: 22px 18px 220px;
+    padding: 22px 18px 96px;
   }
 
   .hero__title {
@@ -1364,6 +1407,10 @@ onBeforeUnmount(() => {
     gap: 16px;
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  .floating-entry {
+    display: none;
   }
 }
 

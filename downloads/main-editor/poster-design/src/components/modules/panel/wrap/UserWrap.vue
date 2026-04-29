@@ -179,15 +179,14 @@ const loadDesign = (init: boolean = false) => {
       }
 
       const normalizedList = list.map((x) => {
-        const cacheBust = `r=${Math.random()}`
         const authToken = String(localStorage.getItem(LocalStorageKey.tokenKey) || '').trim()
         const previewUrl = String(x.url || '').trim()
         const coverUrl = String(x.cover || '').trim()
         const preferredCover = previewUrl || coverUrl
         const appendParams = (raw: string) => {
           if (!raw) return ''
-          const next = `${raw}${raw.includes('?') ? '&' : '?'}${cacheBust}`
-          return authToken ? `${next}&authToken=${encodeURIComponent(authToken)}` : next
+          if (!authToken || /(?:^|[?&])authToken=/.test(raw)) return raw
+          return `${raw}${raw.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(authToken)}`
         }
         return {
           ...x,

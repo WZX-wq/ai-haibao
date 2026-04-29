@@ -1,8 +1,9 @@
 ARG REGISTRY_PREFIX=docker.io
 ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG API_RUNTIME_BASE=poster-design-api-runtime:headless-shell
 
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm-slim AS builder
-WORKDIR /app
+WORKDIR /build
 
 ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
 ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
@@ -14,26 +15,27 @@ ENV npm_config_fetch_retry_mintimeout=20000
 ENV npm_config_fetch_retry_maxtimeout=120000
 ENV npm_config_prefer_offline=true
 ENV npm_config_cache=/root/.npm
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
 
-COPY package.json package-lock.json ./
-COPY packages/color-picker/package.json ./packages/color-picker/
-COPY packages/image-extraction/package.json ./packages/image-extraction/
-
+COPY service/package.json service/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --registry=${NPM_REGISTRY} --prefer-offline --no-audit --no-fund
 
-COPY . .
-
-ARG VITE_API_URL=
-ENV VITE_API_URL=$VITE_API_URL
-ARG VITE_SCREEN_URL=
-ENV VITE_SCREEN_URL=$VITE_SCREEN_URL
-
+COPY service/ ./
 RUN npm run build
 
-ARG REGISTRY_PREFIX=docker.io
-FROM ${REGISTRY_PREFIX}/library/nginx:alpine
-COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM ${API_RUNTIME_BASE}
+
+WORKDIR /app
+COPY --from=builder /build/dist ./dist
+COPY --from=builder /build/node_modules ./node_modules
+COPY service/package.json ./
+COPY service/scripts ./scripts
+COPY service/src/mock ./src/mock
+COPY public ./public
+
+RUN ln -sfn /app/src/mock /app/mock
+RUN mkdir -p static
+
+EXPOSE 7001
+CMD ["node", "dist/server.js"]

@@ -28,6 +28,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const errorMessage = ref('')
+const ACCOUNT_BACK_FALLBACK_KEY = 'xp_account_back_fallback_after_login'
 
 const titleText = computed(() => (errorMessage.value ? '登录失败' : '正在完成登录'))
 const statusText = computed(() => errorMessage.value || '正在与服务器交换令牌并创建会话，请稍候。')
@@ -36,6 +37,42 @@ function queryString(v: unknown): string {
   if (v === undefined || v === null) return ''
   if (Array.isArray(v)) return String(v[0] ?? '')
   return String(v)
+}
+
+function looksLikeJwt(token: string) {
+  return !!token && token.includes('.') && token.split('.').length >= 3
+}
+
+function readCookie(name: string) {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`))
+  return match?.[1] ? decodeURIComponent(match[1]) : ''
+}
+
+function resolveApiWebTokenFromBrowser() {
+  const fromQuery = queryString(route.query.api_web_token).trim()
+  if (fromQuery && !looksLikeJwt(fromQuery)) return fromQuery
+
+  const cookieToken = readCookie('api_web_token').trim()
+  if (cookieToken && !looksLikeJwt(cookieToken)) return cookieToken
+
+  const localKq = (localStorage.getItem('kq_token') || localStorage.getItem('token') || '').trim()
+  if (localKq && !looksLikeJwt(localKq)) return localKq
+
+  return ''
+}
+
+function resolveSessionTokenFromBrowser() {
+  const fromQuery = queryString(route.query.kq_token || route.query.token).trim()
+  if (fromQuery) return fromQuery
+
+  const jwtCookie = readCookie('kq_token').trim() || readCookie('user_token').trim()
+  if (jwtCookie) return jwtCookie
+
+  const storedJwt = (localStorage.getItem('kq_jwt') || '').trim()
+  if (storedJwt) return storedJwt
+
+  return ''
 }
 
 async function finishLogin() {
@@ -65,6 +102,8 @@ async function finishLogin() {
     code,
     state,
     redirectUri: `${window.location.origin}${route.path}`,
+    api_web_token: resolveApiWebTokenFromBrowser(),
+    kq_token: resolveSessionTokenFromBrowser(),
   })
 
   if ((result as any).code === 400 || !result.local_token) {
@@ -88,6 +127,7 @@ async function finishLogin() {
 
   localStorage.removeItem(LocalStorageKey.authStateKey)
   sessionStorage.removeItem(LocalStorageKey.authStateKey)
+  sessionStorage.setItem(ACCOUNT_BACK_FALLBACK_KEY, '1')
   router.replace('/account')
 }
 

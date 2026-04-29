@@ -411,9 +411,9 @@ defineExpose({
 @z-border-color: #e6e6e6;
 
 #zoom-control {
-  bottom: 10px;
   position: absolute;
-  right: 292px;
+  bottom: 18px;
+  right: 18px;
   z-index: 1000;
   .zoom-control-wrap {
     display: flex;
@@ -466,6 +466,8 @@ defineExpose({
       width: 60px;
       border-block-end: 1px solid @z-border-color;
       border-block-start: 1px solid @z-border-color;
+      border-left: 1px solid @z-border-color;
+      border-right: 1px solid @z-border-color;
       &:hover {
         background-color: @color1;
         color: @color-select;
@@ -509,6 +511,13 @@ defineExpose({
         color: @color-select;
       }
     }
+  }
+}
+
+@media (max-width: 1023px) {
+  #zoom-control {
+    right: 12px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
   }
 }
 </style>

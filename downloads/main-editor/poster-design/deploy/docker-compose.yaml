@@ -4,17 +4,19 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.api
       args:
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.io}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
-        APT_MIRROR_ROOT: ${APT_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian}
-        APT_SECURITY_MIRROR_ROOT: ${APT_SECURITY_MIRROR_ROOT:-http://mirrors.cloud.tencent.com/debian-security}
+        APT_MIRROR_ROOT: ${APT_MIRROR_ROOT:-http://deb.debian.org/debian}
+        APT_SECURITY_MIRROR_ROOT: ${APT_SECURITY_MIRROR_ROOT:-http://deb.debian.org/debian-security}
+        CHROMIUM_PACKAGE: ${CHROMIUM_PACKAGE:-chromium-headless-shell}
+        INSTALL_CHROMIUM: ${INSTALL_CHROMIUM:-1}
     env_file:
       - .env
     environment:
       NODE_ENV: production
       PORT: "7001"
       FILE_STORAGE_PATH: /app/static/
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      PUPPETEER_EXECUTABLE_PATH: ${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium-headless-shell}
       PUPPETEER_PAGE_BASE_URL: http://web
     volumes:
       - poster_api_static:/app/static
@@ -27,7 +29,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
-        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-mirror.ccs.tencentyun.com}
+        REGISTRY_PREFIX: ${DOCKER_HUB_MIRROR:-docker.io}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_SCREEN_URL: ${VITE_SCREEN_URL:-}

@@ -8,6 +8,9 @@
 import fetch from '@/utils/axios'
 import _config from '@/config'
 import { IGetTempListData } from './home'
+import photoCate1 from '../../service/src/mock/materials/photos/1.json'
+import photoCate2 from '../../service/src/mock/materials/photos/2.json'
+import photoCate3 from '../../service/src/mock/materials/photos/3.json'
 
 // 获取素材分类：
 export const getKinds = (params: Type.Object = {}) => fetch('design/cate', params)
@@ -88,8 +91,44 @@ export type TGetImageListResult = {
   thumb?: string
 } & Partial<IGetTempListData>
 
+const LOCAL_IMAGE_LIBRARY: Record<number, TGetImageListResult[]> = {
+  1: photoCate1 as TGetImageListResult[],
+  2: photoCate2 as TGetImageListResult[],
+  3: photoCate3 as TGetImageListResult[],
+}
+
+function paginateImageList(list: TGetImageListResult[], page = 1, pageSize = 30) {
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 30
+  const start = (safePage - 1) * safePageSize
+  return list.slice(start, start + safePageSize)
+}
+
+function getLocalImageList(params: TGetImageListParams): TPageRequestResult<TGetImageListResult[]> {
+  const cate = Number(params?.cate || 0)
+  const page = Number(params?.page || 1)
+  const pageSize = Number(params?.pageSize || 30)
+  const list = cate > 0 ? (LOCAL_IMAGE_LIBRARY[cate] || []) : Object.values(LOCAL_IMAGE_LIBRARY).flat()
+  return {
+    list: paginateImageList(list, page, pageSize),
+    page,
+    pageSize,
+    total: list.length,
+  } as TPageRequestResult<TGetImageListResult[]>
+}
+
 // 图库列表
-export const getImagesList = (params: TGetImageListParams) => fetch<TPageRequestResult<TGetImageListResult[]>>('design/imgs', params, 'get')
+export const getImagesList = async (params: TGetImageListParams) => {
+  try {
+    const result = await fetch<TPageRequestResult<TGetImageListResult[]>>('design/imgs', params, 'get')
+    if (Array.isArray(result?.list)) {
+      return result
+    }
+  } catch (error) {
+    console.warn('[material.getImagesList] remote failed, fallback to local library', error)
+  }
+  return getLocalImageList(params)
+}
 
 type TMyPhotoParams = {
   

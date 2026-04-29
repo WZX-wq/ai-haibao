@@ -6,8 +6,8 @@
  * @LastEditTime: 2024-04-10 07:16:00
 -->
 <template>
-  <el-dropdown trigger="click" size="large" placement="bottom-start">
-    <span class="el-dropdown-link">
+  <el-dropdown trigger="click" size="large" placement="bottom-start" @visible-change="handleDropdownVisibleChange">
+    <span ref="triggerRef" class="el-dropdown-link" tabindex="0">
       <slot />
     </span>
     <template #dropdown>
@@ -25,14 +25,35 @@
 </template>
 
 <script setup lang="ts">
-// import { ref, Ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 
 const router = useRouter()
+const triggerRef = ref<HTMLElement | null>(null)
 
 const openPSD = () => {
   window.open(router.resolve('/psd').href, '_blank')
+}
+
+const handleDropdownVisibleChange = (visible: boolean) => {
+  if (visible || typeof document === 'undefined') return
+  nextTick(() => {
+    const active = document.activeElement as HTMLElement | null
+    const triggerEl = triggerRef.value
+    if (triggerEl && active && !triggerEl.contains(active)) {
+      triggerEl.focus?.()
+      return
+    }
+    if (!active) {
+      triggerEl?.focus?.()
+      return
+    }
+    const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
+    if (insideDropdown) {
+      triggerEl?.focus?.()
+    }
+  })
 }
 </script>
 

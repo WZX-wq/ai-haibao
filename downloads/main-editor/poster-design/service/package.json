@@ -17,6 +17,10 @@
   "author": "ShawnPhang",
   "license": "ISC",
   "dependencies": {
+    "@alicloud/imageseg20191230": "^4.0.1",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/tea-util": "^1.4.11",
+    "@alicloud/viapi20230117": "^2.0.1",
     "axios": "^1.7.3",
     "body-parser": "^1.19.0",
     "express": "^4.19.2",
@@ -24,7 +28,7 @@
     "images": "^3.2.4",
     "multiparty": "^4.2.3",
     "mysql2": "^3.21.1",
-    "puppeteer": "^24.13.0"
+    "puppeteer-core": "^24.13.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

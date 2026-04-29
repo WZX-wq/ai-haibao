@@ -485,4 +485,22 @@ function getChilds(uuid: string) {
   border-radius: 10px;
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
 }
+
+@media (max-width: 1023px) {
+  .db-scroll {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .db-scroll .out-page {
+    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .db-scroll .out-page .design-canvas {
+    transform-origin: center top !important;
+  }
+}
 </style>

@@ -45,6 +45,14 @@ function publicScreenshotUrl(pathAndQuery: string) {
   return root.endsWith('/') ? `${root}${path.slice(1)}` : `${root}${path}`
 }
 
+async function warmScreenshotSilently(fetchScreenshotUrl: string) {
+  try {
+    await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+  } catch (error) {
+    console.warn('[warmScreenshotSilently]', fetchScreenshotUrl, error)
+  }
+}
+
 function listWorkPreviewUrl(id: number | string, width: number, height: number, version?: Date | string | number | null) {
   const cw = Math.max(1, Math.round(Number(width)))
   const ch = Math.max(1, Math.round(Number(height)))
@@ -167,7 +175,7 @@ async function saveWorkToMysql(req: any, res: any) {
       authToken ? `&authToken=${encodeURIComponent(authToken)}` : ''
     }`,
   )
-  await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+  await warmScreenshotSilently(fetchScreenshotUrl)
 
   send.success(res, { id })
 }
@@ -945,7 +953,7 @@ export async function saveTemplate(req: any, res: any) {
       const fetchScreenshotUrl = internalApiUrl(
         `api/screenshots?tempid=${targetId}&tempType=${type}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`,
       )
-      await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+      await warmScreenshotSilently(fetchScreenshotUrl)
 
       send.success(res, { id: targetId })
       return
@@ -963,7 +971,7 @@ export async function saveTemplate(req: any, res: any) {
     const fetchScreenshotUrl = internalApiUrl(
       `api/screenshots?tempid=${id}&tempType=${type}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`,
     )
-    await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+    await warmScreenshotSilently(fetchScreenshotUrl)
 
     if (isAdd) {
       const list = readJsonIfExists(mockRel(listPath), [])
@@ -1020,7 +1028,7 @@ export async function saveWork(req: any, res: any) {
     const fetchScreenshotUrl = internalApiUrl(
       `api/screenshots?id=${id}&width=${width}&height=${height}&type=file&size=${size}&quality=75&force=1`,
     )
-    await axios.get(fetchScreenshotUrl, { responseType: 'arraybuffer' })
+    await warmScreenshotSilently(fetchScreenshotUrl)
 
     const listPath = mockPath('posters', 'list.json')
     const list = readJsonIfExists(listPath, [])

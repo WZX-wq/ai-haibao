@@ -19,11 +19,11 @@
       :style="state.editBoxStyle"
       class="svg__edit__wrap"
     >
-      <img class="edit__model" :src="safeImgUrl" />
+      <img class="edit__model" :src="safeImgUrl" @error="handleImageError" />
     </div>
     <div :style="{ transform: params.flip ? `rotate${params.flip}(180deg)` : undefined, borderRadius: params.radius + 'px', '-webkit-mask-image': getMaskStyleValue(params.mask), 'mask-image': getMaskStyleValue(params.mask) }" :class="['img__box', { mask: params.mask }]">
       <div v-if="params.isNinePatch" ref="targetRef" class="target" :style="{ border: `${(params.height * params.sliceData.ratio) / 2}px solid transparent`, borderImage: `url('${safeImgUrl}') ${params.sliceData.left} round` }"></div>
-      <img v-else ref="targetRef" class="target" style="transform-origin: center" :style="targetImgStyle" :src="safeImgUrl" />
+      <img v-else ref="targetRef" class="target" style="transform-origin: center" :style="targetImgStyle" :src="safeImgUrl" @error="handleImageError" />
     </div>
     <div v-if="isMask" class="drop__mask">
       <div putIn="true" :style="{ fontSize: params.width / 12 + 'px' }" class="drop__btn">拖入</div>
@@ -66,7 +66,8 @@ type TState = {
 }
 
 const props = defineProps<TProps>()
-const safeImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
+const sourceImgUrl = computed(() => normalizeLoopbackMediaUrl(props.params.imgUrl))
+const safeImgUrl = ref(sourceImgUrl.value)
 const state = reactive<TState>({
   position: 'absolute', // 'absolute'relative
   editBoxStyle: {
@@ -137,6 +138,41 @@ function getMaskStyleValue(mask?: string) {
   const n = normalizeLoopbackMediaUrl(mask)
   return `url(${n.replace(/'/g, '%27').replace(/\s+/g, '%20')})`
 }
+
+function isRetryableExternalUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+function appendRetryParam(url: string): string {
+  try {
+    const nextUrl = new URL(url, window.location.origin)
+    nextUrl.searchParams.set('_img_retry', `${Date.now()}`)
+    return nextUrl.toString()
+  } catch {
+    const connector = url.includes('?') ? '&' : '?'
+    return `${url}${connector}_img_retry=${Date.now()}`
+  }
+}
+
+let imageRetried = false
+
+function handleImageError() {
+  const currentUrl = sourceImgUrl.value
+  if (!currentUrl || imageRetried || !isRetryableExternalUrl(currentUrl)) {
+    return
+  }
+  imageRetried = true
+  safeImgUrl.value = appendRetryParam(currentUrl)
+}
+
+watch(
+  sourceImgUrl,
+  (value) => {
+    imageRetried = false
+    safeImgUrl.value = value
+  },
+  { immediate: true }
+)
 
 watch(
   () => cropEdit.value,

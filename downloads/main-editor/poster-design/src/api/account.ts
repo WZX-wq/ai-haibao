@@ -50,6 +50,7 @@ export type CurrentSession = {
   user_id: number
   session_status: string
   expired_at: string
+  has_api_web_token?: boolean
   user: AccountUser
   permissions: AccountPermissions
   /** 今日已成功计次的下载次数（MySQL 未配置时为 0） */

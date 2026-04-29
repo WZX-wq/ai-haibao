@@ -24,9 +24,51 @@ export default (router: Router) => {
     if (/\/http/.test(to.path) || /\/https/.test(to.path)) {
       const url = to.path.split('http')[1]
       window.location.href = `http${url}`
-    } else {
-      next()
+      return
     }
+
+    if (to.name === 'Home') {
+      const query = { ...to.query } as Record<string, any>
+      const section = String(query.section || 'welcome')
+      const hasPosterParams = Boolean(query.id || query.tempid || query.tempType)
+
+      if (section === 'welcome' && hasPosterParams) {
+        next({
+          path: '/home',
+          query: {
+            section: 'welcome',
+          },
+          replace: true,
+        })
+        return
+      }
+
+      if (query.tempid && !query.id && section !== 'template') {
+        next({
+          path: '/home',
+          query: {
+            ...query,
+            section: 'template',
+          },
+          replace: true,
+        })
+        return
+      }
+
+      if (query.id && section === 'template') {
+        next({
+          path: '/home',
+          query: {
+            ...query,
+            section: 'mine',
+          },
+          replace: true,
+        })
+        return
+      }
+    }
+
+    next()
   })
 
   router.afterEach((to) => {

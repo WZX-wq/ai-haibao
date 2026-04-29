@@ -105,19 +105,30 @@ function updateRecord() {
   // this.updateZoom()
 }
 
+function normalizeQrColor(input: string | undefined, fallback = '#35495E') {
+  const raw = String(input || '').trim()
+  if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw)) return raw.slice(0, 7)
+  const match = raw.match(/#[0-9a-fA-F]{6}/)
+  return match?.[0] || fallback
+}
+
 function changeValues() {
   const isGradient = props.params.dotColorType !== 'single'
+  const primary = normalizeQrColor(props.params.dotColor)
+  const secondary = normalizeQrColor(props.params.dotColor2, primary)
+  props.params.dotColor = primary
+  props.params.dotColor2 = secondary
   state.qrCodeOptions = {
     qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'H' },
     dotsOptions: {
       type: props.params.dotType,
-      color: isGradient ? undefined : props.params.dotColor,
+      color: isGradient ? undefined : primary,
       gradient: isGradient ? {
         type: 'linear',
         rotation: props.params.dotRotation,
         colorStops: [
-          { offset: 0, color: props.params.dotColor },
-          { offset: 1, color: props.params.dotColor2 || props.params.dotColor },
+          { offset: 0, color: primary },
+          { offset: 1, color: secondary },
         ],
       } : undefined,
     },

@@ -49,6 +49,10 @@ export function normalizeLoopbackMediaUrl(url: string | undefined | null): strin
       const path = `${u.pathname}${u.search}${u.hash}`
       return path || '/'
     }
+    if (window.location.protocol === 'https:' && u.protocol === 'http:') {
+      u.protocol = 'https:'
+      return u.toString()
+    }
   } catch {
     /* 非绝对 URL，原样返回 */
   }

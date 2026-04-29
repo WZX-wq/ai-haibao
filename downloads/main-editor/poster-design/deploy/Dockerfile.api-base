@@ -1,35 +1,15 @@
 ARG REGISTRY_PREFIX=docker.io
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
-ARG CHROMIUM_PACKAGE=chromium-headless-shell
-
-FROM ${REGISTRY_PREFIX}/library/node:20-bookworm AS builder
-WORKDIR /build
-
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
-ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
-ENV npm_config_registry=${NPM_REGISTRY}
-ENV NPM_CONFIG_REPLACE_REGISTRY_HOST=never
-ENV npm_config_replace_registry_host=never
-ENV npm_config_fetch_retries=5
-ENV npm_config_fetch_retry_mintimeout=20000
-ENV npm_config_fetch_retry_maxtimeout=120000
-ENV npm_config_prefer_offline=true
-ENV npm_config_cache=/root/.npm
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
-
-COPY service/package.json service/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-  npm ci --registry=${NPM_REGISTRY} --prefer-offline --no-audit --no-fund
-
-COPY service/ ./
-RUN npm run build
-
 FROM ${REGISTRY_PREFIX}/library/node:20-bookworm-slim
 
 ARG APT_MIRROR_ROOT=http://deb.debian.org/debian
 ARG APT_SECURITY_MIRROR_ROOT=http://deb.debian.org/debian-security
 ARG CHROMIUM_PACKAGE=chromium-headless-shell
 ARG INSTALL_CHROMIUM=1
+ARG APT_HTTP_PROXY=
+ARG APT_HTTPS_PROXY=
+ARG REMBG_MODEL_MIRROR=https://ghproxy.net/
+ARG REMBG_MODEL_NAME=u2net
+
 RUN set -eux; \
   for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
     [ -f "$f" ] || continue; \
@@ -40,8 +20,17 @@ RUN set -eux; \
   done
 
 RUN set -eux; \
+  printf 'Acquire::Languages "none";\nAcquire::Retries "3";\nAcquire::http::No-Cache "true";\nAcquire::https::No-Cache "true";\n' > /etc/apt/apt.conf.d/99codex-speed; \
+  if [ -n "${APT_HTTP_PROXY}" ]; then \
+    printf 'Acquire::http::Proxy "%s";\n' "${APT_HTTP_PROXY}" > /etc/apt/apt.conf.d/99codex-proxy-http; \
+  fi; \
+  if [ -n "${APT_HTTPS_PROXY}" ]; then \
+    printf 'Acquire::https::Proxy "%s";\n' "${APT_HTTPS_PROXY}" > /etc/apt/apt.conf.d/99codex-proxy-https; \
+  fi
+
+RUN set -eux; \
   apt-get update; \
-  packages="ca-certificates fonts-liberation libgomp1 python3 python3-pip python3-venv"; \
+  packages="ca-certificates curl fonts-liberation libgomp1 python3 python3-pip python3-venv"; \
   if [ "${INSTALL_CHROMIUM}" = "1" ]; then \
     packages="${packages} ${CHROMIUM_PACKAGE}"; \
   fi; \
@@ -51,27 +40,23 @@ RUN set -eux; \
 RUN python3 -m venv /opt/cutout-venv
 
 ENV PATH=/opt/cutout-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV U2NET_HOME=/opt/rembg-models
+ENV XDG_DATA_HOME=/opt/rembg-models
+ENV REMBG_MODEL_MIRROR=${REMBG_MODEL_MIRROR}
 ENV AI_CUTOUT_PYTHON=python3
 
 RUN set -eux; \
   python -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
   python -m pip install --no-cache-dir pillow==10.4.0 rembg==2.0.59 onnxruntime==1.22.0
 
+RUN set -eux; \
+  mkdir -p "${U2NET_HOME}"; \
+  model_file="${U2NET_HOME}/${REMBG_MODEL_NAME}.onnx"; \
+  if [ ! -s "${model_file}" ]; then \
+    base_url="${REMBG_MODEL_MIRROR%/}/https://github.com/danielgatis/rembg/releases/download/v0.0.0/${REMBG_MODEL_NAME}.onnx"; \
+    curl --fail --location --retry 5 --retry-delay 5 --output "${model_file}" "${base_url}"; \
+  fi
+
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
-
-WORKDIR /app
-COPY --from=builder /build/dist ./dist
-COPY --from=builder /build/node_modules ./node_modules
-COPY service/package.json ./
-COPY service/scripts ./scripts
-COPY service/src/mock ./src/mock
-COPY public ./public
-
-RUN ln -sfn /app/src/mock /app/mock
-RUN mkdir -p static
-
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-headless-shell
-
-EXPOSE 7001
-CMD ["node", "dist/server.js"]

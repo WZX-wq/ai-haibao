@@ -24,10 +24,12 @@ try {
     '/XD', '.idea',
     '/XD', '.vscode',
     '/XD', 'coverage',
+    '/XD', 'deploy\prebuilt-image-bundle',
     '/XD', 'service\node_modules',
     '/XD', 'service\dist',
     '/XD', 'service\static',
-    '/XF', 'poster-design-docker-deploy.zip'
+    '/XF', 'poster-design-docker-deploy.zip',
+    '/XF', 'poster-design-prebuilt-images-deploy.zip'
   )
 
   & robocopy @robocopyArgs | Out-Null
@@ -55,11 +57,6 @@ try {
       Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
     }
 
-  $envFile = Join-Path $StageDir 'deploy\.env'
-  if (Test-Path -LiteralPath $envFile) {
-    Remove-Item -LiteralPath $envFile -Force
-  }
-
   $packReadme = @'
 # Deployment Package
 
@@ -67,8 +64,8 @@ This package contains the source tree for Docker deployment.
 
 1. Extract the zip file.
 2. Go to `poster-design/deploy`.
-3. Copy `env.template` to `.env`.
-4. Fill in database, OAuth, and other required environment variables.
+3. Review the included `.env` and adjust only if needed.
+4. Fill in database, OAuth, and other required environment variables only if your server differs from the packaged config.
 5. Initialize MySQL with the SQL files in `deploy/mysql` if needed.
 6. Run `docker compose -f docker-compose.yaml up -d --build`.
 

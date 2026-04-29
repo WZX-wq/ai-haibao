@@ -9,8 +9,8 @@
   <div class="wrap">
     <slot />
     <div class="showMask" @click.stop="">
-      <el-dropdown placement="bottom-end" :show-arrow="false" @visible-change="handleDropdownVisibleChange">
-        <i class="iconfont icon-more"></i>
+      <el-dropdown ref="dropdownRef" placement="bottom-end" :show-arrow="false" @visible-change="handleDropdownVisibleChange">
+        <i ref="triggerRef" class="iconfont icon-more" tabindex="0"></i>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item v-for="(op, oi) in options" :key="oi + 'o'" @click="op.fn(data)">{{ op.name }}</el-dropdown-item>
@@ -22,7 +22,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus'
 import useConfirm from '@/common/methods/confirm'
 
@@ -36,16 +36,27 @@ export default defineComponent({
   },
   emits: ['action'],
   setup(props, context) {
+    const dropdownRef = ref()
+    const triggerRef = ref<HTMLElement | null>(null)
+
     function handleDropdownVisibleChange(visible: boolean) {
       if (visible || typeof document === 'undefined') return
-      setTimeout(() => {
+      nextTick(() => {
         const active = document.activeElement as HTMLElement | null
-        if (!active) return
+        const triggerEl = triggerRef.value
+        if (triggerEl && active && !triggerEl.contains(active)) {
+          triggerEl.focus?.()
+          return
+        }
+        if (!active) {
+          triggerEl?.focus?.()
+          return
+        }
         const insideDropdown = active.closest('.el-dropdown-menu, .el-popper, .el-dropdown__popper')
         if (insideDropdown) {
-          active.blur()
+          triggerEl?.focus?.()
         }
-      }, 0)
+      })
     }
 
     async function action(name: string, value: any) {
@@ -59,7 +70,9 @@ export default defineComponent({
     }
     return {
       action,
+      dropdownRef,
       handleDropdownVisibleChange,
+      triggerRef,
     }
   },
 })

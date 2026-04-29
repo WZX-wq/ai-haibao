@@ -80,17 +80,17 @@ onMounted(async () => {
         { id: 1, name: '热门图片' },
         { id: 2, name: '灵感配图' },
       ]
-      const nextShowList: TGetImageListResult[][] = []
-      for (const iterator of state.types) {
-        try {
-          const { list = [] } = await api.material.getImagesList({ cate: iterator.id, pageSize: previewLimit })
-          nextShowList.push(list.slice(0, previewLimit))
-        } catch (error) {
-          console.error(`Failed to load photo category: ${iterator.id}`, error)
-          nextShowList.push([])
-        }
-      }
-      state.showList = nextShowList
+      state.showList = await Promise.all(
+        state.types.map(async (iterator) => {
+          try {
+            const { list = [] } = await api.material.getImagesList({ cate: iterator.id, pageSize: previewLimit })
+            return list.slice(0, previewLimit)
+          } catch (error) {
+            console.error(`Failed to load photo category: ${iterator.id}`, error)
+            return []
+          }
+        }),
+      )
     }
   } catch (error) {
     console.error('Failed to initialize photos panel', error)
