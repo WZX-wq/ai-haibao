@@ -14,7 +14,7 @@ function maskToken(token: string, left = 8) {
   return `${raw.slice(0, left)}...(${raw.length})`
 }
 
-function getKunbiApiBaseUrl() {
+export function getKunbiApiBaseUrl() {
   return String(process.env.KUNBI_API_BASE_URL || DEFAULT_KUNBI_API_BASE_URL).replace(/\/$/, '')
 }
 
@@ -269,7 +269,7 @@ async function syncRemoteTokens(
   )
 }
 
-async function getRemoteAccessToken(req: any) {
+export async function getRemoteAccessToken(req: any) {
   const sessionData = await getCurrentSession(req)
   const userId = Number(sessionData.user.id || 0)
   if (!Number.isFinite(userId) || userId <= 0) {
@@ -311,7 +311,7 @@ async function getRemoteAccessToken(req: any) {
   }
 }
 
-async function postKunbiApi(req: any, remotePath: string, params: Record<string, any> = {}) {
+export async function postKunbiApi(req: any, remotePath: string, params: Record<string, any> = {}) {
   const { apiWebToken } = await getRemoteAccessToken(req)
   const cookieHeader = String(req.headers?.cookie || '')
   const body = new URLSearchParams()

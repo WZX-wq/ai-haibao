@@ -24,6 +24,7 @@ import {
 import aiService from '../service/ai'
 import accountService, { tryResolveSession } from '../service/account'
 import kunbiService from '../service/kunbi'
+import kunbiConsumptionService from '../service/kunbiConsumption'
 import usageService from '../service/usage'
 import { consumeAiQuotaByUserId } from '../service/usage'
 import { isMysqlConfigured } from '../utils/mysql'
@@ -98,6 +99,7 @@ rRouter.get(api.KUNBI_ALIPAY_PAGE, kunbiService.getAlipayRelayPage)
 rRouter.post(api.KUNBI_ORDER_PAY_STATUS, kunbiService.checkRechargeOrderPayStatus)
 rRouter.post(api.KUNBI_RECHARGE_RECORD, kunbiService.getRechargeRecord)
 rRouter.post(api.KUNBI_DETAIL_RECORD, kunbiService.getDetailRecord)
+rRouter.post(api.KUNBI_CONSUME_AI_TOOL, kunbiConsumptionService.consumeAiToolKunbi)
 rRouter.post(api.USAGE_DOWNLOAD_CONSUME, usageService.consumeDownloadQuota)
 rRouter.post(api.USAGE_AI_CONSUME, usageService.consumeAiQuota)
 rRouter.get(api.ADMIN_USERS, accountService.adminListUsers)

@@ -715,9 +715,9 @@ function mapSessionStatusToZh(status: string | null | undefined): string {
 }
 
 function normalizeRecordText(record: any) {
-  if (typeof record === 'string') return stripRecordTime(record)
-  if (record?.title) return stripRecordTime(String(record.title))
-  if (record?.name) return stripRecordTime(String(record.name))
+  if (typeof record === 'string') return sanitizeRecordTitle(stripRecordTime(record))
+  if (record?.title) return sanitizeRecordTitle(stripRecordTime(String(record.title)))
+  if (record?.name) return sanitizeRecordTitle(stripRecordTime(String(record.name)))
   if (record?.id) return `记录 #${record.id}`
   return '新记录'
 }
@@ -725,6 +725,13 @@ function normalizeRecordText(record: any) {
 function stripRecordTime(text: string) {
   return String(text || '')
     .replace(/\s*[·•]\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?\s*$/u, '')
+    .trim()
+}
+
+function sanitizeRecordTitle(text: string) {
+  return String(text || '')
+    .replace(/[（(]\s*VIP[^）)]*[）)]/giu, '')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
@@ -793,13 +800,13 @@ function resolveRecordAmount(record: any) {
 function formatRecordAmount(record: any) {
   const amount = resolveRecordAmount(record)
   if (amount == null || !Number.isFinite(amount) || amount === 0) return ''
-  const action = amount < 0 ? '增加' : '扣减'
+  const action = amount < 0 ? '扣减' : '增加'
   return `${action} ${normalizeCoinNumber(Math.abs(amount))} 鲲币`
 }
 
 function recordAmountClass(record: any) {
   const amount = resolveRecordAmount(record)
-  return amount != null && amount < 0 ? 'is-plus' : 'is-minus'
+  return amount != null && amount < 0 ? 'is-minus' : 'is-plus'
 }
 
 function recordMetaText(record: any) {

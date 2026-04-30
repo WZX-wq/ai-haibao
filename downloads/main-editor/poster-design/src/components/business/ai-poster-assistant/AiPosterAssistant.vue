@@ -4,13 +4,6 @@
       <div>
         <div class="assistant-title">AI 海报</div>
       </div>
-      <el-button class="ai-action-card ai-action-card--header" text :loading="loading.recommend" @click="recommendCopyAndPalette">
-        <span class="ai-action-card__icon"><el-icon><MagicStick /></el-icon></span>
-        <span class="ai-action-card__content" :class="{ 'is-loading': loading.recommend }">
-          <span class="ai-action-card__title">优化文案与配色</span>
-        </span>
-        <span v-show="!loading.recommend" class="ai-action-card__cost">10鲲币</span>
-      </el-button>
     </div>
 
     <div class="section section--template">
@@ -72,7 +65,13 @@
           <el-input v-model="form.qrUrl" placeholder="可选：https://..." />
         </el-form-item>
 
-        <el-form-item label="补充文案">
+        <el-form-item>
+          <template #label>
+            <span class="field-label-with-tip">
+              <span>补充描述</span>
+              <span class="field-label-tip">越详细生成效果越好</span>
+            </span>
+          </template>
           <el-input
             v-model="form.content"
             type="textarea"
@@ -98,9 +97,9 @@
         >
           <span class="ai-action-card__icon"><el-icon><component :is="action.icon" /></el-icon></span>
           <span class="ai-action-card__content" :class="{ 'is-loading': loading.generate && activeGenerateMode === action.mode }">
-            <span class="ai-action-card__title">{{ loading.generate && activeGenerateMode === action.mode ? '生成中...' : action.title }}</span>
+            <span class="ai-action-card__title">{{ loading.generate && activeGenerateMode === action.mode ? '正在生成' : action.title }}</span>
           </span>
-          <span v-show="!(loading.generate && activeGenerateMode === action.mode)" class="ai-action-card__cost">10鲲币</span>
+          <span v-show="!(loading.generate && activeGenerateMode === action.mode)" class="ai-action-card__cost">{{ action.costText }}</span>
         </el-button>
       </div>
     </div>
@@ -167,23 +166,57 @@
         >
           <span class="ai-action-card__icon"><el-icon><component :is="action.icon" /></el-icon></span>
           <span class="ai-action-card__content" :class="{ 'is-loading': loading[action.loadingKey] }">
-            <span class="ai-action-card__title">{{ loading[action.loadingKey] ? '处理中...' : action.title }}</span>
+            <span class="ai-action-card__title">{{ loading[action.loadingKey] ? '正在处理' : action.title }}</span>
           </span>
-          <span v-show="!loading[action.loadingKey]" class="ai-action-card__cost">10鲲币</span>
+          <span v-show="!loading[action.loadingKey]" class="ai-action-card__cost">{{ action.costText }}</span>
         </el-button>
       </div>
     </div>
+
+    <KunbiRechargeModal
+      v-model="rechargeVisible"
+      :balance="kunbiBalance"
+      :packages="rechargePackages"
+      :api-config="rechargeApiConfig"
+      @pay="handleRechargePay"
+      @history="handleRechargeHistory"
+    />
+
+    <el-dialog v-model="wechatPayVisible" width="360px" append-to-body destroy-on-close class="ac-pay-dialog">
+      <div class="ac-pay-dialog__title">微信扫码支付</div>
+      <div class="ac-pay-dialog__desc">请使用微信扫一扫完成支付，支付成功后会自动刷新鲲币余额。</div>
+      <div class="ac-pay-dialog__qr-wrap">
+        <img v-if="wechatPayQrCode" :src="wechatPayQrCode" alt="微信支付二维码" class="ac-pay-dialog__qr" />
+      </div>
+      <div class="ac-pay-dialog__meta">
+        <span v-if="wechatPayAmountText">{{ wechatPayAmountText }}</span>
+        <span v-if="wechatPayKunbiText">到账鲲币：{{ wechatPayKunbiText }}</span>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="alipayPayVisible" width="360px" append-to-body destroy-on-close class="ac-pay-dialog">
+      <div class="ac-pay-dialog__title">支付宝支付</div>
+      <div class="ac-pay-dialog__desc">请使用支付宝扫一扫完成支付，支付成功后会自动刷新鲲币余额。</div>
+      <div class="ac-pay-dialog__qr-wrap ac-pay-dialog__qr-wrap--alipay">
+        <img v-if="alipayPayQrCode" :src="alipayPayQrCode" alt="支付宝二维码" class="ac-pay-dialog__qr" />
+      </div>
+      <div class="ac-pay-dialog__meta">
+        <span v-if="alipayPayAmountText">{{ alipayPayAmountText }}</span>
+        <span v-if="alipayPayKunbiText">到账鲲币：{{ alipayPayKunbiText }}</span>
+      </div>
+    </el-dialog>
 
   </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElForm, ElFormItem, ElRow, ElCol, ElSelect, ElOption } from 'element-plus'
 import { EditPen, Grid, MagicStick, Picture, Promotion, Tools } from '@element-plus/icons-vue'
 import { useCanvasStore, useUserStore, useWidgetStore } from '@/store'
 import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
+import KunbiRechargeModal from '@/components/business/kunbi-recharge/KunbiRechargeModal.vue'
 import {
   requestAi,
   type PosterGenerateInput,
@@ -195,9 +228,34 @@ import {
   type ReplaceImageResult,
   type RelayoutResult,
 } from '@/api/ai'
+import {
+  checkRechargeOrderStatus,
+  consumeAiToolKunbi,
+  createRechargeOrder,
+  getKunbiRechargeInfo,
+  getUserHome,
+  type CreateRechargeOrderParams,
+  type KunbiApiConfig,
+  type KunbiRechargePackage,
+} from '@/api/kunbi'
 import { applyPosterPalette, buildPosterLayout, getPosterGradient, getSizePresets, replaceHeroImage, replacePosterTexts } from './posterEngine'
+import { formatAiPosterKunbiCost, getAiPosterKunbiPrice, type AiPosterKunbiActionKey } from './kunbiPricing'
 
 type PosterGenerationMode = 'fast' | 'quality'
+type PosterLoadingAction = 'generate' | 'copy' | 'image' | 'relayout' | 'recommend'
+type VisibleKunbiActionKey = 'generateQuality' | 'optimizeCopyPalette' | 'generateFast' | 'replaceText' | 'replaceHero' | 'relayout'
+
+type LoadingCopyFrame = {
+  stage: string
+  title: string
+  subtitle: string
+  status: string
+  fun: string
+}
+
+type LoadingCopyView = LoadingCopyFrame & {
+  badge: string
+}
 
 type PosterPreset = {
   key: string
@@ -388,6 +446,23 @@ const loading = reactive({
   image: false,
   relayout: false,
 })
+const rechargeApiConfig: KunbiApiConfig = {
+  baseUrl: '',
+  kunbiIcon: '/images/kunbi.png',
+}
+const kunbiBalance = ref(0)
+const rechargePackages = ref<KunbiRechargePackage[]>([])
+const rechargeVisible = ref(false)
+const wechatPayVisible = ref(false)
+const wechatPayQrCode = ref('')
+const wechatPayAmountText = ref('')
+const wechatPayKunbiText = ref('')
+const alipayPayVisible = ref(false)
+const alipayPayQrCode = ref('')
+const alipayPayAmountText = ref('')
+const alipayPayKunbiText = ref('')
+let rechargeStatusTimer: ReturnType<typeof setInterval> | null = null
+let rechargePollCount = 0
 const activeGenerateMode = ref<PosterGenerationMode | ''>('')
 const activeRefineMode = ref<PosterGenerationMode>('fast')
 const AI_POSTER_LOADING_EVENT = 'ai-poster-loading'
@@ -398,12 +473,16 @@ const generateActions = computed(() => [
     title: '高质量',
     meta: '细节和氛围更强，适合直接出成品',
     icon: MagicStick,
+    kunbiActionKey: 'generateQuality' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('generateQuality'),
   },
   {
     mode: 'fast' as PosterGenerationMode,
     title: '快速生成',
     meta: '更快出首版，再继续微调到成片状态',
     icon: Promotion,
+    kunbiActionKey: 'generateFast' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('generateFast'),
   },
 ])
 
@@ -415,12 +494,24 @@ const refineModeMeta = computed(() =>
 
 const refineActions = computed(() => [
   {
+    key: 'recommend',
+    title: '优化文案与配色',
+    meta: `${refineModeMeta.value}，同步优化文案、CTA 和配色关系`,
+    icon: MagicStick,
+    handler: recommendCopyAndPalette,
+    loadingKey: 'recommend' as const,
+    kunbiActionKey: 'optimizeCopyPalette' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('optimizeCopyPalette'),
+  },
+  {
     key: 'replaceText',
     title: '换文案',
     meta: `${refineModeMeta.value}，重写标题、卖点和 CTA`,
     icon: EditPen,
     handler: replaceTextOnly,
     loadingKey: 'replaceText' as const,
+    kunbiActionKey: 'replaceText' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('replaceText'),
   },
   {
     key: 'image',
@@ -429,6 +520,8 @@ const refineActions = computed(() => [
     icon: Picture,
     handler: replaceHeroOnly,
     loadingKey: 'image' as const,
+    kunbiActionKey: 'replaceHero' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('replaceHero'),
   },
   {
     key: 'relayout',
@@ -437,6 +530,8 @@ const refineActions = computed(() => [
     icon: Tools,
     handler: relayoutLayout,
     loadingKey: 'relayout' as const,
+    kunbiActionKey: 'relayout' as VisibleKunbiActionKey,
+    costText: formatAiPosterKunbiCost('relayout'),
   },
 ])
 
@@ -468,6 +563,454 @@ const heroSelectionTip = computed(() => {
   const confidenceText = selectionMeta?.lowConfidence ? '当前推荐图把握一般，建议人工挑选。' : '已按留白、主体位置、清晰度和色调做过自动评分。'
   return `${modeText}${confidenceText}`
 })
+const loadingSession = reactive({
+  action: '' as PosterLoadingAction | '',
+  mode: 'quality' as PosterGenerationMode,
+  stepIndex: 0,
+  progress: 0,
+})
+let loadingCopyTimer: ReturnType<typeof setInterval> | null = null
+
+function inferLoadingIndustryBucket(industry: string) {
+  const text = String(industry || '').trim()
+  if (/餐饮|美食|咖啡|茶饮/.test(text)) return '餐饮'
+  if (/招聘|招募|人力/.test(text)) return '招聘'
+  if (/课程|教育|培训/.test(text)) return '课程'
+  if (/电商|零售|商品|促销/.test(text)) return '电商'
+  return '通用'
+}
+
+function getLoadingFlavor(action: PosterLoadingAction, industry: string, index: number) {
+  const bucket = inferLoadingIndustryBucket(industry)
+  const groups: Record<string, string[]> = {
+    餐饮: [
+      '先把食欲拉起来，再让标题站稳。',
+      '这口画面正在努力变得更想下单。',
+      '主图在变香，卖点在排队上场。',
+    ],
+    招聘: [
+      '先把岗位说清，再把吸引力提上来。',
+      '正在压缩废话，保留真正打动人的点。',
+      '让福利更醒目，让投递更顺手。',
+    ],
+    课程: [
+      '先讲结果，再讲适合谁。',
+      '正在把报名理由往更前面放。',
+      '少一点套话，多一点行动理由。',
+    ],
+    电商: [
+      '正在让卖点更清楚，按钮更想点。',
+      '先突出核心利益，再安排价格权益。',
+      '这张图正在努力变得更会卖。',
+    ],
+    通用: [
+      '先让信息站稳，再让画面出彩。',
+      '这次不想只出图，想直接出成片。',
+      '正在帮你避开字压图和信息打架。',
+    ],
+  }
+  const actionLead: Record<PosterLoadingAction, string> = {
+    generate: '主图、标题和 CTA 先商量一下。',
+    recommend: '先把文案和颜色关系理顺。',
+    copy: '正在把长句拧成更利落的海报话。',
+    image: '先给主图留呼吸感，再考虑冲击力。',
+    relayout: '先把层级摆正，再把留白疏通。',
+  }
+  const pool = groups[bucket] || groups.通用
+  return `${pool[index % pool.length]}${actionLead[action]}`
+}
+
+function getLoadingStepLabels(action: PosterLoadingAction, mode: PosterGenerationMode) {
+  const steps: Record<PosterLoadingAction, string[]> = {
+    generate: mode === 'quality'
+      ? ['理解需求', '筛主图', '看安全区', '打磨版式', '检查成片']
+      : ['理解需求', '出主图', '挑主图', '压文案', '查成片'],
+    recommend: ['理文案', '配颜色'],
+    copy: ['压标题', '修卖点'],
+    image: ['做主图', '避标题'],
+    relayout: ['调层级', '疏留白'],
+  }
+  return steps[action] || ['处理中']
+}
+
+function buildLoadingFrames(action: PosterLoadingAction, mode: PosterGenerationMode, industry: string): LoadingCopyFrame[] {
+  const framesByAction: Record<PosterLoadingAction, LoadingCopyFrame[]> = {
+    generate: mode === 'quality'
+      ? [
+          { stage: '步骤 1/5', title: '先铺一层灵感底稿', subtitle: '先确认这张海报最该先讲什么。', status: '理解需求中', fun: getLoadingFlavor(action, industry, 0) },
+          { stage: '步骤 2/5', title: '给主图多留几个稳选择', subtitle: '正在生成更适合排字的候选画面。', status: '候选主图生成中', fun: getLoadingFlavor(action, industry, 1) },
+          { stage: '步骤 3/5', title: '让标题和画面先错开', subtitle: '正在比较安全区、留白和主体位置。', status: '安全区比较中', fun: getLoadingFlavor(action, industry, 2) },
+          { stage: '步骤 4/5', title: '把版式往顺眼的方向推', subtitle: '标题、卖点和 CTA 正在重新站位。', status: '版式打磨中', fun: getLoadingFlavor(action, industry, 3) },
+          { stage: '步骤 5/5', title: '最后收一遍成片感', subtitle: '再看一次焦点、留白和整体节奏。', status: '成片检查中', fun: getLoadingFlavor(action, industry, 4) },
+        ]
+      : [
+          { stage: '步骤 1/5', title: '先抓住这张海报的重心', subtitle: '先找出最该先突出的利益点。', status: '理解需求中', fun: getLoadingFlavor(action, industry, 0) },
+          { stage: '步骤 2/5', title: '先出一张更稳的主视觉', subtitle: '正在优先做适合直接出片的画面。', status: '主视觉生成中', fun: getLoadingFlavor(action, industry, 1) },
+          { stage: '步骤 3/5', title: '自动挑更顺手的主图', subtitle: '正在比较留白、清晰度和构图。', status: '主图择优中', fun: getLoadingFlavor(action, industry, 2) },
+          { stage: '步骤 4/5', title: '让文字先利落下来', subtitle: '先减拥挤感，再把信息说准。', status: '标题卖点压缩中', fun: getLoadingFlavor(action, industry, 3) },
+          { stage: '步骤 5/5', title: '最后确认成片是不是顺', subtitle: '再检查一次版式和阅读节奏。', status: '成片检查中', fun: getLoadingFlavor(action, industry, 4) },
+        ],
+    recommend: [
+      { stage: '步骤 1/2', title: '先把话说得更利落', subtitle: '先收紧标题、卖点和 CTA。', status: '文案提炼中', fun: getLoadingFlavor(action, industry, 0) },
+      { stage: '步骤 2/2', title: '再把颜色关系理顺', subtitle: '给这张海报换一套更顺眼的配色。', status: '配色整理中', fun: getLoadingFlavor(action, industry, 1) },
+    ],
+    copy: [
+      { stage: '步骤 1/2', title: '先把标题压短一点', subtitle: '先把一句话说短，也说清。', status: '标题压缩中', fun: getLoadingFlavor(action, industry, 0) },
+      { stage: '步骤 2/2', title: '把该留的卖点挑出来', subtitle: '再保留真正值得上版的信息。', status: '卖点精修中', fun: getLoadingFlavor(action, industry, 1) },
+    ],
+    image: [
+      { stage: '步骤 1/2', title: '先把主图重新拉顺', subtitle: '先保住主体，再让画面更能排字。', status: '主图重做中', fun: getLoadingFlavor(action, industry, 0) },
+      { stage: '步骤 2/2', title: '给标题和按钮留出呼吸位', subtitle: '正在给标题区和 CTA 区找更干净的位置。', status: '标题区避让中', fun: getLoadingFlavor(action, industry, 1) },
+    ],
+    relayout: [
+      { stage: '步骤 1/2', title: '先把层级摆正', subtitle: '先让标题、副标题和 CTA 分出主次。', status: '层级调整中', fun: getLoadingFlavor(action, industry, 0) },
+      { stage: '步骤 2/2', title: '再把留白疏通开', subtitle: '正在减少拥挤感，让阅读更顺。', status: '留白整理中', fun: getLoadingFlavor(action, industry, 1) },
+    ],
+  }
+  return framesByAction[action] || []
+}
+
+const activeLoadingContext = computed<null | { action: PosterLoadingAction; mode: PosterGenerationMode }>(() => {
+  if (loading.generate) return { action: 'generate', mode: activeGenerateMode.value === 'quality' ? 'quality' : 'fast' }
+  if (loading.recommend) return { action: 'recommend', mode: activeRefineMode.value }
+  if (loading.replaceText) return { action: 'copy', mode: activeRefineMode.value }
+  if (loading.image) return { action: 'image', mode: activeRefineMode.value }
+  if (loading.relayout) return { action: 'relayout', mode: activeRefineMode.value }
+  return null
+})
+
+const currentLoadingCopy = computed<LoadingCopyView | null>(() => {
+  const context = activeLoadingContext.value
+  if (!context) return null
+  const frames = buildLoadingFrames(context.action, context.mode, form.industry)
+  if (!frames.length) return null
+  const safeIndex = Math.max(0, Math.min(loadingSession.stepIndex, frames.length - 1))
+  const frame = frames[safeIndex]
+  return {
+    ...frame,
+    badge: context.mode === 'quality' ? '高质量生成' : context.action === 'generate' ? '快速生成' : '快捷微调',
+  }
+})
+
+const loadingStepItems = computed(() => {
+  const context = activeLoadingContext.value
+  if (!context) return []
+  return getLoadingStepLabels(context.action, context.mode)
+})
+
+const currentLoadingStepIndex = computed(() => {
+  return Math.max(0, loadingSession.stepIndex)
+})
+
+const currentLoadingProgress = computed(() => {
+  return Math.max(0, Math.min(100, Math.round(loadingSession.progress)))
+})
+
+function getLoadingProgressBase(stepIndex: number, steps: number, action: PosterLoadingAction) {
+  const start = action === 'generate' ? 10 : 14
+  const end = action === 'generate' ? 86 : 90
+  if (steps <= 1) return end
+  const ratio = Math.max(0, Math.min(1, stepIndex / Math.max(1, steps - 1)))
+  return start + (end - start) * ratio
+}
+
+function beginLoadingSession(action: PosterLoadingAction, mode: PosterGenerationMode) {
+  loadingSession.action = action
+  loadingSession.mode = mode
+  loadingSession.stepIndex = 0
+  loadingSession.progress = getLoadingProgressBase(0, Math.max(loadingStepItems.value.length, 1), action)
+}
+
+function advanceLoadingSession(stepIndex: number) {
+  const context = activeLoadingContext.value
+  if (!context) return
+  const steps = Math.max(loadingStepItems.value.length, 1)
+  const safeIndex = Math.max(0, Math.min(stepIndex, steps - 1))
+  loadingSession.stepIndex = safeIndex
+  loadingSession.progress = Math.max(
+    loadingSession.progress,
+    getLoadingProgressBase(safeIndex, steps, context.action),
+  )
+}
+
+function finalizeLoadingSession(success: boolean) {
+  loadingSession.progress = success ? 100 : Math.max(0, loadingSession.progress)
+}
+
+function startLoadingCopyRotation() {
+  if (loadingCopyTimer) return
+  loadingCopyTimer = setInterval(() => {
+    const context = activeLoadingContext.value
+    if (!context) return
+    const steps = Math.max(loadingStepItems.value.length, 1)
+    const base = getLoadingProgressBase(loadingSession.stepIndex, steps, context.action)
+    const nextBase = loadingSession.stepIndex >= steps - 1
+      ? (context.action === 'generate' ? 92 : 95)
+      : getLoadingProgressBase(loadingSession.stepIndex + 1, steps, context.action)
+    const ceiling = Math.max(base + 4, nextBase - 4)
+    if (loadingSession.progress < ceiling) {
+      loadingSession.progress = Math.min(ceiling, loadingSession.progress + (context.action === 'generate' ? 1.8 : 2.4))
+    }
+  }, 2600)
+}
+
+function stopLoadingCopyRotation() {
+  if (!loadingCopyTimer) return
+  clearInterval(loadingCopyTimer)
+  loadingCopyTimer = null
+}
+
+function stopRechargePolling() {
+  if (!rechargeStatusTimer) return
+  window.clearInterval(rechargeStatusTimer)
+  rechargeStatusTimer = null
+  rechargePollCount = 0
+}
+
+function closeWechatPayDialog() {
+  wechatPayVisible.value = false
+  wechatPayQrCode.value = ''
+  wechatPayAmountText.value = ''
+  wechatPayKunbiText.value = ''
+}
+
+function closeAlipayPayDialog() {
+  alipayPayVisible.value = false
+  alipayPayQrCode.value = ''
+  alipayPayAmountText.value = ''
+  alipayPayKunbiText.value = ''
+}
+
+function openWechatPayDialog(payload: { qrCode: string; amount?: string; kunbi?: string }) {
+  const qrCode = String(payload.qrCode || '').trim()
+  if (!qrCode) return false
+  wechatPayAmountText.value = payload.amount || ''
+  wechatPayKunbiText.value = payload.kunbi || ''
+  wechatPayQrCode.value = qrCode
+  wechatPayVisible.value = true
+  return true
+}
+
+function openAlipayPayDialog(payload: { qrCode: string; amount?: string; kunbi?: string }) {
+  const qrCode = String(payload.qrCode || '').trim()
+  if (!qrCode) return false
+  alipayPayAmountText.value = payload.amount || ''
+  alipayPayKunbiText.value = payload.kunbi || ''
+  alipayPayQrCode.value = qrCode
+  alipayPayVisible.value = true
+  return true
+}
+
+function openPayTarget(target: string) {
+  const url = String(target || '').trim()
+  if (!url) return false
+  if (/^data:image\//i.test(url)) return false
+  window.location.assign(url)
+  return true
+}
+
+function tryHandleWechatPay(data: Record<string, any>) {
+  const qrCode = String(data.qrcode_img_url || data.qr_code_img_url || data.qr_code || '').trim()
+  if (!qrCode) return false
+  if (!/^data:image\//i.test(qrCode) && !/^https?:\/\//i.test(qrCode)) return false
+  return openWechatPayDialog({
+    qrCode,
+    amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+    kunbi: data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim() ? `${String(data.buy_kunbi_count).trim()} 鲲币` : '',
+  })
+}
+
+function tryHandleAlipayPay(data: Record<string, any>) {
+  const qrCode = String(data.alipay_qr_code || '').trim()
+  if (!qrCode) return false
+  return openAlipayPayDialog({
+    qrCode,
+    amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+    kunbi: data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim() ? `${String(data.buy_kunbi_count).trim()} 鲲币` : '',
+  })
+}
+
+function tryHandlePayData(payData: unknown) {
+  if (!payData) return false
+  if (typeof payData === 'string') {
+    const trimmed = payData.trim()
+    if (!trimmed) return false
+    if (trimmed.startsWith('<form') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) return false
+    return openPayTarget(trimmed)
+  }
+  if (typeof payData !== 'object') return false
+  const data = payData as Record<string, any>
+  if (tryHandleAlipayPay(data) || tryHandleWechatPay(data)) return true
+  const urlKeys = ['pay_url', 'url', 'redirect_url', 'h5_url', 'mweb_url', 'deep_link', 'qr_code']
+  for (const key of urlKeys) {
+    if (data[key] && openPayTarget(String(data[key]))) {
+      return true
+    }
+  }
+  for (const [key, value] of Object.entries(data)) {
+    const text = String(value || '').trim()
+    if (!text) continue
+    if ((key.toLowerCase().includes('url') || key.toLowerCase().includes('link')) && openPayTarget(text)) {
+      return true
+    }
+  }
+  return false
+}
+
+async function refreshKunbiBalance() {
+  if (!userStore.online) return 0
+  const data = await getUserHome()
+  const balance = Number(data?.my_kunbin_count ?? data?.kunbi_balance ?? data?.kunbi ?? 0)
+  kunbiBalance.value = Number.isFinite(balance) ? balance : 0
+  return kunbiBalance.value
+}
+
+async function loadRechargeInfo(showError = false) {
+  if (!userStore.online) return
+  try {
+    const data = await getKunbiRechargeInfo()
+    const balance = Number(data?.kunbi_balance ?? data?.kunbi ?? kunbiBalance.value ?? 0)
+    kunbiBalance.value = Number.isFinite(balance) ? balance : 0
+    rechargePackages.value = Array.isArray(data?.recharge_packages) ? data.recharge_packages : []
+  } catch (error: any) {
+    if (showError) {
+      ElMessage.error(error?.message || '获取充值信息失败')
+    }
+  }
+}
+
+async function openRechargeCenter() {
+  if (!userStore.online) return
+  await Promise.allSettled([refreshKunbiBalance(), loadRechargeInfo(true)])
+  rechargeVisible.value = true
+}
+
+async function handleRechargeHistory() {
+  rechargeVisible.value = false
+  await router.push('/account')
+}
+
+async function startRechargePolling(orderSn: string) {
+  stopRechargePolling()
+  const poll = async () => {
+    rechargePollCount += 1
+    try {
+      const status = await checkRechargeOrderStatus(orderSn)
+      if (Number(status?.pay_status) === 1) {
+        stopRechargePolling()
+        rechargeVisible.value = false
+        closeWechatPayDialog()
+        closeAlipayPayDialog()
+        await refreshKunbiBalance()
+        ElMessage.success('支付成功，鲲币余额已刷新')
+        return
+      }
+    } catch {
+      // 轮询期间静默重试
+    }
+    if (rechargePollCount >= 20) {
+      stopRechargePolling()
+    }
+  }
+  void poll()
+  rechargeStatusTimer = window.setInterval(() => {
+    void poll()
+  }, 3000)
+}
+
+async function handleRechargePay(params: CreateRechargeOrderParams) {
+  try {
+    const data = await createRechargeOrder(params)
+    if (!data?.order_sn) {
+      throw new Error('订单创建成功，但未返回订单号')
+    }
+    const opened =
+      (params.pay_type === 2 &&
+        data.alipay_qr_code &&
+        openAlipayPayDialog({
+          qrCode: String(data.alipay_qr_code),
+          amount: data.pay_amount != null && String(data.pay_amount).trim() ? `¥${String(data.pay_amount).trim()}` : '',
+          kunbi:
+            data.buy_kunbi_count != null && String(data.buy_kunbi_count).trim()
+              ? `${String(data.buy_kunbi_count).trim()} 鲲币`
+              : '',
+        })) ||
+      (data.pay_url && openPayTarget(data.pay_url)) ||
+      (data.pay_data && tryHandlePayData(data.pay_data)) ||
+      tryHandlePayData(data)
+
+    ElMessage.success(
+      params.pay_type === 1
+        ? opened
+          ? '订单已创建，请扫码完成微信支付'
+          : '订单已创建，请继续完成支付'
+        : opened
+          ? '订单已创建，请在弹层内完成支付宝支付'
+          : '订单已创建，请继续完成支付',
+    )
+    await startRechargePolling(data.order_sn)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '创建充值订单失败')
+  }
+}
+
+async function ensureSufficientKunbiBalance(actionKey: VisibleKunbiActionKey) {
+  try {
+    const price = getAiPosterKunbiPrice(actionKey)
+    const balance = await refreshKunbiBalance()
+    if (balance >= price.cost) return true
+    ElMessage.warning(`${price.label}需要 ${price.cost} 鲲币，当前余额不足。`)
+    await openRechargeCenter()
+    return false
+  } catch (error: any) {
+    ElMessage.error(error?.message || '获取鲲币余额失败，请稍后重试')
+    return false
+  }
+}
+
+async function consumeKunbiAfterSuccess(actionKey: VisibleKunbiActionKey) {
+  try {
+    const consumeResult = await consumeAiToolKunbi({ actionKey })
+    if (consumeResult?.skipped) {
+      console.warn('[ai-poster] consume kunbi hook skipped', consumeResult)
+      ElMessage.warning(`${consumeResult.label || '当前功能'}暂未完成主站扣费配置，余额还不会变动。`)
+    } else if (Number(consumeResult?.remoteResult?.deducted ?? -1) === 0) {
+      ElMessage.info(`${consumeResult.label || '当前功能'}本次未实际扣币，可能命中了主站免费次数或零成本规则。`)
+    }
+  } catch (error) {
+    console.warn('[ai-poster] consume kunbi hook failed', error)
+    const message = error instanceof Error ? error.message : '主站扣费失败，余额暂未扣减'
+    ElMessage.warning(message)
+  } finally {
+    await refreshKunbiBalance().catch(() => undefined)
+  }
+}
+
+watch(activeLoadingContext, (next) => {
+  if (next) {
+    startLoadingCopyRotation()
+  } else {
+    stopLoadingCopyRotation()
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  stopLoadingCopyRotation()
+  stopRechargePolling()
+})
+
+function mapLoadingKeyToAction(key: string): PosterLoadingAction {
+  if (key === 'replaceText') return 'copy'
+  if (key === 'image') return 'image'
+  if (key === 'relayout') return 'relayout'
+  return 'recommend'
+}
+
+function getLoadingButtonTitle(action: PosterLoadingAction, fallback: string) {
+  const context = activeLoadingContext.value
+  if (!context || context.action !== action) return fallback
+  return currentLoadingCopy.value?.title || fallback
+}
 const absoluteLayoutLayers = computed(() => {
   const layers = ((lastPosterResult.value?.designPlan as any)?.absoluteLayout?.layers || []) as Array<Record<string, any>>
   return layers.map((layer) => ({
@@ -481,6 +1024,17 @@ const absoluteLayoutLayers = computed(() => {
   }))
 })
 const activePalette = computed(() => currentPalette.value)
+
+function getCurrentPosterSnapshot() {
+  const poster = lastPosterResult.value
+  return {
+    title: String(poster?.title || result.title || '').trim(),
+    slogan: String(poster?.slogan || result.slogan || '').trim(),
+    body: String(poster?.body || result.body || '').trim(),
+    cta: String(poster?.cta || result.cta || '').trim(),
+    layoutFamily: String((poster?.designPlan as any)?.layoutFamily || '').trim(),
+  }
+}
 
 function parseHexColor(input: string) {
   const raw = String(input || '').trim().replace('#', '')
@@ -553,6 +1107,19 @@ function getPayload(generationMode: PosterGenerationMode = 'quality'): PosterGen
   }
 }
 
+function getRefinePayload(generationMode: PosterGenerationMode = 'quality'): PosterGenerateInput {
+  const payload = getPayload(generationMode)
+  const current = getCurrentPosterSnapshot()
+  return {
+    ...payload,
+    currentTitle: current.title,
+    currentSlogan: current.slogan,
+    currentBody: current.body,
+    currentCta: current.cta,
+    currentLayoutFamily: current.layoutFamily,
+  }
+}
+
 function getModeLabel(mode: PosterGenerationMode) {
   return mode === 'quality' ? '高质量' : '快速'
 }
@@ -560,16 +1127,18 @@ function getModeLabel(mode: PosterGenerationMode) {
 function emitAiPosterLoading(
   status: 'start' | 'finish',
   detail: {
-    action: 'generate' | 'copy' | 'image' | 'relayout' | 'recommend'
+    action: PosterLoadingAction
     mode?: PosterGenerationMode
     success?: boolean
   },
 ) {
   if (typeof window === 'undefined') return
+  const loadingCopy = currentLoadingCopy.value
   window.dispatchEvent(
     new CustomEvent(AI_POSTER_LOADING_EVENT, {
       detail: {
         status,
+        loadingCopy,
         ...detail,
       },
     }),
@@ -601,6 +1170,29 @@ function syncResult(data: Pick<PosterGenerateResult, 'title' | 'slogan' | 'body'
   result.slogan = data.slogan || ''
   result.body = data.body || ''
   result.cta = data.cta || ''
+}
+
+function syncPosterTextState(
+  data: Pick<PosterGenerateResult, 'title' | 'slogan' | 'body' | 'cta'>,
+  extras?: Partial<PosterGenerateResult>,
+) {
+  syncResult(data)
+  if (!lastPosterResult.value) return
+  lastPosterResult.value = {
+    ...lastPosterResult.value,
+    title: data.title || '',
+    slogan: data.slogan || '',
+    body: data.body || '',
+    cta: data.cta || '',
+    ...(extras || {}),
+  } as PosterGenerateResult
+}
+
+function appendMediaCacheBust(url: string) {
+  const safe = String(url || '').trim()
+  if (!safe) return ''
+  const joiner = safe.includes('?') ? '&' : '?'
+  return `${safe}${joiner}v=${Date.now()}`
 }
 
 function normalizePosterMedia(poster: PosterGenerateResult): PosterGenerateResult {
@@ -784,7 +1376,7 @@ function applyPreset(key: string) {
     form.style = '高级简约'
     form.purpose = '品牌宣传'
     form.sizeKey = preset.sizeKey
-    adaptCanvasSize(true)
+    persistPosterForm()
     return
   }
   if (canReplaceTheme) form.theme = preset.name
@@ -792,7 +1384,7 @@ function applyPreset(key: string) {
   form.style = preset.style
   form.purpose = preset.purpose
   form.sizeKey = preset.sizeKey
-  adaptCanvasSize(true)
+  persistPosterForm()
 }
 
 function isPresetActive(key: string) {
@@ -801,8 +1393,10 @@ function isPresetActive(key: string) {
 
 async function recommendCopyAndPalette() {
   if (!assertAiLogin()) return
+  if (!(await ensureSufficientKunbiBalance('optimizeCopyPalette'))) return
   loading.recommend = true
   let success = false
+  beginLoadingSession('recommend', activeRefineMode.value)
   emitAiPosterLoading('start', { action: 'recommend', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
@@ -821,6 +1415,15 @@ async function recommendCopyAndPalette() {
         '文案与配色优化失败',
       )
     }
+    advanceLoadingSession(1)
+    const nextCopy = copyRes
+      ? {
+        title: copyRes.title || '',
+        slogan: copyRes.slogan || '',
+        body: copyRes.body || '',
+        cta: copyRes.cta || '',
+      }
+      : null
     if (paletteRes?.palette) {
       currentPalette.value = paletteRes.palette
     }
@@ -830,7 +1433,15 @@ async function recommendCopyAndPalette() {
       const hasBackgroundImage = Boolean(String((currentPage as any)?.backgroundImage || '').trim())
       // 有背景图时：只改字体/前景颜色，不更改背景颜色/渐变，也不删除背景图
       if (hasBackgroundImage) {
-        if (lastPosterResult.value) {
+        if (nextCopy) {
+          syncPosterTextState(nextCopy, {
+            palette: currentPalette.value,
+          })
+          replacePosterTexts(widgetStore.dWidgets, payload, {
+            ...nextCopy,
+            palette: currentPalette.value,
+          } as any)
+        } else if (lastPosterResult.value) {
           lastPosterResult.value = {
             ...lastPosterResult.value,
             palette: currentPalette.value,
@@ -838,23 +1449,27 @@ async function recommendCopyAndPalette() {
         }
         applyPaletteToCurrentCanvas()
         widgetStore.updateDWidgets()
-        ElMessage.success(`${getModeLabel(mode)}模型已优化文案与配色。`)
+        ElMessage.success(copyRes && paletteRes ? `${getModeLabel(mode)}模型已优化文案与配色。` : copyRes ? `${getModeLabel(mode)}模型已优化文案。` : `${getModeLabel(mode)}模型已优化配色。`)
         return
       }
       if (lastPosterResult.value) {
         const merged = {
           ...lastPosterResult.value,
-          // 「推荐配色」只改色，不改用户当前文案
-          title: lastPosterResult.value.title,
-          slogan: lastPosterResult.value.slogan,
-          body: lastPosterResult.value.body,
-          cta: lastPosterResult.value.cta,
+          title: nextCopy?.title ?? lastPosterResult.value.title,
+          slogan: nextCopy?.slogan ?? lastPosterResult.value.slogan,
+          body: nextCopy?.body ?? lastPosterResult.value.body,
+          cta: nextCopy?.cta ?? lastPosterResult.value.cta,
           palette: currentPalette.value,
         } as PosterGenerateResult
         lastPosterResult.value = merged
+        syncResult(merged)
         const layout = buildPosterLayout({ input: payload, result: merged })
         applyGeneratedLayoutToCanvas(layout)
       } else {
+        if (nextCopy) {
+          syncResult(nextCopy)
+          applyCopyToCurrentCanvas(nextCopy, mode)
+        }
         const page = pageStore.getDPage()
         pageStore.setDPage({
           ...page,
@@ -866,12 +1481,14 @@ async function recommendCopyAndPalette() {
       widgetStore.updateDWidgets()
       ElMessage.success(copyRes && paletteRes ? `${getModeLabel(mode)}模型已优化文案与配色。` : copyRes ? `${getModeLabel(mode)}模型已优化文案。` : `${getModeLabel(mode)}模型已优化配色。`)
     } else {
-      if (copyRes) {
-        syncResult(copyRes as Pick<PosterGenerateResult, 'title' | 'slogan' | 'body' | 'cta'>)
+      if (nextCopy) {
+        syncResult(nextCopy)
       }
       ElMessage.success(copyRes && paletteRes ? `${getModeLabel(mode)}模型已生成文案与推荐配色。` : copyRes ? `${getModeLabel(mode)}模型已生成推荐文案。` : `${getModeLabel(mode)}模型已生成推荐配色。`)
     }
     success = true
+    finalizeLoadingSession(true)
+    await consumeKunbiAfterSuccess('optimizeCopyPalette')
   } catch (error) {
     console.error(error)
     notifyFriendlyError('推荐失败', error)
@@ -883,14 +1500,19 @@ async function recommendCopyAndPalette() {
 
 async function applyPoster(generationMode: PosterGenerationMode = 'quality') {
   if (!assertAiLogin()) return
+  const actionKey: VisibleKunbiActionKey = generationMode === 'quality' ? 'generateQuality' : 'generateFast'
+  if (!(await ensureSufficientKunbiBalance(actionKey))) return
   loading.generate = true
   activeGenerateMode.value = generationMode
   let success = false
+  beginLoadingSession('generate', generationMode)
   emitAiPosterLoading('start', { action: 'generate', mode: generationMode })
   try {
     const payload = getPayload(generationMode)
+    advanceLoadingSession(1)
     const timeout = getPosterTimeout(generationMode, 'generate')
     const poster = normalizePosterMedia(await requestAi<PosterGenerateResult>('ai/poster/generate', payload, timeout))
+    advanceLoadingSession(3)
     lastPosterResult.value = poster
     selectedHeroCandidateIndex.value = Math.max(0, Number(poster.heroSelectionMeta?.selectedIndex ?? poster.recommendedHeroCandidateIndex ?? 0))
     pendingQualityCandidateSelection.value = generationMode === 'quality' && heroCandidates.value.length > 0
@@ -898,7 +1520,10 @@ async function applyPoster(generationMode: PosterGenerationMode = 'quality') {
     currentPalette.value = poster.palette
     updateProviderTip(poster.providerMeta)
     if (generationMode === 'quality' && heroCandidates.value.length > 0) {
+      advanceLoadingSession(4)
       success = true
+      finalizeLoadingSession(true)
+      await consumeKunbiAfterSuccess(actionKey)
       ElMessage.success('高质量候选主图已生成，请先选择一张主图继续上版。')
       return
     }
@@ -916,9 +1541,12 @@ async function applyPoster(generationMode: PosterGenerationMode = 'quality') {
     if (!layout.widgets.length) {
       throw new Error('AI 已返回结果，但当前排版未生成有效图层，请重试')
     }
+    advanceLoadingSession(4)
     applyGeneratedLayoutToCanvas(layout)
     pendingQualityCandidateSelection.value = false
     success = true
+    finalizeLoadingSession(true)
+    await consumeKunbiAfterSuccess(actionKey)
     ElMessage.success(generationMode === 'fast' ? '快速海报已生成，系统已自动选出最佳主图。' : '高质量海报已生成，可以继续换字、换图和排版。')
   } catch (error) {
     console.error(error)
@@ -998,27 +1626,78 @@ function clampRectToPage(rect: { left: number; top: number; width: number; heigh
   return { left, top, width, height }
 }
 
+function resolveAbsoluteRatio(layer: Record<string, any>, primaryKey: string, fallbackKey: string, pageSize: number, fallbackRatio: number) {
+  const raw = Number(layer?.[primaryKey] ?? layer?.[fallbackKey])
+  if (!Number.isFinite(raw)) return Math.max(0, Math.min(1, fallbackRatio))
+  if (raw >= 0 && raw <= 1) return raw
+  return Math.max(0, Math.min(1, raw / Math.max(1, pageSize)))
+}
+
+function resolveAbsoluteFontSizeForCanvas(layer: Record<string, any>, pageW: number, pageH: number) {
+  const raw = Number(layer?.fontSize)
+  if (!Number.isFinite(raw) || raw <= 0) return 0
+  if (raw <= 1) {
+    const base = Math.min(pageW, pageH)
+    return Math.max(12, Math.round(base * raw))
+  }
+  return Math.max(12, Math.round(raw))
+}
+
+function normalizeAbsoluteLayerRect(layer: Record<string, any>, pageW: number, pageH: number) {
+  const leftRatio = resolveAbsoluteRatio(layer, 'left', 'x', pageW, 0)
+  const topRatio = resolveAbsoluteRatio(layer, 'top', 'y', pageH, 0)
+  const widthRatio = resolveAbsoluteRatio(layer, 'width', 'w', pageW, 0.2)
+  const heightRatio = resolveAbsoluteRatio(layer, 'height', 'h', pageH, 0.08)
+  return clampRectToPage({
+    left: leftRatio * pageW,
+    top: topRatio * pageH,
+    width: Math.max(0.04, widthRatio) * pageW,
+    height: Math.max(0.04, heightRatio) * pageH,
+  }, pageW, pageH)
+}
+
+function findCanvasWidgetByRole(role: string) {
+  const roleMap: Record<string, string[]> = {
+    title: ['ai_title'],
+    slogan: ['ai_slogan'],
+    body: ['ai_body'],
+    cta: ['ai_cta', 'ai_button'],
+    hero: ['ai_hero'],
+    qrcode: ['ai_qrcode'],
+    badge: ['ai_badge'],
+    priceTag: ['ai_price_tag'],
+    priceNum: ['ai_price_num'],
+    meta1: ['ai_meta_1', 'ai_meta1'],
+    meta2: ['ai_meta_2', 'ai_meta2'],
+    chip1: ['ai_chip_1', 'ai_chip1'],
+    chip2: ['ai_chip_2', 'ai_chip2'],
+    chip3: ['ai_chip_3', 'ai_chip3'],
+    chip4: ['ai_chip_4', 'ai_chip4'],
+    logo: ['ai_logo'],
+  }
+  const names = roleMap[String(role || '').trim()] || []
+  return widgetStore.dWidgets.find((item: any) => names.includes(String(item?.name || '').trim())) as any
+}
+
 function applyAbsoluteRelayout(designPlan?: RelayoutResult['designPlan']) {
   const layers = (designPlan as any)?.absoluteLayout?.layers
   if (!Array.isArray(layers) || !layers.length) return false
   const page = pageStore.getDPage()
   const pageW = Number(page.width || 1242)
   const pageH = Number(page.height || 1660)
-  const textWidgets = getCanvasTextWidgets()
-  const hero = getCanvasImageWidget()
-  const qrcode = widgetStore.dWidgets.find((item: any) => item?.type === 'w-qrcode') as any
-
   const byRole = new Map<string, any>(layers.map((item: any) => [String(item.role || ''), item]))
-  const titleWidget = textWidgets[0]
-  const sloganWidget = textWidgets[1]
-  const bodyWidget = textWidgets[2]
-  const ctaWidget = textWidgets.find((w: any) => /cta|button|btn|占位|报名|立即|咨询|抢|预定|预约/i.test(String(w.name || '') + String(w.text || '')))
+  const titleWidget = findCanvasWidgetByRole('title') || getCanvasTextWidgets()[0]
+  const sloganWidget = findCanvasWidgetByRole('slogan') || getCanvasTextWidgets()[1]
+  const bodyWidget = findCanvasWidgetByRole('body') || getCanvasTextWidgets()[2]
+  const ctaWidget = findCanvasWidgetByRole('cta') || getCanvasTextWidgets().find((w: any) => /cta|button|btn|占位|报名|立即|咨询|抢|预定|预约/i.test(String(w.name || '') + String(w.text || '')))
+  const hero = findCanvasWidgetByRole('hero') || getCanvasImageWidget()
+  const qrcode = findCanvasWidgetByRole('qrcode') || (widgetStore.dWidgets.find((item: any) => item?.type === 'w-qrcode') as any)
 
   const assignText = (widget: any, role: string) => {
     if (!widget) return
     const layer = byRole.get(role)
     if (!layer) return
-    const rect = clampRectToPage(layer, pageW, pageH)
+    const rect = normalizeAbsoluteLayerRect(layer, pageW, pageH)
     widget.left = rect.left
     widget.top = rect.top
     widget.width = rect.width
@@ -1027,8 +1706,9 @@ function applyAbsoluteRelayout(designPlan?: RelayoutResult['designPlan']) {
       widget.record.width = rect.width
       widget.record.height = rect.height
     }
-    if (layer.fontSize && Number.isFinite(Number(layer.fontSize))) {
-      widget.fontSize = Math.max(12, Math.round(Number(layer.fontSize)))
+    const nextFontSize = resolveAbsoluteFontSizeForCanvas(layer, pageW, pageH)
+    if (nextFontSize > 0) {
+      widget.fontSize = nextFontSize
     }
     if (['left', 'center', 'right'].includes(String(layer.textAlign || ''))) {
       widget.textAlign = layer.textAlign
@@ -1042,7 +1722,7 @@ function applyAbsoluteRelayout(designPlan?: RelayoutResult['designPlan']) {
   assignText(ctaWidget, 'cta')
 
   if (hero && byRole.get('hero')) {
-    const rect = clampRectToPage(byRole.get('hero'), pageW, pageH)
+    const rect = normalizeAbsoluteLayerRect(byRole.get('hero'), pageW, pageH)
     hero.left = rect.left
     hero.top = rect.top
     hero.width = rect.width
@@ -1053,7 +1733,7 @@ function applyAbsoluteRelayout(designPlan?: RelayoutResult['designPlan']) {
     }
   }
   if (qrcode && byRole.get('qrcode')) {
-    const rect = clampRectToPage(byRole.get('qrcode'), pageW, pageH)
+    const rect = normalizeAbsoluteLayerRect(byRole.get('qrcode'), pageW, pageH)
     qrcode.left = rect.left
     qrcode.top = rect.top
     qrcode.width = rect.width
@@ -1224,8 +1904,10 @@ async function replaceTextOnly() {
     ElMessage.warning('当前画布为空，请先添加一个模板或元素。')
     return
   }
+  if (!(await ensureSufficientKunbiBalance('replaceText'))) return
   loading.replaceText = true
   let success = false
+  beginLoadingSession('copy', activeRefineMode.value)
   emitAiPosterLoading('start', { action: 'copy', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
@@ -1235,14 +1917,16 @@ async function replaceTextOnly() {
       body: result.body,
       cta: result.cta,
     }
-    const copyRes = await requestAi<CopyGenerateResult>('ai/poster/copy', getPayload(mode), getPosterTimeout(mode, 'copy'))
-    syncResult(copyRes as Pick<PosterGenerateResult, 'title' | 'slogan' | 'body' | 'cta'>)
-    const applied = applyCopyToCurrentCanvas({
-      title: result.title,
-      slogan: result.slogan,
-      body: result.body,
-      cta: result.cta,
-    }, mode)
+    const copyRes = await requestAi<CopyGenerateResult>('ai/poster/copy', getRefinePayload(mode), getPosterTimeout(mode, 'copy'))
+    advanceLoadingSession(1)
+    const nextCopy = {
+      title: copyRes.title || '',
+      slogan: copyRes.slogan || '',
+      body: copyRes.body || '',
+      cta: copyRes.cta || '',
+    }
+    syncPosterTextState(nextCopy, copyRes as Partial<PosterGenerateResult>)
+    const applied = applyCopyToCurrentCanvas(nextCopy, mode)
     if (!applied) {
       ElMessage.warning('当前画布没有可替换的文字图层。')
       return
@@ -1250,11 +1934,13 @@ async function replaceTextOnly() {
     widgetStore.updateDWidgets()
     providerTip.value = formatProviderMeta(copyRes.providerMeta)
     const changed =
-      before.title !== result.title ||
-      before.slogan !== result.slogan ||
-      before.body !== result.body ||
-      before.cta !== result.cta
+      before.title !== nextCopy.title ||
+      before.slogan !== nextCopy.slogan ||
+      before.body !== nextCopy.body ||
+      before.cta !== nextCopy.cta
     success = true
+    finalizeLoadingSession(true)
+    await consumeKunbiAfterSuccess('replaceText')
     ElMessage.success(changed ? `${getModeLabel(mode)}模型已替换文案。` : `${getModeLabel(mode)}模型已重新应用文案（本次推荐与上次相同）。`)
   } catch (error) {
     console.error(error)
@@ -1271,17 +1957,20 @@ async function replaceHeroOnly() {
     ElMessage.warning('当前画布为空，请先添加一个模板或元素。')
     return
   }
+  if (!(await ensureSufficientKunbiBalance('replaceHero'))) return
   loading.image = true
   let success = false
+  beginLoadingSession('image', activeRefineMode.value)
   emitAiPosterLoading('start', { action: 'image', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
-    const payload = getPayload(mode)
+    const payload = getRefinePayload(mode)
     let heroUrl = ''
     let providerMessage = ''
     if (String(payload.sourceImageUrl || '').trim()) {
       const imageRes = await requestAi<ReplaceImageResult>('ai/poster/replace-image', payload, getPosterTimeout(mode, 'image'))
-      heroUrl = normalizeLoopbackMediaUrl(imageRes.hero?.imageUrl || '') || ''
+      advanceLoadingSession(1)
+      heroUrl = appendMediaCacheBust(normalizeLoopbackMediaUrl(imageRes.hero?.imageUrl || '') || '')
       providerMessage = formatProviderMeta(imageRes.providerMeta)
     } else {
       const poster = normalizePosterMedia(
@@ -1295,7 +1984,8 @@ async function replaceHeroOnly() {
           getPosterTimeout(mode, 'image'),
         ),
       )
-      heroUrl = normalizeLoopbackMediaUrl(poster.hero?.imageUrl || '') || ''
+      advanceLoadingSession(1)
+      heroUrl = appendMediaCacheBust(normalizeLoopbackMediaUrl(poster.hero?.imageUrl || '') || '')
       providerMessage = formatProviderMeta(poster.providerMeta?.image || poster.providerMeta?.generate)
       if (lastPosterResult.value) {
         lastPosterResult.value = {
@@ -1310,6 +2000,16 @@ async function replaceHeroOnly() {
     }
     if (!heroUrl) {
       throw new Error('AI 未返回新的主图，请重试')
+    }
+    if (lastPosterResult.value) {
+      lastPosterResult.value = {
+        ...lastPosterResult.value,
+        hero: {
+          ...(lastPosterResult.value.hero || {}),
+          imageUrl: heroUrl,
+          prompt: lastPosterResult.value.hero?.prompt || '',
+        },
+      } as PosterGenerateResult
     }
     if (ensurePosterWidgets()) {
       const page = pageStore.getDPage() as any
@@ -1328,6 +2028,8 @@ async function replaceHeroOnly() {
     widgetStore.updateDWidgets()
     providerTip.value = providerMessage
     success = true
+    finalizeLoadingSession(true)
+    await consumeKunbiAfterSuccess('replaceHero')
     ElMessage.success(`${getModeLabel(mode)}模型已更新主图。`)
   } catch (error) {
     console.error(error)
@@ -1344,22 +2046,34 @@ async function relayoutLayout() {
     ElMessage.warning('当前画布为空，请先添加一个模板或元素。')
     return
   }
+  if (!(await ensureSufficientKunbiBalance('relayout'))) return
   loading.relayout = true
   let success = false
+  beginLoadingSession('relayout', activeRefineMode.value)
   emitAiPosterLoading('start', { action: 'relayout', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
-    const relayout = await requestAi<RelayoutResult>('ai/poster/relayout', getPayload(mode), getPosterTimeout(mode, 'relayout'))
+    const relayout = await requestAi<RelayoutResult>('ai/poster/relayout', getRefinePayload(mode), getPosterTimeout(mode, 'relayout'))
+    advanceLoadingSession(1)
     if (!lastPosterResult.value) {
       const applied = relayoutCurrentTemplate(relayout.designPlan)
       providerTip.value = formatProviderMeta(relayout.providerMeta)
       success = applied
+      finalizeLoadingSession(applied)
+      if (applied) {
+        await consumeKunbiAfterSuccess('relayout')
+      }
       ElMessage.success(applied ? `${getModeLabel(mode)}模型已完成智能排版（模板模式）。` : '当前模板缺少可重排元素。')
       return
     }
     const merged = {
       ...lastPosterResult.value,
       designPlan: relayout.designPlan,
+      posterIntent: relayout.posterIntent || lastPosterResult.value.posterIntent,
+      copyDeck: relayout.copyDeck || lastPosterResult.value.copyDeck,
+      slotContent: relayout.slotContent || lastPosterResult.value.slotContent,
+      supplementFacts: relayout.supplementFacts || lastPosterResult.value.supplementFacts,
+      finishCheck: relayout.finishCheck || lastPosterResult.value.finishCheck,
       palette: currentPalette.value,
       title: result.title,
       slogan: result.slogan,
@@ -1371,6 +2085,8 @@ async function relayoutLayout() {
     applyGeneratedLayoutToCanvas(layout)
     providerTip.value = formatProviderMeta(relayout.providerMeta)
     success = true
+    finalizeLoadingSession(true)
+    await consumeKunbiAfterSuccess('relayout')
     ElMessage.success(`${getModeLabel(mode)}模型已完成智能排版。`)
   } catch (error) {
     console.error(error)
@@ -1405,8 +2121,23 @@ defineExpose({ open })
 
 onMounted(() => {
   restorePersistedPosterForm()
+  if (userStore.online) {
+    void refreshKunbiBalance()
+  }
   void maybeAutoGenerateFromWelcome()
 })
+
+watch(
+  () => userStore.online,
+  (online) => {
+    if (online) {
+      void refreshKunbiBalance()
+      return
+    }
+    kunbiBalance.value = 0
+  },
+  { immediate: false },
+)
 
 watch(
   () => route.fullPath,
@@ -1467,6 +2198,50 @@ watch(
     font-size: 16px;
     font-weight: 700;
     line-height: 1.2;
+  }
+
+  :deep(.ac-pay-dialog) {
+    border-radius: 16px;
+  }
+
+  .ac-pay-dialog__title {
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+    color: #111827;
+  }
+
+  .ac-pay-dialog__desc {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.7;
+    text-align: center;
+    color: #6b7280;
+  }
+
+  .ac-pay-dialog__qr-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 18px;
+  }
+
+  .ac-pay-dialog__qr {
+    width: 220px;
+    height: 220px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  .ac-pay-dialog__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: #4b5563;
   }
 
   .header-action {
@@ -2106,6 +2881,20 @@ watch(
     font-size: 10px;
     font-weight: 600;
     color: #475569;
+  }
+
+  .field-label-with-tip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    line-height: 1.2;
+  }
+
+  .field-label-tip {
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 500;
   }
 
   .compact-form :deep(.el-input__wrapper),

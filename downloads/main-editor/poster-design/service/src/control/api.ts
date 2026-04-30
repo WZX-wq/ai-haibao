@@ -40,6 +40,7 @@ export default {
   KUNBI_ORDER_PAY_STATUS: '/kunbi/order-pay-status',
   KUNBI_RECHARGE_RECORD: '/kunbi/recharge-record',
   KUNBI_DETAIL_RECORD: '/kunbi/detail-record',
+  KUNBI_CONSUME_AI_TOOL: '/kunbi/consume-ai-tool',
   USAGE_DOWNLOAD_CONSUME: '/usage/download/consume',
   USAGE_AI_CONSUME: '/usage/ai/consume',
   ADMIN_USERS: '/admin/users',

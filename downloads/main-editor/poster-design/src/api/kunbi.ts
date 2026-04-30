@@ -24,7 +24,32 @@ export type KunbiRechargeInfo = {
 export type KunbiUserHomeResult = {
   kunbi_balance?: number
   kunbi?: number
+  my_kunbin_count?: number
   [key: string]: any
+}
+
+export type ConsumeAiToolKunbiParams = {
+  actionKey?:
+    | 'generateQuality'
+    | 'optimizeCopyPalette'
+    | 'generateFast'
+    | 'replaceText'
+    | 'replaceBackground'
+    | 'replaceHero'
+    | 'relayout'
+    | 'scoreHeroSafety'
+  toolsId?: number
+}
+
+export type ConsumeAiToolKunbiResult = {
+  skipped?: boolean
+  reason?: string
+  actionKey?: string
+  toolsId?: number
+  serviceId?: number
+  cost?: number
+  label?: string
+  remoteResult?: Record<string, any>
 }
 
 export type CreateRechargeOrderParams =
@@ -42,6 +67,9 @@ export type CreateRechargeOrderResult = {
   pay_url?: string
   pay_data?: Record<string, any> | string
   qrcode_img_url?: string
+  qr_code_img_url?: string
+  qr_code?: string
+  alipay_qr_code?: string
   pay_amount?: number | string
   buy_kunbi_count?: number
   [key: string]: any
@@ -290,8 +318,9 @@ export function getUserInfo() {
 export function getUserHome() {
   return request<KunbiUserHomeResult>('kunbi/user-home').then((payload) => ({
     ...payload,
-    kunbi_balance: toNumber((payload as any)?.kunbi_balance ?? (payload as any)?.kunbi, 0),
-    kunbi: toNumber((payload as any)?.kunbi ?? (payload as any)?.kunbi_balance, 0),
+    my_kunbin_count: toNumber((payload as any)?.my_kunbin_count ?? (payload as any)?.kunbi_balance ?? (payload as any)?.kunbi, 0),
+    kunbi_balance: toNumber((payload as any)?.kunbi_balance ?? (payload as any)?.kunbi ?? (payload as any)?.my_kunbin_count, 0),
+    kunbi: toNumber((payload as any)?.kunbi ?? (payload as any)?.kunbi_balance ?? (payload as any)?.my_kunbin_count, 0),
   }))
 }
 
@@ -324,6 +353,10 @@ export function getKunbiDetailRecord(page = 1, limit = 30, type = 0) {
   }).then(normalizeDetailRecordPage)
 }
 
+export function consumeAiToolKunbi(params: ConsumeAiToolKunbiParams) {
+  return request<ConsumeAiToolKunbiResult>('kunbi/consume-ai-tool', params)
+}
+
 export default {
   setBaseUrl,
   getBaseUrl,
@@ -338,4 +371,5 @@ export default {
   checkRechargeOrderStatus,
   getKunbiRechargeRecord,
   getKunbiDetailRecord,
+  consumeAiToolKunbi,
 }
