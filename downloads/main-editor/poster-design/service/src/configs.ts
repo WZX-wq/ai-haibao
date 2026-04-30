@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 /*
  * @Author: ShawnPhang
  * @Date: 2022-02-01 13:41:59
@@ -43,10 +45,14 @@ export const drawLink = getDrawLink()
  * 图片缓存目录位置，根据实际情况调整
  */
 const isDev = process.env.NODE_ENV === 'development'
+const explicitStoragePath = String(process.env.FILE_STORAGE_PATH || '').trim()
+const isLocalSourceRuntime = process.argv.some((arg) => /ts-node|ts-node-dev|src[\\/]+main/i.test(String(arg || '')))
+const workspaceStaticPath = path.join(process.cwd(), 'static')
+const preferWorkspaceStatic = isDev || (!explicitStoragePath && isLocalSourceRuntime && fs.existsSync(workspaceStaticPath))
 
-export const filePath = isDev
-  ? process.cwd() + `/static/`
-  : String(process.env.FILE_STORAGE_PATH || serviceComfig.filePath).replace(/\/?$/, '/') 
+export const filePath = preferWorkspaceStatic
+  ? `${workspaceStaticPath.replace(/[\\/]+$/, '')}/`
+  : String(explicitStoragePath || serviceComfig.filePath).replace(/\/?$/, '/')
 
 /**
  * 配置服务器端的 Chrome/Chromium；Docker 内通常设 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

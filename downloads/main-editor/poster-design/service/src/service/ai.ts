@@ -8,6 +8,14 @@ import { filePath } from '../configs'
 import { checkCreateFolder, copyFile, randomCode, send } from '../utils/tools'
 import { getTemplateCandidatesSmart, getTemplateSuggestionSmart } from './templateCatalog'
 import { getClientSiteRootUrl, getClientStaticBaseUrl, getInternalApiOrigin } from '../utils/clientPublicUrl'
+import {
+  chooseBestHeroCandidate,
+  generateTitleCandidatesByStrategy,
+  pickBestTitleCandidate,
+  rankProofPointsByBusinessValue,
+  sanitizePosterCopyDeck,
+  scoreHeroCandidateBreakdown,
+} from './aiPosterPolicy'
 
 type PosterGenerateInput = {
   presetKey?: string
@@ -25,6 +33,7 @@ type PosterGenerateInput = {
   generateHeroImage?: boolean
   /** 为 false 时不调用背景模型；若未提供底图也会跳过背景模型 */
   generateBackgroundImage?: boolean
+  selectedHeroCandidateIndex?: number
 }
 
 type PosterPalette = {
@@ -53,8 +62,38 @@ type CopyResult = {
   copyDeck?: PosterCopyDeck
 }
 type PosterImageResult = { imageUrl: string; prompt: string }
+type PosterHeroCandidateScoreBreakdown = {
+  whitespace: number
+  subjectPosition: number
+  clarity: number
+  toneMatch: number
+}
+type PosterHeroCandidate = {
+  imageUrl: string
+  prompt: string
+  score: number
+  selected: boolean
+  sourceType?: 'text-to-image' | 'reference-edit' | 'repair-edit'
+  analysisSummary?: string
+  scoreBreakdown: PosterHeroCandidateScoreBreakdown
+  multimodalLayoutHints?: PosterMultimodalLayoutHints
+}
+type PosterHeroSelectionMeta = {
+  recommendedIndex: number
+  selectedIndex: number
+  selectionMode: 'auto' | 'manual'
+  lowConfidence?: boolean
+  topScore?: number
+  spread?: number
+}
 type SizePreset = { key: string; name: string; width: number; height: number }
 type ProviderResult<T> = { result: T; meta: AiProviderMeta }
+type CopyRequestOverrides = {
+  timeoutMs?: number
+  retryTimes?: number
+  enableThinking?: boolean
+  forceSinglePass?: boolean
+}
 type AiStage = 'copy' | 'palette' | 'image' | 'background' | 'imageEdit' | 'relayout' | 'multimodalLayout' | 'cutout'
 type PosterGenerationMode = 'fast' | 'quality'
 type PosterScene = 'commerce' | 'recruitment' | 'event' | 'course' | 'festival' | 'food' | 'fitness' | 'social'
@@ -173,6 +212,21 @@ type PosterQualityReport = {
   issues: PosterQualityIssue[]
   failureTags?: string[]
 }
+type PosterFinalCompositionBreakdown = {
+  heroFit: number
+  readability: number
+  copyStrength: number
+  hierarchy: number
+  whitespace: number
+  ctaVisibility: number
+  conflictPenalty: number
+  finishLevel: number
+}
+type PosterFinalCompositionReport = {
+  totalScore: number
+  breakdown: PosterFinalCompositionBreakdown
+  suggestions: string[]
+}
 type PosterAbsoluteLayoutLayer = {
   role:
     | 'title'
@@ -219,6 +273,11 @@ type PosterGenerateResult = CopyResult & {
   palette: PosterPalette
   background: PosterImageResult
   hero: PosterImageResult
+  heroCandidates?: PosterHeroCandidate[]
+  recommendedHeroCandidateIndex?: number
+  heroSelectionMode?: 'auto' | 'manual'
+  heroSelectionMeta?: PosterHeroSelectionMeta
+  referenceImageUsed?: boolean
   recommendedTemplate: any
   recommendedTemplates?: any[]
   templateCandidates?: any[]
@@ -226,6 +285,7 @@ type PosterGenerateResult = CopyResult & {
     industry: string
     tone: string
     layoutFamily: string
+    layoutStrategy?: string
     density: 'light' | 'balanced' | 'dense'
     heroStrategy: 'product' | 'person' | 'scene' | 'editorial'
     ctaStrength: 'soft' | 'balanced' | 'strong'
@@ -235,6 +295,10 @@ type PosterGenerateResult = CopyResult & {
     backgroundTone?: 'light' | 'dark' | 'mixed'
     contentPattern?: PosterContentPattern
     emphasisOrder?: PosterEmphasisRole[]
+    contentPriority?: PosterEmphasisRole[]
+    maxVisibleProofPoints?: number
+    titleSafeZonePolicy?: 'strict-avoid-subject' | 'prefer-clean-area' | 'allow-overlay'
+    ctaPlacementPolicy?: 'bottom-safe' | 'follow-price' | 'float-near-copy'
     templateCandidates: any[]
     absoluteLayout?: PosterAbsoluteLayout
   }
@@ -243,6 +307,7 @@ type PosterGenerateResult = CopyResult & {
   multimodalLayoutHints?: PosterMultimodalLayoutHints
   qualityHints?: string[]
   qualityReport?: PosterQualityReport
+  finalCompositionReport?: PosterFinalCompositionReport
   size: SizePreset
   providerMeta: Record<string, AiProviderMeta>
 }
@@ -377,6 +442,9 @@ function getStageRetryTimes(stage: 'copy' | 'palette' | 'relayout', generationMo
   if (generationMode === 'fast') return Math.max(getRefineChatRetryTimes(), getDraftStageChatRetryTimes(stage, generationMode))
   return getRefineChatRetryTimes()
 }
+function getFastCopyBackupTimeoutMs() {
+  return getEnvNumber('AI_POSTER_FAST_COPY_BACKUP_TIMEOUT_MS', 45000)
+}
 function getMultimodalLayoutTimeoutMs(generationMode: PosterGenerationMode) {
   return generationMode === 'fast'
     ? getEnvNumber('AI_FAST_MULTIMODAL_LAYOUT_TIMEOUT_MS', 26000)
@@ -491,6 +559,7 @@ function normalizeInput(body: any): PosterGenerateInput {
     baseImageUrl: String(body.baseImageUrl || '').trim(),
     generateHeroImage: normalizeGenerateHeroImage(body.generateHeroImage),
     generateBackgroundImage: normalizeGenerateHeroImage(body.generateBackgroundImage),
+    selectedHeroCandidateIndex: Number.isFinite(Number(body.selectedHeroCandidateIndex)) ? Math.max(0, Math.floor(Number(body.selectedHeroCandidateIndex))) : undefined,
   }
 }
 function pickThemeCore(theme: string, industry: string) {
@@ -531,6 +600,32 @@ function softClipPosterText(value: string, max: number) {
 }
 function clipPosterText(value: string, max = 18) {
   return softClipPosterText(String(value || ''), max)
+}
+function getHeroCandidateCount(generationMode: PosterGenerationMode) {
+  return generationMode === 'fast'
+    ? Math.max(1, getEnvNumber('AI_FAST_HERO_CANDIDATE_COUNT', 3))
+    : Math.max(1, getEnvNumber('AI_QUALITY_HERO_CANDIDATE_COUNT', 4))
+}
+function getHeroScoreThreshold() {
+  return Math.max(0, Math.min(100, getEnvNumber('AI_HERO_SCORE_THRESHOLD', 80)))
+}
+function getHeroScoringProvider() {
+  return String(getEnv('AI_HERO_SCORING_PROVIDER', 'multimodal-layout')).trim() || 'multimodal-layout'
+}
+function shouldEnableReferenceFirst() {
+  const raw = String(getEnv('AI_HERO_ENABLE_REFERENCE_FIRST', '1')).trim().toLowerCase()
+  return !['0', 'false', 'off', 'no'].includes(raw)
+}
+function shouldPreserveReferenceIdentity() {
+  const raw = String(getEnv('AI_HERO_EDIT_PRESERVE_IDENTITY', '1')).trim().toLowerCase()
+  return !['0', 'false', 'off', 'no'].includes(raw)
+}
+function shouldEnableHeroRepair() {
+  const raw = String(getEnv('AI_HERO_REPAIR_ENABLED', '1')).trim().toLowerCase()
+  return !['0', 'false', 'off', 'no'].includes(raw)
+}
+function shouldUseReferenceFirstForHero(input: PosterGenerateInput) {
+  return shouldEnableReferenceFirst() && Boolean(String(input.sourceImageUrl || '').trim())
 }
 const POSTER_BODY_SEGMENT_LIMIT = 5
 function extractFactValueFromSegments(segments: string[], keys: string[]) {
@@ -616,9 +711,18 @@ function buildRecruitmentBenefitLine(input: PosterGenerateInput, facts: ReturnTy
     input.content,
     facts.price,
   ], 6)
+  const joined = `${input.theme || ''} ${input.content || ''} ${segments.join(' ')}`
   const picked = segments.find((item) => /五险一金|双休|包吃住|带薪|晋升|培训|排班|弹性|补贴|社保|年假|住宿|餐补|交通补|零经验|应届|带教/.test(item))
+  const tokens = [
+    /五险|社保|公积金/.test(joined) ? '五险保障' : '',
+    /双休|排班|弹性|时段/.test(joined) ? '排班灵活' : '',
+    /培训|带教|师徒|上手/.test(joined) ? '带教上手' : '',
+    /晋升|成长|通道/.test(joined) ? '晋升可见' : '',
+    /餐补|补贴|住宿|包吃住/.test(joined) ? '补贴到位' : '',
+    /应届|零经验/.test(joined) ? '新人友好' : '',
+  ].filter(Boolean)
+  if (tokens.length) return buildPosterShortCombo(tokens, 18, '')
   if (picked || facts.benefit) return compactDeckLine(picked || facts.benefit || '', 18, '')
-  const joined = `${input.theme || ''} ${input.content || ''}`
   const placeholders = [
     /兼职|小时工/.test(joined) ? '排班灵活 / 时段可协商' : '',
     /咖啡|轻食|餐饮|门店/.test(joined) ? '带教培训 / 晋升通道' : '',
@@ -676,45 +780,74 @@ function buildRecruitmentAudienceHint(input: PosterGenerateInput, facts: ReturnT
   return compactDeckLine(stripThemeEcho(facts.audience || '', input.theme), 18, '')
 }
 function buildRecruitmentRoleHint(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
-  const picked = normalizeCopySegments([
+  const segments = normalizeCopySegments([
     copy.actionReason,
     facts.benefit,
     ...normalizeCopySegments(copy.proofPoints?.length ? copy.proofPoints : copy.body, 6),
     input.content,
-  ], 6).find((item) => /培训|带教|晋升|成长|上手|通道|师徒|新人/.test(item))
+  ], 6)
+  const joined = `${input.theme || ''} ${input.content || ''} ${segments.join(' ')}`
+  const tokens = [
+    /培训|带教|师徒/.test(joined) ? '带教上手' : '',
+    /晋升|成长|通道/.test(joined) ? '晋升通道' : '',
+    /门店|咖啡|餐饮/.test(joined) ? '实战岗位' : '',
+    /新人|零经验|应届/.test(joined) ? '新人友好' : '',
+  ].filter(Boolean)
+  if (tokens.length) return buildPosterTagCombo(tokens, '带教上手/晋升通道')
+  const picked = segments.find((item) => /培训|带教|晋升|成长|上手|通道|师徒|新人/.test(item))
   return compactDeckLine(picked || '系统培训 / 上手更快', 12, '系统培训 / 上手更快')
 }
 function buildRecruitmentSalaryHint(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
-  const picked = normalizeCopySegments([
+  const segments = normalizeCopySegments([
     facts.benefit,
     copy.actionReason,
     ...normalizeCopySegments(copy.proofPoints?.length ? copy.proofPoints : copy.body, 6),
     input.content,
-  ], 6).find((item) => /排班|双休|灵活|补贴|提成上不封顶|奖金|社保|五险/.test(item))
+  ], 6)
+  const joined = `${input.theme || ''} ${input.content || ''} ${segments.join(' ')}`
+  const tokens = [
+    /提成|奖金|激励/.test(joined) ? '提成清晰' : '',
+    /五险|社保|公积金/.test(joined) ? '五险保障' : '',
+    /双休|排班|灵活|时段/.test(joined) ? '排班灵活' : '',
+    /补贴|餐补|住宿/.test(joined) ? '补贴到位' : '',
+    /兼职|小时工/.test(joined) ? '时段可选' : '',
+  ].filter(Boolean)
+  if (tokens.length) return buildPosterTagCombo(tokens, '排班灵活/激励清晰')
+  const picked = segments.find((item) => /排班|双休|灵活|补贴|提成上不封顶|奖金|社保|五险/.test(item))
   return compactDeckLine(picked || '排班灵活 / 激励清晰', 12, '排班灵活 / 激励清晰')
 }
 function buildRecruitmentBenefitHint(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
   const audience = buildRecruitmentAudienceHint(input, facts)
-  if (audience) return compactDeckLine(audience, 12, '')
-  const picked = normalizeCopySegments([
+  if (audience) return buildPosterTagCombo([audience], '')
+  const segments = normalizeCopySegments([
     facts.price,
     copy.offerLine,
     copy.urgencyLine,
     input.content,
-  ], 5).find((item) => /应届|零经验|门店经验|兼职|全职/.test(item))
+  ], 5)
+  const joined = `${input.theme || ''} ${input.content || ''} ${segments.join(' ')}`
+  const tokens = [
+    /应届/.test(joined) ? '应届可投' : '',
+    /零经验|无经验|小白/.test(joined) ? '零经验可投' : '',
+    /兼职/.test(joined) ? '兼职可投' : '',
+    /全职/.test(joined) ? '全职优先' : '',
+    /门店经验|有经验|熟手/.test(joined) ? '经验优先' : '',
+  ].filter(Boolean)
+  if (tokens.length) return buildPosterTagCombo(tokens, '应届可投/经验优先')
+  const picked = segments.find((item) => /应届|零经验|门店经验|兼职|全职/.test(item))
   return compactDeckLine(picked || '应届可投 / 经验优先', 12, '应届可投 / 经验优先')
 }
 function buildRecruitmentOfferLine(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
   const compLine = buildRecruitmentCompLine(input, facts, copy)
   const benefitLine = buildRecruitmentBenefitLine(input, facts, copy)
+  const audienceLine = buildRecruitmentAudienceHint(input, facts)
   const joined = `${input.content || ''} ${copy.body || ''} ${copy.proofPoints?.join(' ') || ''}`
   const salaryShort = /底薪/.test(joined) || /提成/.test(joined) ? '底薪+提成' : (hasExplicitRecruitmentSalarySignal(compLine) ? compLine : '薪酬激励清晰')
   const benefitShort = /五险/.test(joined) || /社保/.test(joined) ? '五险保障' : (/培训|带教/.test(joined) ? '培训清晰' : '成长通道明确')
   const flexShort = /排班|弹性/.test(joined) ? '排班灵活' : (/晋升/.test(joined) ? '晋升可见' : '')
-  const unique = [salaryShort, benefitShort, flexShort || compactDeckLine(benefitLine, 8, '')]
+  const unique = [salaryShort, benefitShort, flexShort || compactDeckLine(benefitLine, 8, ''), compactDeckLine(audienceLine, 8, '')]
     .filter(Boolean)
-    .filter((item, index, arr) => arr.findIndex((current) => canonicalCopyText(String(current || '')) === canonicalCopyText(String(item || ''))) === index)
-  return compactDeckLine(unique.join('｜'), 22, '薪酬激励清晰｜培训清晰｜排班灵活')
+  return buildPosterShortCombo(unique, 22, '薪酬激励清晰/培训清晰/排班灵活')
 }
 function hasRecruitmentCompSignal(value: unknown) {
   return /薪资|底薪|高薪|面议|提成|奖金|补贴|社保|五险|公积金|餐补|住宿|年假|双休|排班|培训|晋升/.test(String(value || ''))
@@ -746,6 +879,16 @@ function buildRecruitmentCompLine(input: PosterGenerateInput, facts: ReturnType<
 }
 function buildCourseAudienceHint(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts']) {
   const joined = `${input.content || ''} ${input.theme || ''}`
+  const tags = [
+    /零基础/.test(joined) ? '零基础入门' : '',
+    /运营/.test(joined) ? '运营进阶' : '',
+    /设计/.test(joined) ? '设计提升' : '',
+    /转行/.test(joined) ? '转行友好' : '',
+    /副业/.test(joined) ? '副业起步' : '',
+    /创作者|博主|内容/.test(joined) ? '创作提效' : '',
+    /新手/.test(joined) ? '新手友好' : '',
+  ].filter(Boolean)
+  if (tags.length) return buildPosterShortCombo(tags, 18, '')
   const matched = joined.match(/设计师[^，。,；;|｜/]{0,10}|运营转型人群[^，。,；;|｜/]{0,6}|零基础[^，。,；;|｜/\s]{0,8}|副业人群[^，。,；;|｜/\s]{0,8}|新手[^，。,；;|｜/\s]{0,8}|转行[^，。,；;|｜/\s]{0,8}|运营[^，。,；;|｜/\s]{0,8}/)
   return compactDeckLine(stripThemeEcho(matched?.[0] || facts.audience || '', input.theme), 18, '')
 }
@@ -753,13 +896,15 @@ function buildCourseOutcomeLine(input: PosterGenerateInput, facts: ReturnType<ty
   const joined = `${input.content || ''} ${copy.slogan || ''} ${copy.body || ''}`
   const tokens = [
     /海报策划/.test(joined) ? '海报策划' : '',
-    /排版/.test(joined) ? '排版提升' : '',
+    /排版/.test(joined) ? '版式提升' : '',
     /高转化文案|转化文案/.test(joined) ? '转化文案' : '',
-    /作业点评|1对1优化|导师/.test(joined) ? '作业点评' : '',
-    /案例/.test(joined) ? '案例实战' : '',
-    /提示词/.test(joined) ? '提示词应用' : '',
+    /作业点评|1对1优化|导师/.test(joined) ? '点评精修' : '',
+    /案例/.test(joined) ? '案例拆解' : '',
+    /提示词/.test(joined) ? '提示词实战' : '',
+    /直播/.test(joined) ? '直播带学' : '',
+    /陪跑/.test(joined) ? '陪跑提效' : '',
   ].filter(Boolean)
-  if (tokens.length >= 2) return compactDeckLine(tokens.slice(0, 3).join(' / '), 18, '')
+  if (tokens.length >= 2) return buildPosterShortCombo(tokens.slice(0, 4), 18, '')
   const segments = normalizeCopySegments([
     facts.benefit,
     copy.offerLine,
@@ -772,10 +917,11 @@ function buildCourseOutcomeLine(input: PosterGenerateInput, facts: ReturnType<ty
 }
 function buildCourseSignupLine(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
   const joined = `${copy.urgencyLine || ''} ${copy.offerLine || ''} ${input.content || ''}`
-  if (/早鸟/.test(joined)) return compactDeckLine('早鸟报名中', 18, '早鸟报名中')
-  if (/试听/.test(joined)) return compactDeckLine('试听预约中', 18, '试听预约中')
+  if (/早鸟/.test(joined)) return buildPosterShortCombo(['早鸟通道', '限时报名'], 18, '早鸟通道/限时报名')
+  if (/试听/.test(joined)) return buildPosterShortCombo(['试听预约', '席位开放'], 18, '试听预约/席位开放')
   const matched = joined.match(/早鸟[^，。,；;|｜/]{0,10}|限时报名[^，。,；;|｜/]{0,10}|立即报名[^，。,；;|｜/]{0,10}|抢占名额[^，。,；;|｜/]{0,10}|名额有限[^，。,；;|｜/]{0,10}/)
-  return compactDeckLine(matched?.[0] || facts.time || copy.urgencyLine || '早鸟报名通道开启', 18, '早鸟报名通道开启')
+  if (matched?.[0]) return compactDeckLine(matched[0], 18, '')
+  return buildPosterShortCombo([facts.time, copy.urgencyLine, '报名通道开启'], 18, '报名通道开启/尽早锁位')
 }
 function buildFitnessSignupValue(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
   const joined = `${copy.urgencyLine || ''} ${copy.offerLine || ''} ${input.content || ''}`
@@ -1463,9 +1609,9 @@ function buildSceneFactCardSeeds(intent: PosterIntent, facts: ReturnType<typeof 
   if (intent.scene === 'festival') {
     const benefitValue = facts.benefit || proof[2] || copy.urgencyLine || '节日限定 / 心意加赠'
     return [
-      { label: '礼遇', value: facts.price || copy.offerLine || proof[0] || '', hint: compactDeckLine('节日限定 / 送礼有理', 12, '') },
-      { label: '场景', value: buildFestivalSceneValue(input, facts, copy) || facts.audience || proof[1] || '', hint: compactDeckLine('团圆分享 / 心意到位', 12, '') },
-      { label: '加码', value: benefitValue, hint: compactDeckLine(copy.cta || '立即下单', 12, '立即下单') },
+      { label: '礼遇', value: facts.price || copy.offerLine || proof[0] || '', hint: buildPosterTagCombo(['节日限定', '送礼有理'], '节日限定/送礼有理') },
+      { label: '场景', value: buildFestivalSceneValue(input, facts, copy) || facts.audience || proof[1] || '', hint: buildPosterTagCombo(['团圆分享', '心意到位'], '团圆分享/心意到位') },
+      { label: '加码', value: benefitValue, hint: buildPosterTagCombo([copy.cta || '立即下单', '限量加赠'], '立即下单/限量加赠') },
     ]
   }
   return [
@@ -1481,13 +1627,19 @@ function normalizeSceneFactCards(input: PosterGenerateInput, intent: PosterInten
     const seed = seeds[index] || seeds[0]
     const currentLabel = String(item?.label || '').trim()
     const purpose = String(input.purpose || '')
+    const isFestivalScene = intent.scene === 'festival'
     const useSeedLabel = intent.scene === 'recruitment'
+      || isFestivalScene
       || (intent.scene === 'food' && /风味|适合|到店|主推/.test(currentLabel))
       || !currentLabel
       || (intent.scene === 'commerce' && /品牌宣传/.test(purpose))
-      || ((intent.scene === 'event' || intent.scene === 'festival') && /时间|地点|亮点|主推|适合/.test(currentLabel))
+      || (intent.scene === 'event' && /时间|地点|亮点|主推|适合/.test(currentLabel))
       || ((intent.scene === 'course' || intent.scene === 'fitness') && /时间|地点|亮点|主推|到店|适合/.test(currentLabel))
-    const nextValue = useSeedLabel || looksLikeWeakFactValue(item?.value || '') ? (seed?.value || '') : item?.value
+    const nextValue = useSeedLabel
+      || looksLikeWeakFactValue(item?.value || '')
+      || (isFestivalScene && (String(item?.value || '').length > 14 || /[，。,；;]/.test(String(item?.value || ''))))
+      ? (seed?.value || '')
+      : item?.value
     const nextHint = intent.scene === 'recruitment'
       ? (seed?.hint || item?.hint || '')
       : (useSeedLabel ? (seed?.hint || '') : (item?.hint || seed?.hint || ''))
@@ -1685,6 +1837,13 @@ function buildPosterShortCombo(values: Array<unknown>, max = 26, fallback = '') 
   const unique = items.filter((item, index) => items.findIndex((cur) => canonicalCopyText(cur) === canonicalCopyText(item)) === index)
   return compactDeckLine(unique.slice(0, 3).join('/'), max, fallback)
 }
+function pickPosterPrimaryToken(value: unknown, fallback = '') {
+  const parts = String(value || '')
+    .split(/[\/｜|]/)
+    .map((item) => clipPosterText(item.trim(), 10))
+    .filter(Boolean)
+  return compactDeckLine(parts[0] || fallback, 10, fallback)
+}
 function buildPosterTagCombo(values: Array<unknown>, fallback = '') {
   return buildPosterShortCombo(values, 12, fallback)
 }
@@ -1810,7 +1969,15 @@ function buildEventHighlightValue(input: PosterGenerateInput, facts: ReturnType<
   return compactDeckLine(copy.offerLine || facts.benefit || '现场亮点', 14, '现场亮点')
 }
 function buildFestivalSceneValue(input: PosterGenerateInput, facts: ReturnType<typeof collectPosterFacts>['facts'], copy: CopyResult) {
-  const joined = `${input.content || ''} ${copy.slogan || ''}`
+  const joined = `${input.content || ''} ${copy.slogan || ''} ${input.theme || ''}`
+  const tokens = [
+    /送礼|礼赠/.test(joined) ? '送礼分享' : '',
+    /团圆|家宴/.test(joined) ? '团圆心意' : '',
+    /限定礼盒|礼盒/.test(joined) ? '限定礼盒' : '',
+    /企业团购|团购/.test(joined) ? '团购送礼' : '',
+    /中秋|春节|端午|节日/.test(joined) ? '节庆场景' : '',
+  ].filter(Boolean)
+  if (tokens.length) return buildPosterShortCombo(tokens, 14, '送礼分享/团圆心意')
   const matched = joined.match(/送礼场景|节日心意|限定礼盒|团圆分享|节日氛围|限定上新/)
   if (matched?.[0] === '限定礼盒') return compactDeckLine('送礼分享 / 团圆心意', 14, '送礼分享 / 团圆心意')
   return compactDeckLine(matched?.[0] || facts.audience || '送礼场景 / 节日心意', 14, '送礼场景 / 节日心意')
@@ -1827,9 +1994,9 @@ function buildFitnessOutcomeValue(input: PosterGenerateInput, facts: ReturnType<
 }
 function buildCourseCardHint(input: PosterGenerateInput, slot: 'audience' | 'outcome' | 'signup') {
   const purpose = String(input.purpose || '')
-  if (slot === 'audience') return compactDeckLine(/品牌宣传/.test(purpose) ? '适合系统进阶' : '适合立即入门', 12, '')
-  if (slot === 'outcome') return compactDeckLine(/课程推广|报名/.test(purpose) ? '结果导向 / 可落地' : '模块清晰 / 可实践', 12, '')
-  return compactDeckLine(/报名/.test(purpose) ? '立即锁定席位' : '咨询后可报名', 12, '')
+  if (slot === 'audience') return buildPosterTagCombo([/品牌宣传/.test(purpose) ? '系统进阶' : '快速入门', '适合新手'], '快速入门/适合新手')
+  if (slot === 'outcome') return buildPosterTagCombo([/课程推广|报名/.test(purpose) ? '结果导向' : '模块清晰', '可直接套用'], '结果导向/可直接套用')
+  return buildPosterTagCombo([/报名/.test(purpose) ? '立即锁位' : '咨询报名', '席位有限'], '立即锁位/席位有限')
 }
 function buildCommerceLikeBadge(
   intent: PosterIntent,
@@ -1866,6 +2033,7 @@ function shouldUseRefinedSupportLine(supportLine: string, heroHeadline: string) 
   const raw = String(supportLine || '').trim()
   if (!raw || isWeakCopy(raw)) return true
   if (canonicalCopyText(raw) === canonicalCopyText(heroHeadline)) return true
+  if (raw.length > 24) return true
   if (/把.+一次|主卖点|优惠力度|下单理由|关键信息已整理/.test(raw)) return true
   if (/^(人才|人群|适合谁|限时|报名)$/u.test(raw)) return true
   if (/｜(?:限时|报名|优惠|同|人|群)$/u.test(raw)) return true
@@ -1972,7 +2140,7 @@ function buildPosterCopyDeck(input: PosterGenerateInput, copy: CopyResult, inten
     suggestion?.ctaAlternatives?.length ? suggestion.ctaAlternatives : copy.ctaAlternatives?.length ? copy.ctaAlternatives : copy.cta ? [copy.cta] : [],
     4,
   )
-  const sceneSupportFallback = buildSceneRefinedSupport(input, intent, facts, {
+  const prefilledDeck = {
     heroHeadline: '',
     supportLine: '',
     offerLine,
@@ -1986,6 +2154,9 @@ function buildPosterCopyDeck(input: PosterGenerateInput, copy: CopyResult, inten
     priceBlock: null,
     audienceLine: '',
     trustLine: '',
+  }
+  const sceneSupportFallback = buildSceneRefinedSupport(input, intent, facts, {
+    ...prefilledDeck,
   })
   const factSupportFallback = buildFactDrivenSupportLine(input, intent, facts, copy, offerLine, proofPoints)
   const supportFallback = intent.scene === 'recruitment'
@@ -2001,12 +2172,25 @@ function buildPosterCopyDeck(input: PosterGenerateInput, copy: CopyResult, inten
   }, intent)
   const rawHeadline = suggestion?.heroHeadline || copy.title
   const headline = normalizePosterHeadline(rawHeadline, buildThemeFactHeadline(input, facts))
+  const titleCandidates = generateTitleCandidatesByStrategy({
+    ...prefilledDeck,
+    heroHeadline: headline,
+    priceBlock,
+  }, {
+    industry: input.industry,
+    theme: input.theme,
+    purpose: input.purpose,
+  })
+  const bestTitleCandidate = pickBestTitleCandidate(titleCandidates)
   const heroHeadline = shouldUseRefinedHeadline(headline, intent) || looksLikeClippedPosterLine(rawHeadline, headline, 18)
     ? buildThemeFactHeadline(input, facts)
-    : headline
+    : (bestTitleCandidate?.text || headline)
   const rawSupportLine = suggestion?.supportLine || copy.slogan
   const supportLine = compactDeckLine(rawSupportLine, 26, supportFallback)
-  const finalSupportLine = shouldUseRefinedSupportLine(supportLine, heroHeadline) || looksLikeClippedPosterLine(rawSupportLine, supportLine, 26)
+  const forceSceneSupport = (intent.scene === 'festival' && !/[\/｜|·]/.test(supportLine))
+    || (intent.scene === 'recruitment' && /[\/｜|]/.test(supportLine) && supportLine.split(/[\/｜|]/).length > 3)
+    || (intent.scene === 'course' && /[\/｜|]/.test(supportLine) && supportLine.split(/[\/｜|]/).length > 3)
+  const finalSupportLine = forceSceneSupport || shouldUseRefinedSupportLine(supportLine, heroHeadline) || looksLikeClippedPosterLine(rawSupportLine, supportLine, 26)
     ? supportFallback
     : supportLine
   const derivedAudienceLine = pickFactCardValueByLabel(normalizedFactCards, /适合|对象|人群|岗位|课程对象|适合谁/)
@@ -2023,6 +2207,7 @@ function buildPosterCopyDeck(input: PosterGenerateInput, copy: CopyResult, inten
     urgencyLine,
     proofPoints,
   }, normalizedFactCards)
+  const rankedProofPoints = rankProofPointsByBusinessValue(proofPoints, { industry: input.industry })
   return {
     heroHeadline,
     supportLine: finalSupportLine,
@@ -2036,7 +2221,7 @@ function buildPosterCopyDeck(input: PosterGenerateInput, copy: CopyResult, inten
     cta: pickPrimaryCta(compactDeckLine(suggestion?.cta || copy.cta, 8, buildCta(input.purpose || '')), ctaAlternatives),
     ctaAlternatives,
     badge: compactDeckLine(suggestion?.badge || buildCommerceLikeBadge(intent, facts, offerLine, urgencyLine, copy), 8, ''),
-    proofPoints,
+    proofPoints: rankedProofPoints,
     factCards: normalizedFactCards,
     priceBlock,
     audienceLine: compactDeckLine(
@@ -2076,7 +2261,11 @@ function applyCopyDeckToCopy(copy: CopyResult, copyDeck: PosterCopyDeck, intent:
 function buildPosterProtocol(input: PosterGenerateInput, copy: CopyResult, suggestion?: PosterProtocolSuggestion) {
   const normalized = enrichPosterCopy(input, copy)
   const intent = buildPosterIntentFromSuggestion(input, normalized, suggestion?.posterIntent)
-  const copyDeck = buildPosterCopyDeck(input, normalized, intent, suggestion?.copyDeck)
+  const copyDeck = sanitizePosterCopyDeck(buildPosterCopyDeck(input, normalized, intent, suggestion?.copyDeck), {
+    industry: input.industry,
+    theme: input.theme,
+    purpose: input.purpose,
+  }) as PosterCopyDeck
   return {
     posterIntent: intent,
     copyDeck,
@@ -2098,6 +2287,9 @@ function buildPosterQualityHints(plan: NonNullable<PosterGenerateResult['designP
   if (plan.contentPattern === 'list-info') hints.add('已启用清单式信息排版')
   if (plan.contentPattern === 'price-first') hints.add('已优先突出转化利益点')
   if (plan.contentPattern === 'immersive-hero') hints.add('已启用主视觉沉浸式排版')
+  if (plan.titleSafeZonePolicy === 'strict-avoid-subject') hints.add('标题区优先避让主体')
+  if (plan.ctaPlacementPolicy === 'bottom-safe') hints.add('CTA 优先落在底部安全区')
+  if (plan.maxVisibleProofPoints === 2) hints.add('已收紧卖点展示数量以保留白')
   return Array.from(hints)
 }
 function normalizeQualityText(value: string) {
@@ -2125,13 +2317,24 @@ function evaluatePosterQuality(plan: NonNullable<PosterGenerateResult['designPla
   if (isHeadlineDuplicate(copyDeck.heroHeadline, copyDeck.supportLine)) {
     issues.push({ code: 'headline_duplicate', message: '标题与副标题表达过近，第一屏层级不够分工。', level: 'error' })
   }
+  if (String(copyDeck.heroHeadline || '').trim().length > 12) {
+    issues.push({ code: 'headline_too_long', message: '主标题超过 12 字，首屏冲击力会下降。', level: 'warn' })
+  }
+  if (String(copyDeck.supportLine || '').trim().length > 18) {
+    issues.push({ code: 'support_too_long', message: '副标题超过 18 字，排版余量不足。', level: 'warn' })
+  }
   if (isWeakQualityText(copyDeck.cta, 2)) issues.push({ code: 'cta_missing', message: 'CTA 过弱或缺失，转化动作不明确。', level: 'error' })
+  if (String(copyDeck.cta || '').trim().length > 6) issues.push({ code: 'cta_too_long', message: 'CTA 超过 6 字，按钮不够利落。', level: 'warn' })
   if (!copyDeck.factCards.length && !copyDeck.proofPoints.length) issues.push({ code: 'detail_missing', message: '缺少卖点条或信息卡，商业完成度不足。', level: 'error' })
+  if (copyDeck.proofPoints.length > 3) issues.push({ code: 'proof_too_many', message: '卖点条超过 3 条，信息密度偏满。', level: 'warn' })
   if (!copyDeck.urgencyLine && !copyDeck.priceBlock && !copyDeck.actionReason) issues.push({ code: 'conversion_missing', message: '缺少价格、稀缺或行动理由，转化信息偏弱。', level: 'warn' })
   if (copyDeck.proofPoints.length > 0) {
     const uniqueProofs = new Set(copyDeck.proofPoints.map((item) => normalizeQualityText(item)).filter(Boolean))
     if (uniqueProofs.size <= 1 && copyDeck.proofPoints.length > 1) {
       issues.push({ code: 'proof_duplicate', message: '卖点信息重复度过高，容易显得模板化。', level: 'warn' })
+    }
+    if (copyDeck.proofPoints.some((item) => String(item || '').trim().length > 14)) {
+      issues.push({ code: 'proof_too_long', message: '存在超过 14 字的卖点，信息块会显得拖沓。', level: 'warn' })
     }
   }
   if (plan.contentPattern === 'price-first' && !copyDeck.priceBlock) {
@@ -2142,6 +2345,12 @@ function evaluatePosterQuality(plan: NonNullable<PosterGenerateResult['designPla
   }
   if (plan.contentPattern === 'immersive-hero' && !copyDeck.offerLine && !copyDeck.urgencyLine) {
     issues.push({ code: 'hero_info_thin', message: '主视觉气氛足够，但利益点或稀缺提醒偏弱。', level: 'warn' })
+  }
+  if (plan.textStrategy === 'clean' && copyDeck.proofPoints.length >= 3 && plan.density === 'dense') {
+    issues.push({ code: 'whitespace_thin', message: '当前留白预算偏紧，建议降低文字密度或重排。', level: 'warn' })
+  }
+  if (plan.ctaStyle?.emphasis === 'soft' && !copyDeck.priceBlock && !copyDeck.urgencyLine) {
+    issues.push({ code: 'cta_emphasis_low', message: 'CTA 视觉力度偏弱，转化焦点不够集中。', level: 'warn' })
   }
   if (plan.layoutFamily === 'premium-offer' && !copyDeck.priceBlock) {
     issues.push({ code: 'premium_offer_without_price', message: '优惠型骨架缺少价格块，成片感会明显下降。', level: 'error' })
@@ -2168,6 +2377,298 @@ function evaluatePosterQuality(plan: NonNullable<PosterGenerateResult['designPla
     needsRefine: score < 85,
     issues,
     failureTags,
+  }
+}
+function clampUnitScore(value: number, min = 0, max = 100) {
+  if (!Number.isFinite(value)) return min
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+function evaluateBackgroundReadabilityGovernance(
+  plan: NonNullable<PosterGenerateResult['designPlan']>,
+  hints: PosterMultimodalLayoutHints | undefined,
+  copyDeck: PosterCopyDeck,
+) {
+  const texture = String(hints?.visualAnalysis?.texture || 'clean')
+  const dominantTone = String(hints?.visualAnalysis?.dominantTone || 'mixed')
+  const needsPanel = Boolean(hints?.visualAnalysis?.needsPanel)
+  const safeZones = (hints?.safeZones || []).filter((item) => item.kind === 'safe')
+  const avoidZones = hints?.avoidZones || []
+  const titleHint = (hints?.suggestedPlacement || []).find((item) => item.role === 'heroHeadline')
+  const ctaHint = (hints?.suggestedPlacement || []).find((item) => item.role === 'cta')
+  const actions: Array<'overlay' | 'darken' | 'purify' | 'switch-hero'> = []
+  let titleReadabilityScore = 88
+  let ctaContrastScore = 88
+  let conflictPenalty = 8
+  if (texture === 'detailed') {
+    titleReadabilityScore -= 18
+    ctaContrastScore -= 10
+    conflictPenalty += 12
+    actions.push('purify')
+  }
+  if (needsPanel) {
+    titleReadabilityScore -= 10
+    conflictPenalty += 10
+    actions.push('overlay')
+  }
+  if (dominantTone === 'mixed' && plan.textStrategy === 'clean') {
+    titleReadabilityScore -= 8
+    actions.push('darken')
+  }
+  if (!safeZones.length && (titleHint || ctaHint)) {
+    titleReadabilityScore -= 12
+    ctaContrastScore -= 8
+    conflictPenalty += 8
+  }
+  if (avoidZones.length >= 2 && copyDeck.heroHeadline) {
+    titleReadabilityScore -= 8
+    conflictPenalty += 6
+  }
+  if (plan.titleSafeZonePolicy === 'strict-avoid-subject' && !safeZones.length) {
+    titleReadabilityScore -= 10
+    conflictPenalty += 8
+    actions.push('switch-hero')
+  }
+  if (plan.ctaPlacementPolicy === 'bottom-safe' && !ctaHint) {
+    ctaContrastScore -= 10
+    conflictPenalty += 6
+    actions.push('overlay')
+  }
+  return {
+    titleReadabilityScore: clampUnitScore(titleReadabilityScore),
+    ctaContrastScore: clampUnitScore(ctaContrastScore),
+    conflictPenalty: clampUnitScore(conflictPenalty),
+    actions: Array.from(new Set(actions)),
+  }
+}
+function buildCompositionSuggestions(
+  qualityReport: PosterQualityReport,
+  readability: ReturnType<typeof evaluateBackgroundReadabilityGovernance>,
+  heroFit: number,
+  copyStrength: number,
+) {
+  const suggestions = new Set<string>()
+  qualityReport.issues.forEach((issue) => {
+    if (issue.code === 'headline_duplicate') suggestions.add('标题与副标题需要分工，避免重复表达。')
+    if (issue.code === 'proof_too_many') suggestions.add('卖点控制在 3 条内，先保留最强利益点。')
+    if (issue.code === 'cta_too_long') suggestions.add('CTA 优先使用行业短句，保证按钮利落。')
+    if (issue.code === 'whitespace_thin') suggestions.add('当前文字密度偏高，优先压缩次要信息或切换信息型变体。')
+  })
+  readability.actions.forEach((action) => {
+    if (action === 'overlay') suggestions.add('标题区或 CTA 区建议加轻遮罩，优先保可读性。')
+    if (action === 'darken') suggestions.add('文字落区建议压暗背景，拉开对比。')
+    if (action === 'purify') suggestions.add('标题区纹理过强，建议做局部纯化或模糊处理。')
+    if (action === 'switch-hero') suggestions.add('当前主图安全区不足，建议换主图候选。')
+  })
+  if (heroFit < 72) suggestions.add('主图更适合换候选，不建议继续一味压文字。')
+  if (copyStrength < 75) suggestions.add('文案商业性偏弱，先收敛到一个核心卖点再排版。')
+  if (qualityReport.failureTags?.includes('detail_missing')) suggestions.add('补足 2 到 3 条高价值卖点，成片会更像真实商业海报。')
+  if (qualityReport.failureTags?.includes('headline_too_long') || qualityReport.failureTags?.includes('headline_duplicate')) {
+    suggestions.add('标题需要更短更狠，优先保利益点或动作词。')
+  }
+  return Array.from(suggestions)
+}
+
+function evaluateHeadlineCommercialSharpness(copyDeck: PosterCopyDeck, plan: NonNullable<PosterGenerateResult['designPlan']>) {
+  const headline = String(copyDeck.heroHeadline || '').trim()
+  const support = String(copyDeck.supportLine || '').trim()
+  const proofs = Array.isArray(copyDeck.proofPoints) ? copyDeck.proofPoints : []
+  const combined = `${headline} ${support} ${proofs.join(' ')}`
+  const concreteSignal = /低脂|高蛋白|现做|招牌|新品|第二件|半价|满减|到手|包邮|现货|双休|提成|晋升|社保|试听|陪跑|实战|名额|限量|限时|投递|报名|到店|尝鲜/.test(combined)
+  const actionSignal = /抢|买|下单|领|报名|投递|到店|尝鲜|预约|咨询|开练|开课/.test(headline)
+  const sceneSignal = /新品|岗位|课程|活动|礼盒|套餐|门店|训练|直播|小班|爆款/.test(headline)
+  let score = 74
+  if (headline.length >= 4 && headline.length <= 10) score += 10
+  if (headline.length > 12) score -= Math.min(18, (headline.length - 12) * 4)
+  if (concreteSignal) score += 10
+  if (actionSignal) score += 6
+  if (sceneSignal) score += 5
+  if (isHeadlineDuplicate(headline, support)) score -= 18
+  if (/体验|品质|诚意|重磅|焕新|精彩|解锁|拥有|美好/.test(combined)) score -= 14
+  if (plan.contentPriority?.[0] === 'heroHeadline') score += 4
+  return clampUnitScore(score)
+}
+
+function evaluateDetailCompleteness(copyDeck: PosterCopyDeck, plan: NonNullable<PosterGenerateResult['designPlan']>) {
+  let score = 72
+  if (copyDeck.proofPoints.length >= 2) score += 10
+  if (copyDeck.proofPoints.length >= 3) score += 4
+  if (copyDeck.factCards.length >= 2) score += 8
+  if (copyDeck.priceBlock || copyDeck.urgencyLine) score += 8
+  if (copyDeck.actionReason || copyDeck.trustLine || copyDeck.audienceLine) score += 6
+  if (plan.maxVisibleProofPoints === 2 && copyDeck.proofPoints.length > 3) score -= 10
+  if (plan.density === 'dense' && copyDeck.factCards.length >= 4) score -= 8
+  return clampUnitScore(score)
+}
+
+function evaluateCompositionStability(
+  qualityReport: PosterQualityReport,
+  readability: ReturnType<typeof evaluateBackgroundReadabilityGovernance>,
+  options: { heroSelectionMeta?: PosterHeroSelectionMeta } = {},
+) {
+  let score = 82
+  if (qualityReport.issues.some((issue) => issue.level === 'error')) score -= 12
+  if ((qualityReport.failureTags?.length || 0) >= 3) score -= 10
+  if (readability.actions.includes('switch-hero')) score -= 12
+  if (readability.actions.includes('overlay')) score -= 5
+  if (readability.actions.includes('darken')) score -= 4
+  if (readability.actions.includes('purify')) score -= 4
+  if ((options.heroSelectionMeta?.lowConfidence)) score -= 8
+  const spread = Number(options.heroSelectionMeta?.spread || 0)
+  if (spread < 4 && Number(options.heroSelectionMeta?.topScore || 0) > 0) score -= 5
+  return clampUnitScore(score)
+}
+
+function getCompositionWeightProfile(plan: NonNullable<PosterGenerateResult['designPlan']>) {
+  const profile = {
+    heroFit: 0.12,
+    readability: 0.22,
+    copyStrength: 0.21,
+    hierarchy: 0.15,
+    whitespace: 0.08,
+    ctaVisibility: 0.08,
+    finishLevel: 0.14,
+    compositionStability: 0.12,
+    conflictPenalty: 0.12,
+    criticalPenalty: 0.1,
+  }
+  if (plan.contentPattern === 'price-first') {
+    profile.copyStrength += 0.02
+    profile.ctaVisibility += 0.03
+    profile.whitespace -= 0.01
+    profile.heroFit -= 0.02
+  }
+  if (plan.contentPattern === 'list-info') {
+    profile.readability += 0.02
+    profile.hierarchy += 0.02
+    profile.heroFit -= 0.02
+    profile.whitespace -= 0.01
+  }
+  if (plan.heroStrategy === 'person' || plan.heroStrategy === 'product') {
+    profile.heroFit += 0.02
+    profile.conflictPenalty += 0.02
+    profile.whitespace -= 0.01
+  }
+  if (plan.density === 'dense') {
+    profile.readability += 0.02
+    profile.compositionStability += 0.01
+    profile.whitespace += 0.01
+    profile.heroFit -= 0.01
+  }
+  if (plan.ctaStrength === 'strong') {
+    profile.ctaVisibility += 0.02
+    profile.copyStrength += 0.01
+    profile.finishLevel -= 0.01
+  }
+  return profile
+}
+
+function evaluatePosterFinalComposition(
+  plan: NonNullable<PosterGenerateResult['designPlan']>,
+  copyDeck: PosterCopyDeck,
+  hasHero: boolean,
+  qualityReport: PosterQualityReport,
+  options: {
+    multimodalHints?: PosterMultimodalLayoutHints
+    heroSelectionMeta?: PosterHeroSelectionMeta
+  } = {},
+): PosterFinalCompositionReport {
+  const heroTopScore = Number(options.heroSelectionMeta?.topScore || 0)
+  const readabilitySignals = evaluateBackgroundReadabilityGovernance(plan, options.multimodalHints, copyDeck)
+  const headlineSharpness = evaluateHeadlineCommercialSharpness(copyDeck, plan)
+  const detailCompleteness = evaluateDetailCompleteness(copyDeck, plan)
+  const compositionStability = evaluateCompositionStability(qualityReport, readabilitySignals, options)
+  const weights = getCompositionWeightProfile(plan)
+  const heroFit = clampUnitScore(
+    hasHero
+      ? (heroTopScore > 0
+        ? heroTopScore
+        : 82 - readabilitySignals.conflictPenalty * 0.3)
+      : 45,
+  )
+  const readability = clampUnitScore(
+    (readabilitySignals.titleReadabilityScore * 0.62)
+    + (readabilitySignals.ctaContrastScore * 0.38)
+    - (qualityReport.failureTags?.includes('headline_too_long') ? 10 : 0)
+    - (qualityReport.failureTags?.includes('support_too_long') ? 8 : 0),
+  )
+  const copyStrength = clampUnitScore(
+    qualityReport.score
+    + (copyDeck.proofPoints.length > 0 ? 6 : -8)
+    + (copyDeck.priceBlock || copyDeck.urgencyLine ? 8 : 0)
+    + (copyDeck.ctaAlternatives?.length >= 3 ? 4 : 0)
+    - (isHeadlineDuplicate(copyDeck.heroHeadline, copyDeck.supportLine) ? 18 : 0)
+    + (headlineSharpness - 78) * 0.45
+    + (detailCompleteness - 76) * 0.28,
+  )
+  const hierarchy = clampUnitScore(
+    86
+    - (copyDeck.heroHeadline.length > 12 ? 10 : 0)
+    - (copyDeck.supportLine.length > 18 ? 8 : 0)
+    - (copyDeck.proofPoints.length > 3 ? 10 : 0)
+    + (plan.emphasisOrder?.[0] === 'heroHeadline' ? 6 : 0)
+    + (headlineSharpness >= 82 ? 4 : 0),
+  )
+  const whitespace = clampUnitScore(
+    84
+    - (plan.density === 'dense' ? 12 : plan.density === 'balanced' ? 4 : 0)
+    - (copyDeck.factCards.length >= 4 ? 8 : 0)
+    - (copyDeck.proofPoints.length >= 3 ? 6 : 0)
+    + (plan.maxVisibleProofPoints === 2 ? 5 : 0),
+  )
+  const ctaVisibility = clampUnitScore(
+    78
+    + (plan.ctaStrength === 'strong' ? 12 : plan.ctaStrength === 'balanced' ? 6 : 0)
+    + (plan.ctaStyle?.placement === 'bottom-bar' || plan.ctaPlacementPolicy === 'bottom-safe' ? 8 : 0)
+    + (copyDeck.cta.length <= 6 ? 4 : -6)
+    - (readabilitySignals.ctaContrastScore < 70 ? 10 : 0),
+  )
+  const conflictPenalty = clampUnitScore(
+    readabilitySignals.conflictPenalty
+    + (qualityReport.failureTags?.includes('whitespace_thin') ? 10 : 0)
+    + (qualityReport.failureTags?.includes('headline_duplicate') ? 8 : 0),
+  )
+  const finishLevel = clampUnitScore(
+    qualityReport.score
+    + (heroFit >= 80 ? 6 : 0)
+    + (readability >= 78 ? 6 : 0)
+    + (ctaVisibility >= 78 ? 4 : 0)
+    + (headlineSharpness >= 80 ? 4 : 0)
+    + (detailCompleteness >= 82 ? 4 : 0)
+    + (compositionStability >= 78 ? 4 : -4)
+    - (conflictPenalty > 28 ? 8 : 0),
+  )
+  const criticalPenalty = clampUnitScore(
+    (readability < 70 ? 12 : 0)
+    + (copyStrength < 72 ? 10 : 0)
+    + (conflictPenalty > 24 ? 12 : 0)
+    + (qualityReport.failureTags?.includes('headline_duplicate') ? 8 : 0)
+    + (qualityReport.failureTags?.includes('detail_missing') ? 8 : 0),
+  )
+  const totalScore = clampUnitScore(
+    heroFit * weights.heroFit
+    + readability * weights.readability
+    + copyStrength * weights.copyStrength
+    + hierarchy * weights.hierarchy
+    + whitespace * weights.whitespace
+    + ctaVisibility * weights.ctaVisibility
+    + finishLevel * weights.finishLevel
+    + compositionStability * weights.compositionStability
+    - conflictPenalty * weights.conflictPenalty
+    - criticalPenalty * weights.criticalPenalty,
+  )
+  return {
+    totalScore,
+    breakdown: {
+      heroFit,
+      readability,
+      copyStrength,
+      hierarchy,
+      whitespace,
+      ctaVisibility,
+      conflictPenalty,
+      finishLevel,
+    },
+    suggestions: buildCompositionSuggestions(qualityReport, readabilitySignals, heroFit, copyStrength),
   }
 }
 function buildSceneRefinedHeadline(input: PosterGenerateInput, intent: PosterIntent, facts: ReturnType<typeof collectPosterFacts>['facts']) {
@@ -2215,13 +2716,25 @@ function buildSceneRefinedSupport(input: PosterGenerateInput, intent: PosterInte
         /午晚餐/.test(`${input.content || ''} ${deck.offerLine || ''}`) ? '午晚餐都适合' : deck.offerLine,
       ], 26, '招牌风味/到店更快/现在尝鲜')
     case 'recruitment':
-      return compactDeckLine(facts.benefit || facts.price || facts.place, 26, '岗位价值、福利条件和投递窗口一次说清')
+      return compactDeckLine([
+        pickPosterPrimaryToken(buildRecruitmentRoleLine(input, ''), '岗位清晰'),
+        pickPosterPrimaryToken(buildRecruitmentCompLine(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), '薪酬激励'),
+        pickPosterPrimaryToken(buildRecruitmentBenefitLine(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), '投递友好'),
+      ].filter(Boolean).join(' · '), 26, '岗位清晰 · 薪酬激励 · 投递友好')
     case 'course':
-      return compactDeckLine([buildCourseOutcomeLine(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), buildCourseAudienceHint(input, facts)].filter(Boolean).join('｜'), 26, '适合谁学、能学到什么和为什么现在报名')
+      return compactDeckLine([
+        pickPosterPrimaryToken(buildCourseAudienceHint(input, facts), '零基础友好'),
+        pickPosterPrimaryToken(buildCourseOutcomeLine(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), '实战提效'),
+        pickPosterPrimaryToken(buildCourseSignupLine(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), '报名通道'),
+      ].filter(Boolean).join(' · '), 26, '零基础友好 · 实战提效 · 报名通道')
     case 'social':
       return compactDeckLine(facts.benefit || deck.offerLine || deck.actionReason, 26, '最值得冲的点、适合谁看和为什么先收藏一次说透')
     case 'festival':
-      return compactDeckLine(deck.offerLine || deck.urgencyLine || facts.benefit, 26, '限定礼遇、送礼场景和参与理由一次到位')
+      return compactDeckLine([
+        pickPosterPrimaryToken(deck.offerLine, '限定礼遇'),
+        pickPosterPrimaryToken(buildFestivalSceneValue(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), '送礼分享'),
+        pickPosterPrimaryToken(deck.urgencyLine || facts.benefit, '节庆心意'),
+      ].filter(Boolean).join(' · '), 26, '限定礼遇 · 送礼分享 · 节庆心意')
     case 'fitness':
       return compactDeckLine([buildFitnessAudienceValue(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult), buildFitnessOutcomeValue(input, facts, { ...deck, title: '', slogan: '', body: '' } as CopyResult)].filter(Boolean).join('｜'), 26, '适合对象、训练收益和开练理由一次说透')
     case 'event':
@@ -2314,10 +2827,11 @@ function refinePosterProtocolLocally(
   }
   if (!nextDeck.audienceLine) nextDeck.audienceLine = buildSceneAudienceLine(input, nextIntent, protocol.copy, nextDeck.factCards)
   if (!nextDeck.trustLine) nextDeck.trustLine = buildSceneTrustLine(input, nextIntent, protocol.copy, nextDeck.factCards)
+  const sanitizedDeck = sanitizePosterCopyDeck(nextDeck, { industry: input.industry }) as PosterCopyDeck
   return {
     posterIntent: nextIntent,
-    copyDeck: nextDeck,
-    copy: applyCopyDeckToCopy(protocol.copy, nextDeck, nextIntent),
+    copyDeck: sanitizedDeck,
+    copy: applyCopyDeckToCopy(protocol.copy, sanitizedDeck, nextIntent),
   }
 }
 function clamp01(value: number, fallback = 0) {
@@ -2914,6 +3428,13 @@ function buildFastCopyDeckPrompt(input: PosterGenerateInput) {
     '禁止输出解释、Markdown、字段名回声。',
   ].join('\n')
 }
+function buildQualitySplitCopyCorePrompt(input: PosterGenerateInput, mode: CopyTaskMode = 'draft') {
+  return [
+    buildFastCopyCorePrompt(input, mode),
+    '高质量模式补充要求：标题要更像成熟广告 headline，副标题要更像品牌海报第二视觉文案，body 要更有商业信息密度，但仍然必须适合大字号直接上版。',
+    '不要为了文采牺牲清楚度，也不要把信息写成长段小字。',
+  ].join('\n')
+}
 function buildPalettePrompt(input: PosterGenerateInput, mode: 'draft' | 'refine' = 'draft') {
   const generationMode = normalizeGenerationMode(input.generationMode)
   const posterDirective = buildCommercialPosterDirective()
@@ -3380,6 +3901,11 @@ function buildImagePrompt(input: PosterGenerateInput, mode: 'background' | 'hero
     '请生成一张用于商业海报的「主视觉摄影或插画底图」（单张连贯画面），后续会在上层由设计师排版叠字；这张图必须具备直接做成优秀海报成片的视觉冲击力，完成度接近成熟品牌海报、杂志封面或广告大片静帧。',
     '这张图不是普通配图，而是整张海报的主角。第一眼必须抓人，主体必须明确，气质必须高级，不能像电商白底图、游客照或随手素材。',
     personHint,
+    shouldUseReferenceFirstForHero(input)
+      ? (shouldPreserveReferenceIdentity()
+        ? '当前存在参考图，请优先保留主体 identity，只提升构图、镜头、光影、广告感与排字留白，不要把原主体改成另一种人、另一款商品或另一套品牌物料。'
+        : '当前存在参考图，请优先沿用参考主体做商业化增强，重点优化构图、光影、留白与海报完成度。')
+      : '',
     recruitLike
       ? '招聘主视觉硬性要求：必须为标题、副标题、岗位信息卡、CTA 预留清晰安全区；宁可留白更多，也不要让人物、边框、屏幕、桌面杂物侵入这些区域。主视觉要像成熟招聘海报底图，而不是普通企业宣传照。'
       : '',
@@ -3632,6 +4158,23 @@ function canUseDirectRemoteModelSourceUrl(url: string) {
 }
 async function resolveRemoteModelImageUrl(rawUrl: string, model: string, folder = 'ai-source', options?: { preferTmpfiles?: boolean }) {
   const preferredUrl = ensurePublicSourceUrl(rawUrl)
+  const existingLocalPath = resolveExistingLocalImagePath(preferredUrl)
+  if (existingLocalPath) {
+    const fileName = path.basename(existingLocalPath) || buildRemoteAssetFileName(rawUrl)
+    if (options?.preferTmpfiles) {
+      try {
+        return await uploadLocalFileToTmpfiles(existingLocalPath, fileName)
+      } catch (error) {
+        console.warn('[ai] tmpfiles upload failed for local source, retrying with dashscope oss:', error)
+      }
+    }
+    try {
+      return await uploadLocalFileToDashScopeOss(existingLocalPath, fileName, model)
+    } catch (error) {
+      console.warn('[ai] dashscope temporary upload failed for local source, retrying with tmpfiles:', error)
+    }
+    return uploadLocalFileToTmpfiles(existingLocalPath, fileName)
+  }
   if (canUseDirectRemoteModelSourceUrl(preferredUrl)) {
     return preferredUrl
   }
@@ -3792,6 +4335,18 @@ function buildLocalCopyResult(input: PosterGenerateInput): ProviderResult<CopyRe
     meta: getProviderMeta('copy', { provider: 'local-poster-engine', model: 'deterministic-copy', message: '已生成适合海报落版的文案。' }, normalizeGenerationMode(input.generationMode)),
   }
 }
+function buildAiProtocolCopyFallback(input: PosterGenerateInput, reason: string): ProviderResult<CopyResult> {
+  const fallback = buildLocalCopyResult(input)
+  return {
+    result: fallback.result,
+    meta: getProviderMeta('copy', {
+      provider: 'ai-protocol',
+      model: 'scene-copy-last-resort',
+      isMockFallback: false,
+      message: `AI 文案未及时返回，已按当前主题、行业和用途生成可直接上版的成片文案：${reason}`,
+    }, normalizeGenerationMode(input.generationMode)),
+  }
+}
 function buildLocalPaletteResult(input: PosterGenerateInput): ProviderResult<PosterPalette> {
   const recruitMode = inferRecruitmentCreativeMode(input)
   const recruitLike = input.presetKey === 'recruitment' || /招聘|招募/.test(`${input.industry || ''} ${input.purpose || ''} ${input.theme || ''}`)
@@ -3866,40 +4421,73 @@ function buildLocalRelayoutResult(input: PosterGenerateInput, candidates: any[])
     meta: getProviderMeta('relayout', { provider: 'local-poster-engine', model: 'layout-heuristic', message: '已按当前内容智能匹配更合适的稳定版式。' }, normalizeGenerationMode(input.generationMode)),
   }
 }
-async function generateCopyInternal(input: PosterGenerateInput, mode: CopyTaskMode = 'draft'): Promise<ProviderResult<CopyResult>> {
+async function generateCopyInternal(
+  input: PosterGenerateInput,
+  mode: CopyTaskMode = 'draft',
+  overrides: CopyRequestOverrides = {},
+): Promise<ProviderResult<CopyResult>> {
   const generationMode = normalizeGenerationMode(input.generationMode)
   try {
     const ready = ensureBailianReady('copy', generationMode)
     const isDraftMode = mode === 'draft'
     const requestOptions = {
-      timeoutMs: getStageTimeoutMs('copy', generationMode, isDraftMode ? 'draft' : 'refine'),
-      retryTimes: getStageRetryTimes('copy', generationMode, isDraftMode ? 'draft' : 'refine'),
-      enableThinking: generationMode !== 'fast',
+      timeoutMs: overrides.timeoutMs ?? getStageTimeoutMs('copy', generationMode, isDraftMode ? 'draft' : 'refine'),
+      retryTimes: overrides.retryTimes ?? getStageRetryTimes('copy', generationMode, isDraftMode ? 'draft' : 'refine'),
+      enableThinking: typeof overrides.enableThinking === 'boolean' ? overrides.enableThinking : generationMode !== 'fast',
     }
-    const parsed = generationMode === 'fast'
+    const parsed = !overrides.forceSinglePass
       ? await (async () => {
-        const [core, deck] = await Promise.all([
-          requestBailianChat(
-            [
-              { role: 'system', content: '你是中文海报文案助手。只输出 JSON。字段仅允许 title/slogan/body/cta/posterIntent。' },
-              { role: 'user', content: buildFastCopyCorePrompt(input, mode) },
-            ],
-            ready.model,
-            requestOptions,
-          ),
-          requestBailianChat(
-            [
-              { role: 'system', content: '你是中文海报成片结构助手。只输出 JSON。字段仅允许 copyDeck。' },
-              { role: 'user', content: buildFastCopyDeckPrompt(input) },
-            ],
-            ready.model,
-            requestOptions,
-          ),
-        ])
-        return {
-          ...core,
-          copyDeck: deck?.copyDeck || {},
+        const corePrompt = generationMode === 'fast'
+          ? buildFastCopyCorePrompt(input, mode)
+          : buildQualitySplitCopyCorePrompt(input, mode)
+        const coreTask = requestBailianChat(
+          [
+            { role: 'system', content: '你是中文海报文案助手。只输出 JSON。字段仅允许 title/slogan/body/cta/posterIntent。' },
+            { role: 'user', content: corePrompt },
+          ],
+          ready.model,
+          {
+            ...requestOptions,
+            enableThinking: generationMode === 'fast' ? false : requestOptions.enableThinking,
+          },
+        )
+        const deckTask = requestBailianChat(
+          [
+            { role: 'system', content: '你是中文海报成片结构助手。只输出 JSON。字段仅允许 copyDeck。' },
+            { role: 'user', content: buildFastCopyDeckPrompt(input) },
+          ],
+          ready.model,
+          {
+            ...requestOptions,
+            enableThinking: false,
+          },
+        )
+        const [coreState, deckState] = await Promise.allSettled([coreTask, deckTask])
+        if (coreState.status === 'fulfilled') {
+          return {
+            ...coreState.value,
+            copyDeck: deckState.status === 'fulfilled' ? (deckState.value?.copyDeck || {}) : {},
+          }
         }
+        if (deckState.status === 'fulfilled') {
+          return await requestBailianChat(
+            [
+              { role: 'system', content: '你是中文海报文案助手。只输出 JSON。必填字段：title、slogan、body、cta、posterIntent。不要解释。' },
+              { role: 'user', content: corePrompt },
+            ],
+            ready.model,
+            {
+              ...requestOptions,
+              timeoutMs: Math.min(requestOptions.timeoutMs, generationMode === 'fast' ? getFastCopyBackupTimeoutMs() : 50000),
+              retryTimes: 0,
+              enableThinking: generationMode === 'fast' ? false : requestOptions.enableThinking,
+            },
+          ).then((core) => ({
+            ...core,
+            copyDeck: deckState.value?.copyDeck || {},
+          }))
+        }
+        throw (coreState.reason instanceof Error ? coreState.reason : new Error(String(coreState.reason || `${generationMode} core copy failed`)))
       })()
       : await requestBailianChat(
         [
@@ -3936,6 +4524,26 @@ async function generateCopyInternal(input: PosterGenerateInput, mode: CopyTaskMo
     }
   } catch (error) {
     throw new Error(buildStrictProviderError('文案生成', error))
+  }
+}
+async function generateCopyWithBackups(input: PosterGenerateInput, mode: CopyTaskMode = 'draft'): Promise<ProviderResult<CopyResult>> {
+  try {
+    return await generateCopyInternal(input, mode)
+  } catch (primaryError) {
+    const primaryMode = normalizeGenerationMode(input.generationMode)
+    if (primaryMode === 'fast') {
+      return await generateCopyInternal(
+        { ...input, generationMode: 'quality' },
+        mode,
+        {
+          timeoutMs: getFastCopyBackupTimeoutMs(),
+          retryTimes: 0,
+          enableThinking: true,
+          forceSinglePass: true,
+        },
+      )
+    }
+    return buildAiProtocolCopyFallback(input, (primaryError as Error)?.message || 'unknown error')
   }
 }
 async function generatePaletteInternal(input: PosterGenerateInput, mode: 'draft' | 'refine' = 'draft'): Promise<ProviderResult<PosterPalette>> {
@@ -3988,7 +4596,15 @@ async function generatePaletteWithBackups(input: PosterGenerateInput, mode: 'dra
     return buildAiProtocolPaletteFallback(input, (primaryError as Error)?.message || 'unknown error')
   }
 }
-async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> {
+async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset, variantSeed = 0): Promise<ProviderResult<PosterImageResult>> {
+  return bailianHeroProviderInternal(input, size, variantSeed, {})
+}
+async function bailianHeroProviderInternal(
+  input: PosterGenerateInput,
+  size: SizePreset,
+  variantSeed = 0,
+  options: { skipSanitize?: boolean } = {},
+): Promise<ProviderResult<PosterImageResult>> {
   const generationMode = normalizeGenerationMode(input.generationMode)
   const ready = ensureBailianReady('image', generationMode)
   const extend = false
@@ -3997,7 +4613,7 @@ async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset)
   let prompt = ''
   let taskResult: any = null
   for (let attempt = 0; attempt <= retryTimes; attempt += 1) {
-    prompt = buildImagePrompt(input, 'hero', 'draft-hero', attempt)
+    prompt = buildImagePrompt(input, 'hero', 'draft-hero', variantSeed + attempt)
     try {
       taskResult = await requestBailianTextToImage(prompt, ready.model, size, extend)
       break
@@ -4011,7 +4627,9 @@ async function bailianHeroProvider(input: PosterGenerateInput, size: SizePreset)
     ? '已使用阿里百炼快速主视觉模型生成主图。'
     : '已使用阿里百炼高质量主视觉模型生成图片。'
   const savedImageUrl = await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai')
-  const sanitized = await sanitizeGeneratedPosterImageIfNeeded(input, savedImageUrl, size)
+  const sanitized = options.skipSanitize
+    ? { imageUrl: savedImageUrl, cleaned: false }
+    : await sanitizeGeneratedPosterImageIfNeeded(input, savedImageUrl, size)
   return {
     result: normalizeImageResult(sanitized.imageUrl, prompt),
     meta: getProviderMeta('image', {
@@ -4105,7 +4723,16 @@ async function bailianBackgroundProvider(input: PosterGenerateInput, _size: Size
     }, generationMode),
   }
 }
-async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePreset): Promise<ProviderResult<PosterImageResult>> {
+async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePreset, variantSeed = 0, taskMode: ImageTaskMode = 'refresh-hero'): Promise<ProviderResult<PosterImageResult>> {
+  return bailianImageEditProviderInternal(input, size, variantSeed, taskMode, {})
+}
+async function bailianImageEditProviderInternal(
+  input: PosterGenerateInput,
+  size: SizePreset,
+  variantSeed = 0,
+  taskMode: ImageTaskMode = 'refresh-hero',
+  options: { skipSanitize?: boolean } = {},
+): Promise<ProviderResult<PosterImageResult>> {
   const generationMode = normalizeGenerationMode(input.generationMode)
   const sourceImageUrl = String(input.sourceImageUrl || '').trim()
   if (!sourceImageUrl) {
@@ -4118,7 +4745,7 @@ async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePr
   let prompt = ''
   let taskResult: any = null
   for (let attempt = 0; attempt <= retryTimes; attempt += 1) {
-    prompt = buildImagePrompt(input, 'hero', 'refresh-hero', attempt)
+    prompt = buildImagePrompt(input, 'hero', taskMode, variantSeed + attempt)
     try {
       taskResult = await requestBailianImageEdit(prompt, ready.model, resolvedSourceImageUrl, size)
       break
@@ -4129,7 +4756,9 @@ async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePr
   }
   if (!taskResult) throw lastError || new Error('image edit task failed')
   const savedImageUrl = await saveRemoteImageToLocal(extractTaskImageUrl(taskResult), 'ai')
-  const sanitized = await sanitizeGeneratedPosterImageIfNeeded(input, savedImageUrl, size)
+  const sanitized = options.skipSanitize
+    ? { imageUrl: savedImageUrl, cleaned: false }
+    : await sanitizeGeneratedPosterImageIfNeeded(input, savedImageUrl, size)
   return {
     result: normalizeImageResult(sanitized.imageUrl, prompt),
     meta: getProviderMeta('imageEdit', {
@@ -4141,14 +4770,210 @@ async function bailianImageEditProvider(input: PosterGenerateInput, size: SizePr
     }, generationMode),
   }
 }
-async function generateHeroImageInternal(input: PosterGenerateInput, _palette: PosterPalette, size: SizePreset) {
-  return withRequiredImageSuccess('主图生成', () => bailianHeroProvider(input, size))
-}
 async function generateBackgroundInternal(input: PosterGenerateInput, _palette: PosterPalette, size: SizePreset) {
   return withRequiredImageSuccess('背景生成', () => bailianBackgroundProvider(input, size))
 }
 async function replaceImageInternal(input: PosterGenerateInput, _palette: PosterPalette, size: SizePreset) {
   return withRequiredImageSuccess('换图', () => bailianImageEditProvider(input, size))
+}
+type HeroGenerationResult = {
+  hero: PosterImageResult
+  heroCandidates: PosterHeroCandidate[]
+  recommendedHeroCandidateIndex: number
+  heroSelectionMode: 'auto' | 'manual'
+  heroSelectionMeta: PosterHeroSelectionMeta
+  multimodalLayoutHints?: PosterMultimodalLayoutHints
+  referenceImageUsed: boolean
+}
+function nowMs() {
+  return Date.now()
+}
+function formatDurationMs(startMs: number) {
+  return `${Math.max(0, nowMs() - startMs)}ms`
+}
+function logPosterStage(traceId: string, stage: string, message: string, extra?: Record<string, unknown>) {
+  const payload = extra && Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : ''
+  console.log(`[poster][${traceId}][${stage}] ${message}${payload}`)
+}
+function deriveHeroWhitespaceScore(hints: PosterMultimodalLayoutHints) {
+  const primarySafe = (hints.safeZones || []).find((item) => String(item.label || '').includes('title') || item.y <= 0.18) || hints.safeZones?.[0]
+  if (!primarySafe) return 62
+  const area = Math.max(0, Number(primarySafe.w || 0) * Number(primarySafe.h || 0))
+  const topBias = Number(primarySafe.y || 0) <= 0.22 ? 10 : 0
+  const leftBias = Number(primarySafe.x || 0) <= 0.2 ? 8 : 0
+  return Math.max(48, Math.min(96, Math.round(area * 220 + topBias + leftBias + 52)))
+}
+function deriveHeroSubjectPositionScore(hints: PosterMultimodalLayoutHints) {
+  const bias = String(hints.visualAnalysis?.focusBias || 'center')
+  const primarySafe = hints.safeZones?.[0]
+  if (!primarySafe) return bias === 'center' ? 72 : 78
+  const subjectAwayFromTitle = Number(primarySafe.x || 0) <= 0.24 || Number(primarySafe.y || 0) <= 0.2
+  const biasBonus = bias === 'right' ? 12 : bias === 'center' ? 8 : 4
+  return Math.max(54, Math.min(95, Math.round((subjectAwayFromTitle ? 74 : 60) + biasBonus)))
+}
+function deriveHeroClarityScore(hints: PosterMultimodalLayoutHints) {
+  const texture = String(hints.visualAnalysis?.texture || 'detailed')
+  const needsPanel = Boolean(hints.visualAnalysis?.needsPanel)
+  const base = texture === 'clean' ? 90 : 74
+  return Math.max(40, Math.min(96, base - (needsPanel ? 10 : 0)))
+}
+function deriveHeroToneMatchScore(hints: PosterMultimodalLayoutHints, plan: NonNullable<PosterGenerateResult['designPlan']>) {
+  const tone = String(hints.visualAnalysis?.dominantTone || 'mixed')
+  const expected = String(plan.backgroundTone || 'mixed')
+  if (expected === 'mixed' || tone === expected) return 88
+  if (tone === 'mixed') return 78
+  return 66
+}
+async function buildHeroCandidate(
+  input: PosterGenerateInput,
+  size: SizePreset,
+  variantSeed: number,
+  posterIntent: PosterIntent,
+  copyDeck: PosterCopyDeck,
+  designPlan: NonNullable<PosterGenerateResult['designPlan']>,
+): Promise<PosterHeroCandidate> {
+  const useReference = shouldUseReferenceFirstForHero(input)
+  const candidateInput = { ...input, generateHeroImage: true }
+  const providerResult = useReference
+    ? await withRequiredImageSuccess('换图', () => bailianImageEditProviderInternal(candidateInput, size, variantSeed, 'refresh-hero', { skipSanitize: true }))
+    : await withRequiredImageSuccess('主图生成', () => bailianHeroProviderInternal(candidateInput, size, variantSeed, { skipSanitize: true }))
+  const multimodal = await generateMultimodalLayoutHintsWithBackups(
+    input,
+    providerResult.result.imageUrl,
+    posterIntent,
+    copyDeck,
+    designPlan,
+  )
+  const scoreBreakdown: PosterHeroCandidateScoreBreakdown = {
+    whitespace: deriveHeroWhitespaceScore(multimodal.result),
+    subjectPosition: deriveHeroSubjectPositionScore(multimodal.result),
+    clarity: deriveHeroClarityScore(multimodal.result),
+    toneMatch: deriveHeroToneMatchScore(multimodal.result, designPlan),
+  }
+  const score = scoreHeroCandidateBreakdown(scoreBreakdown)
+  return {
+    imageUrl: providerResult.result.imageUrl,
+    prompt: providerResult.result.prompt,
+    score,
+    selected: false,
+    sourceType: useReference ? (shouldEnableHeroRepair() ? 'reference-edit' : 'reference-edit') : 'text-to-image',
+    analysisSummary: `${getHeroScoringProvider()} ${multimodal.result.layoutDecision?.recommendedFamily || ''}`.trim(),
+    scoreBreakdown,
+    multimodalLayoutHints: multimodal.result,
+  }
+}
+async function finalizeSelectedHeroCandidate(
+  input: PosterGenerateInput,
+  size: SizePreset,
+  candidate: PosterHeroCandidate | undefined,
+) {
+  if (!candidate || !String(candidate.imageUrl || '').trim()) return candidate
+  const sanitized = await sanitizeGeneratedPosterImageIfNeeded(input, candidate.imageUrl, size)
+  const finalImageUrl = String(sanitized.imageUrl || candidate.imageUrl).trim()
+  return {
+    ...candidate,
+    imageUrl: finalImageUrl,
+  } as PosterHeroCandidate
+}
+async function generateHeroImageInternal(
+  input: PosterGenerateInput,
+  _palette: PosterPalette,
+  size: SizePreset,
+  posterIntent: PosterIntent,
+  copyDeck: PosterCopyDeck,
+  designPlan: NonNullable<PosterGenerateResult['designPlan']>,
+) {
+  const generationMode = normalizeGenerationMode(input.generationMode)
+  const candidateCount = getHeroCandidateCount(generationMode)
+  const traceId = randomCode(8)
+  const startedAt = nowMs()
+  logPosterStage(traceId, 'hero', 'start hero candidate generation', {
+    generationMode,
+    candidateCount,
+    sizeKey: input.sizeKey,
+    industry: input.industry,
+  })
+  const candidateStates = await Promise.allSettled(
+    Array.from({ length: candidateCount }, async (_, index) => {
+      const candidateStartedAt = nowMs()
+      logPosterStage(traceId, 'hero-candidate', 'start', { index })
+      const candidate = await buildHeroCandidate(input, size, index, posterIntent, copyDeck, designPlan)
+      logPosterStage(traceId, 'hero-candidate', 'done', {
+        index,
+        elapsed: formatDurationMs(candidateStartedAt),
+        score: candidate.score,
+        sourceType: candidate.sourceType,
+      })
+      return candidate
+    }),
+  )
+  const candidates = candidateStates.flatMap((state, index) => {
+    if (state.status === 'fulfilled') return [state.value]
+    logPosterStage(traceId, 'hero-candidate', 'failed', {
+      index,
+      error: state.reason instanceof Error ? state.reason.message : String(state.reason || 'unknown error'),
+    })
+    return []
+  })
+  if (!candidates.length) {
+    throw new Error(`AI 主图候选全部生成失败（${candidateCount}/${candidateCount}），耗时 ${formatDurationMs(startedAt)}`)
+  }
+  const decision = chooseBestHeroCandidate(candidates, {
+    mode: generationMode,
+    threshold: getHeroScoreThreshold(),
+  })
+  const decisionCandidates = [...(decision.candidates as PosterHeroCandidate[])]
+  const selectedCandidateIndex = decision.selectedIndex >= 0 ? decision.selectedIndex : decision.recommendedIndex
+  const selectedCandidate = decisionCandidates[selectedCandidateIndex] || decisionCandidates[decision.recommendedIndex]
+  const sanitizeStartedAt = nowMs()
+  const finalizedSelectedCandidate = await finalizeSelectedHeroCandidate(
+    input,
+    size,
+    selectedCandidate,
+  )
+  if (finalizedSelectedCandidate) {
+    decisionCandidates[selectedCandidateIndex] = finalizedSelectedCandidate
+  }
+  logPosterStage(traceId, 'hero', 'selected hero candidate finalized', {
+    elapsed: formatDurationMs(sanitizeStartedAt),
+    selectedIndex: selectedCandidateIndex,
+    sanitized: Boolean(finalizedSelectedCandidate && finalizedSelectedCandidate.imageUrl !== selectedCandidate?.imageUrl),
+    finalScore: finalizedSelectedCandidate?.score ?? selectedCandidate?.score ?? 0,
+  })
+  logPosterStage(traceId, 'hero', 'hero selection ready', {
+    elapsed: formatDurationMs(startedAt),
+    succeeded: candidates.length,
+    attempted: candidateCount,
+    recommendedIndex: decision.recommendedIndex,
+    selectedIndex: decision.selectedIndex,
+    selectionMode: decision.selectionMode,
+    topScore: finalizedSelectedCandidate?.score ?? decision.summary.topScore,
+  })
+  return {
+    result: {
+      hero: normalizeImageResult(finalizedSelectedCandidate?.imageUrl || selectedCandidate?.imageUrl || '', finalizedSelectedCandidate?.prompt || selectedCandidate?.prompt || ''),
+      heroCandidates: decisionCandidates,
+      recommendedHeroCandidateIndex: decision.recommendedIndex,
+      heroSelectionMode: decision.selectionMode,
+      heroSelectionMeta: {
+        recommendedIndex: decision.recommendedIndex,
+        selectedIndex: decision.selectedIndex,
+        selectionMode: decision.selectionMode,
+        lowConfidence: decision.summary.lowConfidence,
+        topScore: finalizedSelectedCandidate?.score ?? decision.summary.topScore,
+        spread: decision.summary.spread,
+      },
+      multimodalLayoutHints: finalizedSelectedCandidate?.multimodalLayoutHints || selectedCandidate?.multimodalLayoutHints,
+      referenceImageUsed: shouldUseReferenceFirstForHero(input),
+    } as HeroGenerationResult,
+    meta: getProviderMeta('image', {
+      provider: shouldUseReferenceFirstForHero(input) ? 'aliyun-bailian-image-edit' : 'aliyun-bailian',
+      model: shouldUseReferenceFirstForHero(input) ? getProviderModel('imageEdit', generationMode) : getProviderModel('image', generationMode),
+      message: generationMode === 'fast'
+        ? `已生成 ${decision.candidates.length}/${candidateCount} 张主图候选并自动选择最佳结果。`
+        : `已生成 ${decision.candidates.length}/${candidateCount} 张主图候选，等待用户选择推荐主图。`,
+    }, generationMode),
+  }
 }
 type CutoutMode = 'local' | 'remote'
 function normalizeCutoutMode(raw: unknown): CutoutMode { return String(raw || '').trim().toLowerCase() === 'local' ? 'local' : 'remote' }
@@ -4631,36 +5456,36 @@ function choosePreferredLayoutFamily(input: PosterGenerateInput, candidates: any
   const presetFallback = presetPreferred.find((name) => allow.includes(name)) || pool.find((name) => allow.includes(name)) || ''
   if (recruitSignal) {
     const recruitMode = inferRecruitmentCreativeMode(input)
-    if (denseSignal)
-      return prefer('list-recruitment', 'split-editorial', 'hero-left')
+    if (denseSignal || mediumInfoSignal)
+      return 'list-recruitment'
     if (recruitMode === 'black-gold')
-      return prefer('magazine-cover', 'hero-left', 'split-editorial')
+      return 'magazine-cover'
     if (recruitMode === 'bold-red' || recruitMode === 'retro')
-      return prefer('hero-left', 'magazine-cover', 'split-editorial')
-    return prefer('hero-left', 'split-editorial', 'magazine-cover')
+      return 'split-editorial'
+    return 'split-editorial'
   }
-  if (courseSignal) return prefer(denseSignal ? 'split-editorial' : mediumInfoSignal ? 'clean-course' : 'hero-left', 'clean-course', presetFallback)
+  if (courseSignal) return denseSignal ? 'split-editorial' : 'clean-course'
   if (festivalSignal) {
-    if (denseSignal) return prefer('festive-frame', 'magazine-cover', 'hero-center')
-    return prefer(editorialSignal ? 'magazine-cover' : 'festive-frame', 'hero-center', 'split-editorial')
+    if (denseSignal) return 'festive-frame'
+    return editorialSignal ? 'magazine-cover' : 'festive-frame'
   }
   if (eventSignal) {
-    if (denseSignal) return prefer('split-editorial', 'festive-frame', 'hero-center')
-    if (illustrativeEventSignal) return prefer('hero-center', 'festive-frame', 'magazine-cover')
-    return prefer(editorialSignal ? 'magazine-cover' : 'festive-frame', 'hero-center', 'split-editorial')
+    if (denseSignal) return 'split-editorial'
+    if (illustrativeEventSignal) return 'festive-frame'
+    return editorialSignal ? 'magazine-cover' : 'hero-center'
   }
-  if (foodSignal && promoSignal) return prefer('premium-offer', 'hero-center', 'grid-product')
-  if (foodSignal) return prefer('hero-center', 'magazine-cover', 'premium-offer')
-  if (promoSignal) return prefer(denseSignal ? 'premium-offer' : 'hero-center', 'grid-product', 'hero-left')
-  if (/电商|零售|商品|萌宠|宠物|美妆|母婴/.test(themeText)) return prefer(denseSignal ? 'premium-offer' : 'hero-center', 'hero-left', 'grid-product')
-  if (explicitNoteSignal) return prefer(editorialSignal ? 'magazine-cover' : 'xiaohongshu-note', 'hero-center', 'hero-left')
-  if (noteSceneFallback) return prefer(editorialSignal ? 'magazine-cover' : 'xiaohongshu-note', 'hero-center', 'hero-left')
-  if (editorialSignal) return prefer('magazine-cover', 'hero-center', 'split-editorial')
-  if (/健身|运动|训练/.test(themeText)) return prefer(editorialSignal ? 'magazine-cover' : 'hero-center', 'hero-left', 'premium-offer')
-  if (/专业商务|极简科技|政务公益|金融|科技互联网/.test(`${style} ${input.industry}`)) return prefer(denseSignal ? 'split-editorial' : 'hero-left', 'magazine-cover', presetFallback)
-  if (denseSignal) return prefer('split-editorial', 'clean-course', 'hero-left', presetFallback)
-  if (mediumInfoSignal) return prefer('hero-left', 'hero-center', 'premium-offer', presetFallback)
-  if (/潮流|年轻|海报感|赛博|街头/.test(style)) return prefer('magazine-cover', 'hero-center', 'grid-product', presetFallback)
+  if (foodSignal && promoSignal) return 'premium-offer'
+  if (foodSignal) return editorialSignal ? 'magazine-cover' : 'hero-center'
+  if (promoSignal) return denseSignal ? 'grid-product' : 'premium-offer'
+  if (/电商|零售|商品|萌宠|宠物|美妆|母婴/.test(themeText)) return denseSignal ? 'grid-product' : 'hero-center'
+  if (explicitNoteSignal) return editorialSignal ? 'magazine-cover' : 'xiaohongshu-note'
+  if (noteSceneFallback) return editorialSignal ? 'magazine-cover' : 'xiaohongshu-note'
+  if (editorialSignal) return 'magazine-cover'
+  if (/健身|运动|训练/.test(themeText)) return editorialSignal ? 'magazine-cover' : 'hero-center'
+  if (/专业商务|极简科技|政务公益|金融|科技互联网/.test(`${style} ${input.industry}`)) return denseSignal ? 'split-editorial' : 'hero-left'
+  if (denseSignal) return 'split-editorial'
+  if (mediumInfoSignal) return 'hero-left'
+  if (/潮流|年轻|海报感|赛博|街头/.test(style)) return 'magazine-cover'
   if (presetFallback) return presetFallback
   return pool.find((name) => allow.includes(name)) || 'hero-left'
 }
@@ -4899,6 +5724,8 @@ function applyMultimodalPlanOverride(
   const nextFamily = allowedFamilies.has(recommendedFamily) && confidence >= 0.32
     ? recommendedFamily
     : currentPlan.layoutFamily
+  const hasTitleSafeZone = (hints?.safeZones || []).some((item) => /title|text|headline|文案/i.test(String(item.label || '')))
+  const hasBottomSafeZone = (hints?.safeZones || []).some((item) => /cta|bottom|footer|下方/i.test(String(item.label || '')))
   const absoluteLayout = buildAbsoluteLayoutFromMultimodalHints(size, { ...currentPlan, layoutFamily: nextFamily }, hints)
   return {
     ...currentPlan,
@@ -4910,6 +5737,16 @@ function applyMultimodalPlanOverride(
     backgroundTone: hints.visualAnalysis?.dominantTone === 'light' || hints.visualAnalysis?.dominantTone === 'dark'
       ? hints.visualAnalysis.dominantTone
       : currentPlan.backgroundTone,
+    titleSafeZonePolicy: hasTitleSafeZone
+      ? 'prefer-clean-area'
+      : currentPlan.heroStrategy === 'person' || currentPlan.heroStrategy === 'product'
+        ? 'strict-avoid-subject'
+        : currentPlan.titleSafeZonePolicy,
+    ctaPlacementPolicy: hasBottomSafeZone
+      ? 'bottom-safe'
+      : currentPlan.ctaStyle?.placement === 'with-price'
+        ? 'follow-price'
+        : currentPlan.ctaPlacementPolicy,
   }
 }
 function deriveHeroStrategy(input: PosterGenerateInput): 'product' | 'person' | 'scene' | 'editorial' {
@@ -4924,6 +5761,30 @@ function deriveHeroStrategy(input: PosterGenerateInput): 'product' | 'person' | 
   if (/活动|节日|庆典|展会|旅游|门店|餐饮|美食|咖啡|茶饮|杂志|小红书/.test(joined)) return 'scene'
   if (/科技互联网|金融|政务公益|专业商务|高级简约/.test(joined)) return 'editorial'
   return 'product'
+}
+function deriveLayoutStrategy(contentPattern: PosterContentPattern, heroStrategy: NonNullable<PosterGenerateResult['designPlan']>['heroStrategy']) {
+  if (contentPattern === 'price-first') return 'offer-dominant'
+  if (contentPattern === 'list-info') return heroStrategy === 'person' ? 'recruitment-dense' : 'info-dominant'
+  if (contentPattern === 'cover-story') return 'cover-centered'
+  return heroStrategy === 'editorial' ? 'cover-centered' : 'hero-dominant'
+}
+function deriveContentPriority(contentPattern: PosterContentPattern, hasPriceBlock: boolean): PosterEmphasisRole[] {
+  if (contentPattern === 'price-first' || hasPriceBlock) return ['priceBlock', 'heroHeadline', 'cta', 'offerLine', 'proofPoints', 'supportLine']
+  if (contentPattern === 'list-info') return ['heroHeadline', 'proofPoints', 'factCards', 'cta', 'supportLine']
+  return ['heroHeadline', 'supportLine', 'offerLine', 'cta', 'proofPoints']
+}
+function deriveTitleSafeZonePolicy(
+  heroStrategy: NonNullable<PosterGenerateResult['designPlan']>['heroStrategy'],
+  backgroundTone: 'light' | 'dark' | 'mixed',
+) {
+  if (heroStrategy === 'person' || heroStrategy === 'product') return 'strict-avoid-subject' as const
+  if (backgroundTone === 'mixed') return 'prefer-clean-area' as const
+  return 'allow-overlay' as const
+}
+function deriveCtaPlacementPolicy(ctaStyle: PosterCtaStyle, hasPriceBlock: boolean) {
+  if (ctaStyle.placement === 'with-price' || hasPriceBlock) return 'follow-price' as const
+  if (ctaStyle.placement === 'floating') return 'float-near-copy' as const
+  return 'bottom-safe' as const
 }
 function deriveDesignPlan(input: PosterGenerateInput, candidates: any[], size: SizePreset, posterIntent?: PosterIntent, copyDeck?: PosterCopyDeck) {
   const purpose = String(input.purpose || '')
@@ -4947,6 +5808,11 @@ function deriveDesignPlan(input: PosterGenerateInput, candidates: any[], size: S
   const contentPattern = deriveContentPattern(fallbackIntent, fallbackDeck, input.sizeKey)
   const emphasisOrder = deriveEmphasisOrder(fallbackIntent, fallbackDeck)
   const ctaStyle = derivePosterCtaStyle(input, fallbackIntent, fallbackDeck, { contentPattern, ctaStrength })
+  const layoutStrategy = deriveLayoutStrategy(contentPattern, heroStrategy)
+  const contentPriority = deriveContentPriority(contentPattern, Boolean(fallbackDeck.priceBlock))
+  const maxVisibleProofPoints = density === 'dense' ? 2 : 3
+  const titleSafeZonePolicy = deriveTitleSafeZonePolicy(heroStrategy, backgroundTone)
+  const ctaPlacementPolicy = deriveCtaPlacementPolicy(ctaStyle, Boolean(fallbackDeck.priceBlock))
   const absoluteLayout = buildAbsoluteLayout(size, {
     layoutFamily,
     density,
@@ -4957,6 +5823,7 @@ function deriveDesignPlan(input: PosterGenerateInput, candidates: any[], size: S
     industry: input.industry || DEFAULT_INDUSTRY,
     tone: input.style || '高级简约',
     layoutFamily,
+    layoutStrategy,
     density,
     heroStrategy,
     ctaStrength,
@@ -4966,6 +5833,10 @@ function deriveDesignPlan(input: PosterGenerateInput, candidates: any[], size: S
     backgroundTone,
     contentPattern,
     emphasisOrder,
+    contentPriority,
+    maxVisibleProofPoints,
+    titleSafeZonePolicy,
+    ctaPlacementPolicy,
     templateCandidates: candidates,
     absoluteLayout,
   }
@@ -4993,7 +5864,7 @@ async function relayoutDesignPlanInternal(input: PosterGenerateInput, candidates
     ? [
         '只输出 JSON，不要解释。',
         '你是商业海报版式规划器，负责给可编辑文字图层推荐成片级排版。',
-        `前端偏好：${input.presetKey || 'AI自由推荐'}（仅作风格参考，不是版式约束）`,
+        `前端偏好：${input.presetKey || 'AI自由推荐'}（仅作候选骨架参考，不是版式约束，更不是主导结果）`,
         `主题：${input.theme || '未填写'}`,
         `行业：${input.industry || DEFAULT_INDUSTRY}`,
         `用途：${input.purpose || '推广'}`,
@@ -5011,8 +5882,10 @@ async function relayoutDesignPlanInternal(input: PosterGenerateInput, candidates
         generationMode === 'fast'
           ? '快速模式：优先最稳、最清晰、最容易直接成片的版式。'
           : '高质量模式：优先成片感、标题权重、信息可读性和按钮清晰度。',
-        '输出字段：layoutFamily、density、heroStrategy、ctaStrength、ctaStyle、qrStrategy、textStrategy、backgroundTone、contentPattern、emphasisOrder。',
+        '输出字段：layoutFamily、density、heroStrategy、ctaStrength、ctaStyle、qrStrategy、textStrategy、backgroundTone、contentPattern、emphasisOrder、absoluteLayout。',
+        'absoluteLayout 必须输出，layers 只允许 role: title/slogan/body/cta/hero/qrcode/badge/priceTag/priceNum/meta1/meta2/chip1/chip2/chip3/chip4/logo，坐标用 0~1 相对值。',
         '要求：版式必须先服务主题和主图，不要机械套模板；标题区要大，按钮要清晰，信息卡不要拥挤，不要挡住主体。',
+        '如果多模态图像语义与 preset 偏好冲突，以主题、主图构图和转化目标为准。',
         '除非主图背景确实复杂或主体紧贴文字区，否则不要默认给整块深色大面板；优先用留白、安全区、描边字、浅色磨砂条解决可读性。',
       ].join('\n')
     : [
@@ -5022,7 +5895,7 @@ async function relayoutDesignPlanInternal(input: PosterGenerateInput, candidates
         generationMode === 'fast'
           ? '本次是快速生成模式：请给出最稳、最清晰、最适合直接成片的版式规划，优先减少冲突和信息拥挤。'
           : '本次排版规划以效果优先，不需要节省生成成本，请按最高质量完成，相当于把可用鲲币都用于提升成片版式完成度。',
-        `前端偏好：${input.presetKey || 'AI自由推荐'}（仅作风格参考，不是版式约束）`,
+        `前端偏好：${input.presetKey || 'AI自由推荐'}（仅作候选骨架参考，不是版式约束，更不是主导结果）`,
         `主题：${input.theme || '未填写'}`,
         `行业：${input.industry || DEFAULT_INDUSTRY}`,
         `用途：${input.purpose || '推广'}`,
@@ -5040,8 +5913,10 @@ async function relayoutDesignPlanInternal(input: PosterGenerateInput, candidates
         `信息卡：${(copyDeck?.factCards || []).map((item) => `${item.label}:${item.value}`).join(' | ') || '无'}`,
         `是否有二维码：${String(Boolean(input.qrUrl))}`,
         `可用骨架列表：${allow.join(', ')}`,
-        '输出字段：layoutFamily、density、heroStrategy、ctaStrength、ctaStyle、qrStrategy、textStrategy、backgroundTone、contentPattern、emphasisOrder。',
+        '输出字段：layoutFamily、density、heroStrategy、ctaStrength、ctaStyle、qrStrategy、textStrategy、backgroundTone、contentPattern、emphasisOrder、absoluteLayout。',
+        'absoluteLayout 必须输出，layers 只允许 role: title/slogan/body/cta/hero/qrcode/badge/priceTag/priceNum/meta1/meta2/chip1/chip2/chip3/chip4/logo，坐标用 0~1 相对值。',
         '目标：标题更大，信息分区更清楚，按钮更醒目，尽量避免黑色大面板压住主图；版式要跟主题和图片语义匹配，不要机械复用固定模板感。',
+        '如果主图语义和 presetKey 倾向冲突，优先让主图构图、信息层级和海报目标决定版式。',
         '如果画面本身有足够干净的留白区，请优先输出 clean / outline 文字策略，而不是 panel。',
       ].join('\n')
 
@@ -5206,6 +6081,7 @@ async function generateMultimodalLayoutHintsInternal(
         'suggestedPlacement 只允许 role: heroHeadline/supportLine/body/cta/badge/priceBlock；坐标全部用 0~1 的 x/y/w/h。',
         'textStyleHints.treatment 只允许 clean/outline/panel。',
         'layoutDecision.recommendedFamily 只允许：hero-center, hero-left, split-editorial, grid-product, magazine-cover, festive-frame, list-recruitment, xiaohongshu-note, clean-course, premium-offer。',
+        '主图构图、主体避让和封面第一眼优先级高于 preset/template 偏好；不要因为模板倾向而牺牲标题位置或主图呼吸感。',
         '若主体占据中心、人物靠近文字区、背景过亮或纹理复杂，请给 avoidZones，并在 visualAnalysis.needsPanel 中明确 true/false。',
         '只有在确实没有可读文字安全区时才把 needsPanel 设为 true；若存在大片干净留白或单色区域，优先给 clean 或 outline。',
         '不要解释，不要 markdown，不要额外字段。',
@@ -5233,6 +6109,7 @@ async function generateMultimodalLayoutHintsInternal(
         'suggestedPlacement 仅允许 role 为 heroHeadline/supportLine/body/cta/badge/priceBlock。',
         'textStyleHints 仅允许 treatment 为 clean/outline/panel。',
         'layoutDecision.recommendedFamily 仅允许以下之一：hero-center, hero-left, split-editorial, grid-product, magazine-cover, festive-frame, list-recruitment, xiaohongshu-note, clean-course, premium-offer。',
+        '版式判断以图片可用安全区、主体方向、标题权重和转化目标为先，不要被 preset/template 候选绑死。',
         '如果图片主体在中间或右下，请优先给出避让建议和更合适的文字安全区。',
         '必须考虑文字可读性：背景复杂或反差不足时 needsPanel=true，并为标题/正文给出 panel 颜色。',
         '如果主图已经有可用留白区，请优先使用 clean 或 outline，并尽量避免输出会遮挡主体的大面板建议。',
@@ -5287,6 +6164,16 @@ async function generateMultimodalLayoutHintsWithBackups(
   }
 }
 async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<PosterGenerateResult> {
+  const traceId = randomCode(8)
+  const totalStartedAt = nowMs()
+  logPosterStage(traceId, 'draft', 'start', {
+    theme: input.theme,
+    generationMode: normalizeGenerationMode(input.generationMode),
+    sizeKey: input.sizeKey,
+    industry: input.industry,
+    wantHero: input.generateHeroImage !== false,
+    wantBackground: input.generateBackgroundImage !== false,
+  })
   const size = sizeMap[input.sizeKey] || sizeMap.xiaohongshu
   const generationMode = normalizeGenerationMode(input.generationMode)
   const templateCandidates = getTemplateCandidatesSmart(input.presetKey || '', input.industry, 6, input)
@@ -5295,8 +6182,22 @@ async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<Post
   const wantBackground = input.generateBackgroundImage !== false
   const hasBackgroundBase = Boolean(String(input.baseImageUrl || '').trim())
   const fastBackground = useFastBackgroundGeneration()
-  const buildHeroFallback = (error: unknown): ProviderResult<PosterImageResult> => ({
-    result: { imageUrl: '', prompt: '' },
+  const buildHeroFallback = (error: unknown): ProviderResult<HeroGenerationResult> => ({
+    result: {
+      hero: { imageUrl: '', prompt: '' },
+      heroCandidates: [],
+      recommendedHeroCandidateIndex: 0,
+      heroSelectionMode: generationMode === 'fast' ? 'auto' : 'manual',
+      heroSelectionMeta: {
+        recommendedIndex: 0,
+        selectedIndex: 0,
+        selectionMode: generationMode === 'fast' ? 'auto' : 'manual',
+        lowConfidence: true,
+        topScore: 0,
+        spread: 0,
+      },
+      referenceImageUsed: false,
+    },
     meta: getProviderMeta('image', { provider: 'none', model: 'hero-fallback', isMockFallback: true, message: `主图生成失败，已返回可编辑排版草案：${sanitizeCutoutFailure(error) || (error as Error)?.message || 'unknown error'}` }, generationMode),
   })
   const buildBackgroundFallback = (error: unknown): ProviderResult<PosterImageResult> => ({
@@ -5304,25 +6205,38 @@ async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<Post
     meta: getProviderMeta('background', { provider: 'none', model: 'background-fallback', isMockFallback: true, message: `背景生成失败，已回退为纯排版草案：${sanitizeCutoutFailure(error) || (error as Error)?.message || 'unknown error'}` }, generationMode),
   })
 
-  const copyTask = generateCopyInternal(input, 'draft')
-  const paletteTask = generatePaletteWithBackups(input, 'draft')
-  const heroPromise = wantHero
-    ? generateHeroImageInternal(input, paletteByIndustry[input.industry] || paletteByIndustry[DEFAULT_INDUSTRY], size)
-      .catch((error) => buildHeroFallback(error))
-    : Promise.resolve({
-      result: { imageUrl: '', prompt: '' },
-      meta: getProviderMeta('image', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 主图，仅生成背景与文案版式。' }, generationMode),
-      } as ProviderResult<PosterImageResult>)
+  const copyStartedAt = nowMs()
+  const paletteStartedAt = nowMs()
+  const copyTask = generateCopyWithBackups(input, 'draft').then((result) => {
+    logPosterStage(traceId, 'copy', 'copy stage finished', {
+      elapsed: formatDurationMs(copyStartedAt),
+      provider: result.meta?.provider || '',
+      model: result.meta?.model || '',
+      titleLength: String(result.result?.title || '').trim().length,
+      proofPointCount: Array.isArray(result.result?.proofPoints) ? result.result.proofPoints.length : 0,
+    })
+    return result
+  })
+  const paletteTask = generatePaletteWithBackups(input, 'draft').then((result) => {
+    logPosterStage(traceId, 'palette', 'palette stage finished', {
+      elapsed: formatDurationMs(paletteStartedAt),
+      provider: result.meta?.provider || '',
+      model: result.meta?.model || '',
+      swatchCount: Array.isArray(result.result?.swatches) ? result.result.swatches.length : 0,
+    })
+    return result
+  })
 
-  const backgroundPromise = wantBackground && (hasBackgroundBase || fastBackground)
-    ? generateBackgroundInternal(input, paletteByIndustry[input.industry] || paletteByIndustry[DEFAULT_INDUSTRY], size)
-      .catch((error) => buildBackgroundFallback(error))
-    : null
-
+  const setupStartedAt = nowMs()
   const [paletteState, copyState] = await Promise.allSettled([
     paletteTask,
     copyTask,
   ])
+  logPosterStage(traceId, 'draft-setup', 'copy/palette finished', {
+    elapsed: formatDurationMs(setupStartedAt),
+    copyStatus: copyState.status,
+    paletteStatus: paletteState.status,
+  })
   const paletteResult = paletteState.status === 'fulfilled'
     ? paletteState.value
     : await generatePaletteWithBackups(input, 'draft')
@@ -5331,57 +6245,144 @@ async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<Post
   }
   const copyResult = copyState.value
   const copyProtocol = buildPosterProtocol(input, copyResult.result)
+  const relayoutStartedAt = nowMs()
   const relayoutResult = await relayoutDesignPlanWithBackups(input, templateCandidates, 'draft', copyProtocol.posterIntent, copyProtocol.copyDeck)
-  const heroResult = await heroPromise
-  const backgroundInput = wantBackground && !hasBackgroundBase && heroResult.result.imageUrl
-    ? { ...input, baseImageUrl: heroResult.result.imageUrl }
+  logPosterStage(traceId, 'relayout', 'draft relayout finished', {
+    elapsed: formatDurationMs(relayoutStartedAt),
+    layoutFamily: relayoutResult.plan?.layoutFamily || '',
+    presetKey: input.presetKey || '',
+  })
+  const designPlan = relayoutResult.plan!
+  const heroStartedAt = nowMs()
+  const heroResult = wantHero
+    ? await generateHeroImageInternal(
+      input,
+      paletteByIndustry[input.industry] || paletteByIndustry[DEFAULT_INDUSTRY],
+      size,
+      copyProtocol.posterIntent,
+      copyProtocol.copyDeck,
+      designPlan,
+    ).catch((error) => buildHeroFallback(error))
+    : ({
+      result: {
+        hero: { imageUrl: '', prompt: '' },
+        heroCandidates: [],
+        recommendedHeroCandidateIndex: 0,
+        heroSelectionMode: generationMode === 'fast' ? 'auto' : 'manual',
+        heroSelectionMeta: {
+          recommendedIndex: 0,
+          selectedIndex: 0,
+          selectionMode: generationMode === 'fast' ? 'auto' : 'manual',
+          lowConfidence: true,
+          topScore: 0,
+          spread: 0,
+        },
+        referenceImageUsed: false,
+      },
+      meta: getProviderMeta('image', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 主图，仅生成背景与文案版式。' }, generationMode),
+    } as ProviderResult<HeroGenerationResult>)
+  logPosterStage(traceId, 'hero', 'hero stage finished', {
+    elapsed: formatDurationMs(heroStartedAt),
+    hasHero: Boolean(String(heroResult.result.hero?.imageUrl || '').trim()),
+    candidateCount: heroResult.result.heroCandidates?.length || 0,
+  })
+  if (wantHero && !String(heroResult.result.hero?.imageUrl || '').trim()) {
+    const failureMessage = String(heroResult.meta?.message || '').trim()
+    throw new Error(failureMessage || 'AI 主图生成失败，已中止本次出片。')
+  }
+  const backgroundInput = wantBackground && !hasBackgroundBase && heroResult.result.hero.imageUrl
+    ? { ...input, baseImageUrl: heroResult.result.hero.imageUrl }
     : input
-  const backgroundResult = backgroundPromise
-    ? await backgroundPromise
-    : wantBackground
-      ? await generateBackgroundInternal(backgroundInput, paletteResult.result, size).catch((error) => buildBackgroundFallback(error))
-      : ({
-          result: { imageUrl: '', prompt: '' },
-          meta: getProviderMeta('background', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 背景图生成。' }, generationMode),
-        } as ProviderResult<PosterImageResult>)
-  const designPlan = relayoutResult.plan
-  const multimodalSourceUrl = String(heroResult.result.imageUrl || backgroundResult.result.imageUrl || input.sourceImageUrl || input.baseImageUrl || '').trim()
-  const multimodalLayoutResult = await generateMultimodalLayoutHintsWithBackups(
-    input,
-    multimodalSourceUrl,
-    copyProtocol.posterIntent,
-    copyProtocol.copyDeck,
-    designPlan!,
-  )
+  const backgroundStartedAt = nowMs()
+  const backgroundResult = wantBackground
+    ? await generateBackgroundInternal(backgroundInput, paletteResult.result, size).catch((error) => buildBackgroundFallback(error))
+    : ({
+      result: { imageUrl: '', prompt: '' },
+      meta: getProviderMeta('background', { provider: 'none', model: 'skipped', isMockFallback: false, message: '已跳过 AI 背景图生成。' }, generationMode),
+    } as ProviderResult<PosterImageResult>)
+  logPosterStage(traceId, 'background', 'background stage finished', {
+    elapsed: formatDurationMs(backgroundStartedAt),
+    hasBackground: Boolean(String(backgroundResult.result.imageUrl || '').trim()),
+    usedHeroAsBase: Boolean(wantBackground && !hasBackgroundBase && heroResult.result.hero.imageUrl),
+  })
+  const multimodalLayoutResult = {
+    result: heroResult.result.multimodalLayoutHints || buildAiPlanDerivedMultimodalLayoutHints(copyProtocol.posterIntent, copyProtocol.copyDeck, designPlan),
+    meta: getProviderMeta('multimodalLayout', {
+      provider: 'hero-candidate-scoring',
+      model: getHeroScoringProvider(),
+      isMockFallback: false,
+      message: generationMode === 'fast' ? '已基于候选主图评分结果自动选择安全区更稳的主图。' : '已基于候选主图评分结果生成推荐主图与安全区建议。',
+    }, generationMode),
+  }
   let finalProtocol = copyProtocol
   let finalDesignPlan = applyMultimodalPlanOverride(size, designPlan!, multimodalLayoutResult.result)
   let finalMultimodalLayoutResult = multimodalLayoutResult
-  let qualityHints = buildPosterQualityHints(finalDesignPlan, finalProtocol.copyDeck, Boolean(String(heroResult.result.imageUrl || '').trim()))
-  let qualityReport = evaluatePosterQuality(finalDesignPlan, finalProtocol.copyDeck, Boolean(String(heroResult.result.imageUrl || '').trim()))
+  let qualityHints = buildPosterQualityHints(finalDesignPlan, finalProtocol.copyDeck, Boolean(String(heroResult.result.hero.imageUrl || '').trim()))
+  let qualityReport = evaluatePosterQuality(finalDesignPlan, finalProtocol.copyDeck, Boolean(String(heroResult.result.hero.imageUrl || '').trim()))
+  const compositionStartedAt = nowMs()
+  let finalCompositionReport = evaluatePosterFinalComposition(
+    finalDesignPlan,
+    finalProtocol.copyDeck,
+    Boolean(String(heroResult.result.hero.imageUrl || '').trim()),
+    qualityReport,
+    {
+      multimodalHints: finalMultimodalLayoutResult.result,
+      heroSelectionMeta: heroResult.result.heroSelectionMeta,
+    },
+  )
+  logPosterStage(traceId, 'composition', 'initial composition evaluated', {
+    elapsed: formatDurationMs(compositionStartedAt),
+    totalScore: finalCompositionReport.totalScore,
+  })
   let finalRelayoutMeta = relayoutResult.meta
-  if (generationMode !== 'fast' && qualityReport.needsRefine) {
+  if (generationMode !== 'fast' && (qualityReport.needsRefine || finalCompositionReport.totalScore < 82)) {
+    const refineStartedAt = nowMs()
     const refinedProtocol = refinePosterProtocolLocally(input, finalProtocol, qualityReport)
     const refinedRelayoutResult = await relayoutDesignPlanWithBackups(input, templateCandidates, 'refine', refinedProtocol.posterIntent, refinedProtocol.copyDeck)
     const refinedPlan = refinedRelayoutResult.plan || finalDesignPlan
     const refinedMultimodal = await generateMultimodalLayoutHintsWithBackups(
       input,
-      multimodalSourceUrl,
+      String(heroResult.result.hero.imageUrl || backgroundResult.result.imageUrl || input.sourceImageUrl || input.baseImageUrl || '').trim(),
       refinedProtocol.posterIntent,
       refinedProtocol.copyDeck,
       refinedPlan!,
     )
     const refinedPlanWithHints = applyMultimodalPlanOverride(size, refinedPlan!, refinedMultimodal.result)
-    const refinedHints = buildPosterQualityHints(refinedPlanWithHints, refinedProtocol.copyDeck, Boolean(String(heroResult.result.imageUrl || '').trim()))
-    const refinedQuality = evaluatePosterQuality(refinedPlanWithHints, refinedProtocol.copyDeck, Boolean(String(heroResult.result.imageUrl || '').trim()))
-    if (refinedQuality.score >= qualityReport.score) {
+    const refinedHints = buildPosterQualityHints(refinedPlanWithHints, refinedProtocol.copyDeck, Boolean(String(heroResult.result.hero.imageUrl || '').trim()))
+    const refinedQuality = evaluatePosterQuality(refinedPlanWithHints, refinedProtocol.copyDeck, Boolean(String(heroResult.result.hero.imageUrl || '').trim()))
+    const refinedCompositionReport = evaluatePosterFinalComposition(
+      refinedPlanWithHints,
+      refinedProtocol.copyDeck,
+      Boolean(String(heroResult.result.hero.imageUrl || '').trim()),
+      refinedQuality,
+      {
+        multimodalHints: refinedMultimodal.result,
+        heroSelectionMeta: heroResult.result.heroSelectionMeta,
+      },
+    )
+    if (refinedCompositionReport.totalScore >= finalCompositionReport.totalScore) {
       finalProtocol = refinedProtocol
       finalDesignPlan = refinedPlanWithHints
       finalMultimodalLayoutResult = refinedMultimodal
       finalRelayoutMeta = refinedRelayoutResult.meta || finalRelayoutMeta
-      qualityHints = Array.from(new Set([...refinedHints, '已执行一次自动成片细化']))
+      qualityHints = Array.from(new Set([...refinedHints, ...refinedCompositionReport.suggestions, '已执行一次自动成片细化']))
       qualityReport = refinedQuality
+      finalCompositionReport = refinedCompositionReport
     }
+    logPosterStage(traceId, 'refine', 'refine stage finished', {
+      elapsed: formatDurationMs(refineStartedAt),
+      refinedScore: refinedCompositionReport.totalScore,
+      accepted: refinedCompositionReport.totalScore >= finalCompositionReport.totalScore,
+    })
   }
+  qualityHints = Array.from(new Set([...qualityHints, ...finalCompositionReport.suggestions]))
+  logPosterStage(traceId, 'draft', 'done', {
+    elapsed: formatDurationMs(totalStartedAt),
+    finalScore: finalCompositionReport.totalScore,
+    heroCandidates: heroResult.result.heroCandidates?.length || 0,
+    hasHero: Boolean(String(heroResult.result.hero?.imageUrl || '').trim()),
+    hasBackground: Boolean(String(backgroundResult.result.imageUrl || '').trim()),
+  })
   return {
     title: finalProtocol.copy.title,
     slogan: finalProtocol.copy.slogan,
@@ -5393,7 +6394,12 @@ async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<Post
     proofPoints: finalProtocol.copy.proofPoints,
     palette: paletteResult.result,
     background: backgroundResult.result,
-    hero: heroResult.result,
+    hero: heroResult.result.hero,
+    heroCandidates: heroResult.result.heroCandidates,
+    recommendedHeroCandidateIndex: heroResult.result.recommendedHeroCandidateIndex,
+    heroSelectionMode: heroResult.result.heroSelectionMode,
+    heroSelectionMeta: heroResult.result.heroSelectionMeta,
+    referenceImageUsed: heroResult.result.referenceImageUsed,
     recommendedTemplate: recommendation.listItem,
     recommendedTemplates: templateCandidates,
     templateCandidates,
@@ -5403,6 +6409,7 @@ async function generatePosterDraftOnce(input: PosterGenerateInput): Promise<Post
     multimodalLayoutHints: finalMultimodalLayoutResult.result,
     qualityHints,
     qualityReport,
+    finalCompositionReport,
     size,
     providerMeta: { copy: copyResult.meta, palette: paletteResult.meta, background: backgroundResult.meta, image: heroResult.meta, relayout: finalRelayoutMeta, multimodalLayout: finalMultimodalLayoutResult.meta, generation: getProviderMeta('image', { provider: 'aliyun-bailian', model: generationMode === 'fast' ? 'fast-poster-flow' : 'quality-poster-flow', message: generationMode === 'fast' ? '当前为快速生成：优先更快出成片。' : '当前为高质量生成：优先更强质感与成片效果。' }, generationMode) },
   }
@@ -5425,7 +6432,7 @@ export async function generatePosterDraft(req: any, res: any) { try { send.succe
 export async function generateCopy(req: any, res: any) {
   const input = normalizeInput(req.body || {})
   try {
-    const result = await generateCopyInternal(input, 'rewrite')
+    const result = await generateCopyWithBackups(input, 'rewrite')
     send.success(res, {
       title: result.result.title,
       slogan: result.result.slogan,
