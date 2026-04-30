@@ -1,0 +1,40 @@
+services:
+  api:
+    image: poster-design-api:prebuilt
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "7001"
+      FILE_STORAGE_PATH: /app/static/
+      PUPPETEER_EXECUTABLE_PATH: ${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium-headless-shell}
+      PUPPETEER_PAGE_BASE_URL: http://web
+    entrypoint:
+      - /bin/sh
+      - /opt/bootstrap/bootstrap-cutout.sh
+    volumes:
+      - poster_api_static:/app/static
+      - poster_api_cutout_runtime:/opt/cutout-runtime
+      - ./bootstrap-cutout.sh:/opt/bootstrap/bootstrap-cutout.sh:ro
+      - ./cutout_worker.py:/opt/bootstrap/cutout_worker.py:ro
+    restart: unless-stopped
+    networks:
+      - poster_net
+
+  web:
+    image: poster-design-web:prebuilt
+    ports:
+      - "${HTTP_PUBLISH_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - poster_net
+
+volumes:
+  poster_api_static:
+  poster_api_cutout_runtime:
+
+networks:
+  poster_net:
+    driver: bridge

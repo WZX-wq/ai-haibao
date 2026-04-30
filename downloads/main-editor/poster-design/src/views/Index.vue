@@ -7,9 +7,25 @@
 
       <div v-else class="page-design-shell">
         <design-board ref="designBoardRef" class="page-design-wrap" pageDesignCanvasId="page-design-canvas">
-          <div class="shelter" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
-          <div class="shelter-bg transparent-bg" :style="{ width: Math.floor((dPage.width * dZoom) / 100) + 'px', height: Math.floor((dPage.height * dZoom) / 100) + 'px' }"></div>
+          <template v-if="showBoardShelter">
+            <div class="shelter" :style="boardViewportStyle"></div>
+          </template>
         </design-board>
+
+        <div v-if="state.aiPosterLoadingVisible" class="ai-poster-loading-layer">
+          <div class="ai-poster-loading-layer__card">
+            <div class="ai-poster-loading-layer__eyebrow">{{ state.aiPosterLoadingEyebrow }}</div>
+            <div class="ai-poster-loading-layer__title">{{ state.aiPosterLoadingTitle }}</div>
+            <div class="ai-poster-loading-layer__desc">{{ state.aiPosterLoadingMessage }}</div>
+            <div class="ai-poster-loading-layer__bar">
+              <div class="ai-poster-loading-layer__bar-fill" :style="{ width: `${state.aiPosterLoadingPercent}%` }"></div>
+            </div>
+            <div class="ai-poster-loading-layer__foot">
+              <span>{{ state.aiPosterLoadingShowPercent ? `${Math.max(1, Math.round(state.aiPosterLoadingPercent))}%` : (state.aiPosterLoadingPhaseLabel || '处理中…') }}</span>
+              <span>别急，正在把画面往顺眼的方向推</span>
+            </div>
+          </div>
+        </div>
 
         <div class="editor-action-dock">
           <div class="editor-action-dock__tools">
@@ -152,6 +168,13 @@ type TState = {
   downloadText: string
   downloadMsg: string | undefined
   downloadImage: string
+  aiPosterLoadingVisible: boolean
+  aiPosterLoadingPercent: number
+  aiPosterLoadingTitle: string
+  aiPosterLoadingMessage: string
+  aiPosterLoadingEyebrow: string
+  aiPosterLoadingPhaseLabel: string
+  aiPosterLoadingShowPercent: boolean
   isContinue: boolean
   APP_NAME: string
   showLineGuides: boolean
@@ -164,6 +187,13 @@ const state = reactive<TState>({
   downloadText: '',
   downloadMsg: '',
   downloadImage: '',
+  aiPosterLoadingVisible: false,
+  aiPosterLoadingPercent: 0,
+  aiPosterLoadingTitle: '',
+  aiPosterLoadingMessage: '',
+  aiPosterLoadingEyebrow: 'AI 海报出片中',
+  aiPosterLoadingPhaseLabel: '',
+  aiPosterLoadingShowPercent: true,
   isContinue: true,
   APP_NAME: _config.APP_NAME,
   showLineGuides: false,
@@ -176,6 +206,69 @@ const zoomControlRef = ref<typeof zoomControl | null>(null)
 const designBoardRef = ref<InstanceType<typeof designBoard> | null>(null)
 const createDesignRef: Ref<typeof createDesign | null> = ref(null)
 const isWelcomeMode = computed(() => String(route.query.section || 'welcome') === 'welcome')
+const isAiPosterMode = computed(() => String(route.query.section || '') === 'ai-poster')
+const hasAiPosterLayers = computed(() =>
+  widgetStore.dWidgets.some((item) => {
+    const name = String(item?.name || '').trim()
+    return name.startsWith('ai_')
+  }),
+)
+const showBoardShelter = computed(() => !isAiPosterMode.value && !hasAiPosterLayers.value)
+const boardViewportStyle = computed(() => ({
+  width: Math.floor((Number(dPage.value.width || 0) * Number(dZoom.value || 100)) / 100) + 'px',
+  height: Math.floor((Number(dPage.value.height || 0) * Number(dZoom.value || 100)) / 100) + 'px',
+}))
+
+type AiPosterLoadingAction = 'generate' | 'copy' | 'image' | 'relayout' | 'recommend'
+type AiPosterLoadingMode = 'fast' | 'quality'
+type AiPosterLoadingEventDetail = {
+  status: 'start' | 'finish'
+  action: AiPosterLoadingAction
+  mode?: AiPosterLoadingMode
+  success?: boolean
+}
+
+const AI_POSTER_LOADING_EVENT = 'ai-poster-loading'
+const aiPosterLoadingTimer = ref<number | null>(null)
+const aiPosterLoadingCloseTimer = ref<number | null>(null)
+const aiPosterLoadingPhaseIndex = ref(0)
+const aiPosterLoadingStartedAt = ref(0)
+const AI_POSTER_LOADING_LONG_WAIT_MS = 18000
+const AI_POSTER_LOADING_DEEP_STAGE_MS = 12000
+
+const aiPosterLoadingPhrases: Record<AiPosterLoadingAction, string[]> = {
+  generate: [
+    '先铺一层灵感底稿',
+    '在替你找更顺眼的主视觉',
+    '标题和画面正在互相让位',
+    '卖点、按钮和节奏感开始归位',
+    '最后再压一压成片质感',
+  ],
+  copy: [
+    '标题先瘦身，别让它说废话',
+    '副标题正在改成更像海报的短句',
+    '把卖点压成能直接上版的词块',
+    'CTA 正在换一身更会转化的语气',
+  ],
+  image: [
+    '主视觉正在换一张更搭主题的脸',
+    '先把背景情绪拉到同一频道',
+    '主体位置在给文字腾安全区',
+    '再检查一遍图和文有没有抢戏',
+  ],
+  relayout: [
+    '先给标题腾出第一眼的位置',
+    '卡片和按钮正在重新站队',
+    '把拥挤的地方慢慢压松一点',
+    '最后对齐节奏，让版面更像成片',
+  ],
+  recommend: [
+    '先闻一闻这张海报该是什么气质',
+    '文案、配色和语气正在重新配对',
+    '把生硬的信息压成更能上版的句子',
+    '顺手给画面补一层更舒服的颜色关系',
+  ],
+}
 
 const beforeUnload = function (e: Event): any {
   if (dHistoryStack.value.changes.length > 0) {
@@ -279,11 +372,10 @@ function applyAiPosterDesignIfNeeded() {
   try {
     const payload = deepNormalizeLoopbackMediaUrls(JSON.parse(raw))
     if (!payload?.page || !Array.isArray(payload.widgets)) return false
-    widgetStore.setDLayouts([{ global: payload.page, layers: payload.widgets }])
     pageStore.setDCurrentPage(0)
-    widgetStore.setDWidgets(payload.widgets)
+    widgetStore.setDLayouts([{ global: payload.page, layers: payload.widgets }])
     pageStore.setDPage(payload.page)
-    widgetStore.selectWidget({ uuid: payload.widgets[0]?.uuid || '-1' })
+    widgetStore.selectWidget({ uuid: '-1' })
     return true
   } catch (error) {
     console.error('failed to apply ai poster design handoff', error)
@@ -300,6 +392,140 @@ function optionsChange({ downloadPercent, downloadText, downloadMsg, downloadIma
   if (downloadImage !== undefined) {
     state.downloadImage = downloadImage
   }
+}
+
+function clearAiPosterLoadingTimers() {
+  if (aiPosterLoadingTimer.value) {
+    window.clearInterval(aiPosterLoadingTimer.value)
+    aiPosterLoadingTimer.value = null
+  }
+  if (aiPosterLoadingCloseTimer.value) {
+    window.clearTimeout(aiPosterLoadingCloseTimer.value)
+    aiPosterLoadingCloseTimer.value = null
+  }
+}
+
+function getAiPosterLoadingMeta(action: AiPosterLoadingAction, mode: AiPosterLoadingMode = 'quality', percent: number) {
+  const phrases = aiPosterLoadingPhrases[action] || aiPosterLoadingPhrases.generate
+  const index = Math.min(phrases.length - 1, Math.max(0, aiPosterLoadingPhaseIndex.value))
+  const title = phrases[index]
+  const eyebrowMap: Record<AiPosterLoadingAction, string> = {
+    generate: mode === 'fast' ? 'AI 快速起版中' : 'AI 高质量出片中',
+    copy: 'AI 正在重写文案',
+    image: 'AI 正在重做主图',
+    relayout: 'AI 正在重排版式',
+    recommend: 'AI 正在润色内容',
+  }
+  const messageMap: Record<AiPosterLoadingAction, string[]> = {
+    generate: [
+      '先把主题、风格和画面气质对齐。',
+      '主图、标题和信息块正在找彼此舒服的位置。',
+      '这一轮会优先保证你看到的是能继续编辑的成片草案。',
+    ],
+    copy: [
+      '这次会把说明句往封面短句和词块方向再压一压。',
+      '尽量让标题、副标题和卡片各说各的，不互相复读。',
+      '文案会保留成文本图层，改起来还是很轻松。',
+    ],
+    image: [
+      '会先看场景，再决定主体该更满、更轻还是更干净。',
+      '顺手会避开一上来就把人物硬塞满画面的老毛病。',
+      '图出来后还会再让它给文字留出呼吸区。',
+    ],
+    relayout: [
+      '重点先处理遮挡、重叠、字太小这些肉眼会先皱眉的问题。',
+      '能不加底框就不加，只有背景真的吵才会帮文字垫一层。',
+      '这一轮主要是把结构拧顺，不是简单挪两下位置。',
+    ],
+    recommend: [
+      '会优先把语气、节奏和配色拧到同一条线上。',
+      '不让文案只剩“主题 + 描述”的说明腔。',
+      '配色建议会尽量贴近当前画面，而不是另起一套风格。',
+    ],
+  }
+  const msgs = messageMap[action] || messageMap.generate
+  const msgIndex = percent < 32 ? 0 : percent < 68 ? 1 : 2
+  return {
+    eyebrow: eyebrowMap[action],
+    title,
+    message: msgs[msgIndex],
+  }
+}
+
+function startAiPosterLoading(action: AiPosterLoadingAction, mode: AiPosterLoadingMode = 'quality') {
+  clearAiPosterLoadingTimers()
+  aiPosterLoadingPhaseIndex.value = 0
+  aiPosterLoadingStartedAt.value = Date.now()
+  state.aiPosterLoadingVisible = true
+  state.aiPosterLoadingPercent = 6
+  state.aiPosterLoadingPhaseLabel = ''
+  state.aiPosterLoadingShowPercent = true
+  const initial = getAiPosterLoadingMeta(action, mode, state.aiPosterLoadingPercent)
+  state.aiPosterLoadingEyebrow = initial.eyebrow
+  state.aiPosterLoadingTitle = initial.title
+  state.aiPosterLoadingMessage = initial.message
+  aiPosterLoadingTimer.value = window.setInterval(() => {
+    const current = state.aiPosterLoadingPercent
+    const elapsed = Date.now() - aiPosterLoadingStartedAt.value
+    const deepStage = elapsed >= AI_POSTER_LOADING_DEEP_STAGE_MS
+    const longWait = elapsed >= AI_POSTER_LOADING_LONG_WAIT_MS
+    const cap = longWait ? 94 : mode === 'fast' ? 90 : 92
+    if (current >= cap) {
+      state.aiPosterLoadingPhaseLabel = longWait ? '成片处理中…' : deepStage ? '成片深化中…' : ''
+      state.aiPosterLoadingShowPercent = !(deepStage || longWait)
+      if (longWait && action === 'generate') {
+        state.aiPosterLoadingTitle = mode === 'fast' ? '主图和版式还在收尾' : '正在做最后的成片检查'
+        state.aiPosterLoadingMessage = mode === 'fast'
+          ? '这轮是质量优先，主图、文案和版式会一起等到能落画布再回来。'
+          : '会继续把主图安全区、文字可读性和 CTA 节奏一起压顺。'
+      } else if (deepStage && action === 'generate') {
+        state.aiPosterLoadingTitle = mode === 'fast' ? '已经进入成片阶段' : '正在继续打磨成片细节'
+        state.aiPosterLoadingMessage = mode === 'fast'
+          ? '这不是卡住，后面还会继续生成海报；现在主要在等主图、文案和排版一起落稳。'
+          : '这一段会比前面的起版慢一些，因为正在做主图、文字和层级的联合收束。'
+      }
+      return
+    }
+    const step = current < 28 ? 5 : current < 56 ? 3.5 : current < 78 ? 2.2 : longWait ? 0.5 : 1.1
+    const next = Math.min(cap, current + step)
+    state.aiPosterLoadingPercent = next
+    state.aiPosterLoadingPhaseLabel = longWait ? '成片处理中…' : deepStage ? '成片深化中…' : ''
+    state.aiPosterLoadingShowPercent = !(deepStage || longWait)
+    const phaseCount = aiPosterLoadingPhrases[action]?.length || 1
+    aiPosterLoadingPhaseIndex.value = Math.min(phaseCount - 1, Math.floor((next / 100) * phaseCount))
+    const meta = getAiPosterLoadingMeta(action, mode, next)
+    state.aiPosterLoadingEyebrow = meta.eyebrow
+    state.aiPosterLoadingTitle = meta.title
+    state.aiPosterLoadingMessage = meta.message
+  }, 950)
+}
+
+function finishAiPosterLoading(action: AiPosterLoadingAction, mode: AiPosterLoadingMode = 'quality', success = true) {
+  clearAiPosterLoadingTimers()
+  state.aiPosterLoadingPercent = 100
+  state.aiPosterLoadingPhaseLabel = success ? '已完成' : ''
+  state.aiPosterLoadingShowPercent = false
+  state.aiPosterLoadingEyebrow = success ? '马上出片' : '这次没完全接住'
+  state.aiPosterLoadingTitle = success ? '收最后一笔，准备把海报放上来' : '灵感有点卡壳，先把现场收一收'
+  state.aiPosterLoadingMessage = success
+    ? getAiPosterLoadingMeta(action, mode, 100).message
+    : '你可以直接再点一次，系统会重新拉起这一轮生成。'
+  aiPosterLoadingCloseTimer.value = window.setTimeout(() => {
+    state.aiPosterLoadingVisible = false
+    state.aiPosterLoadingPercent = 0
+    state.aiPosterLoadingPhaseLabel = ''
+    state.aiPosterLoadingShowPercent = true
+  }, success ? 420 : 900)
+}
+
+function handleAiPosterLoadingEvent(event: Event) {
+  const detail = (event as CustomEvent<AiPosterLoadingEventDetail>).detail
+  if (!detail?.action || !detail?.status) return
+  if (detail.status === 'start') {
+    startAiPosterLoading(detail.action, detail.mode || 'quality')
+    return
+  }
+  finishAiPosterLoading(detail.action, detail.mode || 'quality', detail.success !== false)
 }
 
 function handleHistory(data: 'undo' | 'redo') {
@@ -334,6 +560,42 @@ function closeMobilePanel() {
   state.mobilePanelOpen = false
 }
 
+function syncAiPosterEmptyCanvasBackground() {
+  const page = pageStore.getDPage() as any
+  const transparentBackgroundColor = '#ffffff00'
+  const defaultBackgroundColor = '#ffffffff'
+  const isPlainTransparentBackground = (
+    String(page?.backgroundColor || '').toLowerCase() === transparentBackgroundColor &&
+    !String(page?.backgroundGradient || '').trim() &&
+    !String(page?.backgroundImage || '').trim()
+  )
+
+  if (!isAiPosterMode.value || widgetStore.dWidgets.length > 0) {
+    if (!isPlainTransparentBackground) return
+    pageStore.setDPage({
+      ...page,
+      backgroundColor: defaultBackgroundColor,
+      backgroundGradient: '',
+      backgroundImage: '',
+      backgroundTransform: {},
+    } as any)
+    return
+  }
+
+  if (
+    isPlainTransparentBackground
+  ) {
+    return
+  }
+  pageStore.setDPage({
+    ...page,
+    backgroundColor: transparentBackgroundColor,
+    backgroundGradient: '',
+    backgroundImage: '',
+    backgroundTransform: {},
+  } as any)
+}
+
 const { handleKeydowm, handleKeyup, dealCtrl } = shortcuts.methods
 let checkCtrl: number | undefined
 const instanceFn = { save, zoomAdd, zoomSub }
@@ -342,6 +604,7 @@ onMounted(() => {
   groupStore.initGroupJson(JSON.stringify(wGroupSetting))
   document.addEventListener('keydown', handleKeydowm(controlStore, checkCtrl, instanceFn, dealCtrl), false)
   document.addEventListener('keyup', handleKeyup(controlStore, checkCtrl), false)
+  window.addEventListener(AI_POSTER_LOADING_EVENT, handleAiPosterLoadingEvent as EventListener)
   checkMobile()
   window.addEventListener('resize', checkMobile)
   loadData()
@@ -369,10 +632,26 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => [
+    isAiPosterMode.value,
+    widgetStore.dWidgets.length,
+    dPage.value.backgroundColor,
+    dPage.value.backgroundGradient,
+    dPage.value.backgroundImage,
+  ] as const,
+  () => {
+    syncAiPosterEmptyCanvasBackground()
+  },
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydowm(controlStore, checkCtrl, instanceFn, dealCtrl), false)
   document.removeEventListener('keyup', handleKeyup(controlStore, checkCtrl), false)
+  window.removeEventListener(AI_POSTER_LOADING_EVENT, handleAiPosterLoadingEvent as EventListener)
   window.removeEventListener('resize', checkMobile)
+  clearAiPosterLoadingTimers()
   document.oncontextmenu = null
 })
 
@@ -418,6 +697,80 @@ defineExpose({
 .page-design-wrap {
   position: relative;
   display: block;
+}
+
+.ai-poster-loading-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-poster-loading-layer {
+  z-index: 28;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.28) 0%, rgba(241, 245, 249, 0.52) 100%);
+  backdrop-filter: blur(10px);
+}
+
+.ai-poster-loading-layer__card {
+  width: min(460px, calc(100% - 40px));
+  padding: 22px 22px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.14);
+}
+
+.ai-poster-loading-layer__eyebrow {
+  margin-bottom: 8px;
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ai-poster-loading-layer__title {
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ai-poster-loading-layer__desc {
+  margin-top: 10px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.ai-poster-loading-layer__bar {
+  margin-top: 18px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.9);
+  overflow: hidden;
+}
+
+.ai-poster-loading-layer__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #a17bfd 0%, #976dfd 58%, #8757fb 100%);
+  box-shadow: 0 8px 18px rgba(151, 109, 253, 0.28);
+  transition: width 0.5s ease;
+}
+
+.ai-poster-loading-layer__foot {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .editor-action-dock {
@@ -620,6 +973,25 @@ defineExpose({
 
   .editor-action-dock :deep(.top-icon-wrap) {
     flex-wrap: wrap;
+  }
+
+  .ai-poster-loading-layer__card {
+    width: min(360px, calc(100% - 24px));
+    padding: 18px 16px 16px;
+    border-radius: 18px;
+  }
+
+  .ai-poster-loading-layer__title {
+    font-size: 20px;
+  }
+
+  .ai-poster-loading-layer__desc {
+    font-size: 13px;
+  }
+
+  .ai-poster-loading-layer__foot {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   :deep(#widget-panel) {

@@ -56,10 +56,18 @@ const createFolder = (folder: string) => {
   try {
     fs.accessSync(folder)
   } catch (e) {
-    fs.mkdirSync(folder)
+    fs.mkdirSync(folder, { recursive: true })
   }
 }
 createFolder(filePath)
+const legacyStorageRoot = path.resolve(String(process.env.FILE_STORAGE_PATH || '/cache/'))
+const staticRoots = Array.from(
+  new Set(
+    [String(filePath || '').trim(), path.join(process.cwd(), 'static'), legacyStorageRoot]
+      .filter(Boolean)
+      .map((item) => path.resolve(String(item).replace(/[\\/]+$/, ''))),
+  ),
+)
 
 app.all('*', (req: any, res: any, next: any) => {
   res.header('Access-Control-Allow-Origin', '*')
@@ -76,15 +84,18 @@ app.all('*', (req: any, res: any, next: any) => {
   next()
 })
 
-app.use(
-  '/static',
-  setUploadContentType,
-  express.static(process.cwd() + `/static/`, {
-    etag: true,
-    lastModified: true,
-    setHeaders: setStaticCacheHeaders,
-  }),
-)
+staticRoots.forEach((root) => {
+  createFolder(root)
+  app.use(
+    '/static',
+    setUploadContentType,
+    express.static(root, {
+      etag: true,
+      lastModified: true,
+      setHeaders: setStaticCacheHeaders,
+    }),
+  )
+})
 if (fs.existsSync(process.cwd() + `/src/mock/assets`)) {
   app.use(
     '/store',

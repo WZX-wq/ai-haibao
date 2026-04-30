@@ -878,12 +878,12 @@ onBeforeUnmount(() => {
   min-width: 156px;
   min-height: 50px;
   padding: 10px 16px;
-  border: 1px solid #2f58ad;
+  border: 1px solid #8b63ef;
   border-radius: 16px;
-  background: linear-gradient(135deg, #4d78cf 0%, #2e56aa 100%);
+  background: linear-gradient(135deg, #a17bfd 0%, #976dfd 58%, #8757fb 100%);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 14px 30px rgba(54, 94, 175, 0.28);
+  box-shadow: 0 14px 30px rgba(151, 109, 253, 0.28);
   transition: 0.2s ease;
 }
 
@@ -933,7 +933,9 @@ onBeforeUnmount(() => {
 .hero-input__button:hover,
 .floating-entry__button:hover {
   transform: translateY(-1px);
-  filter: saturate(0.98);
+  border-color: #7f52f7;
+  box-shadow: 0 16px 34px rgba(151, 109, 253, 0.34);
+  filter: saturate(1.03);
 }
 
 .category-strip {

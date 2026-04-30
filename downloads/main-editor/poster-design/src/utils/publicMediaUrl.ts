@@ -13,6 +13,24 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '0.0.0.0'
 }
 
+function isInternalMediaHostname(hostname: string): boolean {
+  const value = String(hostname || '').trim().toLowerCase()
+  return value === 'poster-local.kunqiongai.com'
+}
+
+function getStableMediaPath(url: URL): string {
+  return `${url.pathname}${url.search}${url.hash}` || '/'
+}
+
+function isLikelyMediaUrl(value: string): boolean {
+  const s = String(value || '').trim()
+  if (!s) return false
+  if (/^url\(/i.test(s)) return true
+  if (/^(https?:)?\/\//i.test(s)) return true
+  if (/^(?:\.{0,2}\/)?(?:static|api|fonts|uploads|storage|temp)\b/i.test(s)) return true
+  return false
+}
+
 /** 构建期误写入的 VITE_API_URL / VITE_SCREEN_URL 等：在非本机页面下丢弃 */
 export function sanitizeLoopbackApiBase(url: string | undefined): string | undefined {
   if (!url || typeof window === 'undefined') return url
@@ -32,11 +50,14 @@ export function sanitizeLoopbackApiBase(url: string | undefined): string | undef
 export function normalizeLoopbackMediaUrl(url: string | undefined | null): string {
   let s = String(url || '').trim()
   if (!s || typeof window === 'undefined') return s
-  if (isPageLoopbackHost()) return s
 
   const urlFn = /^url\(\s*(['"]?)(.+?)\1\s*\)$/i.exec(s)
   if (urlFn?.[2]) {
     s = String(urlFn[2]).trim()
+  }
+
+  if (!isLikelyMediaUrl(s)) {
+    return String(url || '').trim()
   }
 
   if (/^\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0)\b/i.test(s)) {
@@ -45,9 +66,13 @@ export function normalizeLoopbackMediaUrl(url: string | undefined | null): strin
 
   try {
     const u = new URL(s, window.location.origin)
+    if (isInternalMediaHostname(u.hostname)) {
+      const path = getStableMediaPath(u)
+      return isPageLoopbackHost() ? `http://127.0.0.1:7001${path}` : path
+    }
     if (isLoopbackHostname(u.hostname)) {
-      const path = `${u.pathname}${u.search}${u.hash}`
-      return path || '/'
+      if (isPageLoopbackHost()) return s
+      return getStableMediaPath(u)
     }
     if (window.location.protocol === 'https:' && u.protocol === 'http:') {
       u.protocol = 'https:'

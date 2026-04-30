@@ -62,6 +62,12 @@
           </el-col>
         </el-row>
 
+        <el-form-item label="常用尺寸" class="size-select-item">
+          <el-select v-model="form.sizeKey" class="size-select" style="width: 100%" @change="adaptCanvasSize()">
+            <el-option v-for="item in sizePresets" :key="item.key" :label="item.name" :value="item.key" />
+          </el-select>
+        </el-form-item>
+
         <el-form-item label="二维码链接">
           <el-input v-model="form.qrUrl" placeholder="可选：https://..." />
         </el-form-item>
@@ -95,6 +101,37 @@
             <span class="ai-action-card__title">{{ loading.generate && activeGenerateMode === action.mode ? '生成中...' : action.title }}</span>
           </span>
           <span v-show="!(loading.generate && activeGenerateMode === action.mode)" class="ai-action-card__cost">10鲲币</span>
+        </el-button>
+      </div>
+    </div>
+
+    <div v-if="heroCandidates.length" class="section">
+      <div class="section-title"><el-icon><Picture /></el-icon><span>主图候选</span></div>
+      <div class="candidate-tip">
+        {{ heroSelectionTip }}
+      </div>
+      <div class="hero-candidate-grid">
+        <button
+          v-for="(candidate, index) in heroCandidates"
+          :key="`${candidate.imageUrl}-${index}`"
+          type="button"
+          :class="['hero-candidate-card', { active: selectedHeroCandidateIndex === index, recommended: recommendedHeroCandidateIndex === index }]"
+          @click="selectedHeroCandidateIndex = index"
+        >
+          <span v-if="recommendedHeroCandidateIndex === index" class="hero-candidate-badge">推荐</span>
+          <img class="hero-candidate-image" :src="candidate.imageUrl" :alt="`候选主图${index + 1}`">
+          <span class="hero-candidate-score">总分 {{ candidate.score }}</span>
+          <span class="hero-candidate-breakdown">
+            留白 {{ candidate.scoreBreakdown?.whitespace ?? 0 }} / 构图 {{ candidate.scoreBreakdown?.subjectPosition ?? 0 }}
+          </span>
+          <span class="hero-candidate-breakdown">
+            清晰 {{ candidate.scoreBreakdown?.clarity ?? 0 }} / 色调 {{ candidate.scoreBreakdown?.toneMatch ?? 0 }}
+          </span>
+        </button>
+      </div>
+      <div class="candidate-actions">
+        <el-button type="primary" class="candidate-apply-btn" @click="applySelectedHeroCandidate">
+          {{ pendingQualityCandidateSelection ? '使用当前主图并继续上版' : '应用当前主图' }}
         </el-button>
       </div>
     </div>
@@ -245,6 +282,7 @@ const purposeOptions = computed(() => [
   '节日祝福',
 ])
 const sizePresets = getSizePresets()
+const AI_POSTER_FORM_STORAGE_KEY = 'ai-poster-assistant-form-v1'
 
 const pageStore = useCanvasStore()
 const widgetStore = useWidgetStore()
@@ -279,6 +317,63 @@ const form = reactive<PosterGenerateInput & { presetKey: string }>({
   generateBackgroundImage: false,
 })
 
+function buildPersistedPosterFormState() {
+  return {
+    presetKey: String(form.presetKey || '').trim(),
+    theme: String(form.theme || '').trim(),
+    purpose: String(form.purpose || '').trim(),
+    industry: String(form.industry || '').trim(),
+    style: String(form.style || '').trim(),
+    sizeKey: String(form.sizeKey || '').trim(),
+    qrUrl: String(form.qrUrl || '').trim(),
+    content: String(form.content || '').trim(),
+  }
+}
+
+function restorePersistedPosterForm() {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = window.localStorage.getItem(AI_POSTER_FORM_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw || '{}') as Partial<PosterGenerateInput & { presetKey: string }>
+    const presetKey = String(parsed.presetKey || '').trim()
+    if (presetKey && posterPresets.some((item) => item.key === presetKey)) {
+      form.presetKey = presetKey === 'smart' ? '' : presetKey
+    }
+    form.theme = String(parsed.theme || '').trim()
+    form.purpose = purposeOptions.value.includes(String(parsed.purpose || '').trim())
+      ? String(parsed.purpose || '').trim()
+      : form.purpose
+    form.industry = industries.includes(String(parsed.industry || '').trim())
+      ? String(parsed.industry || '').trim()
+      : form.industry
+    form.style = styles.includes(String(parsed.style || '').trim())
+      ? String(parsed.style || '').trim()
+      : form.style
+    form.sizeKey = sizePresets.some((item) => item.key === String(parsed.sizeKey || '').trim())
+      ? String(parsed.sizeKey || '').trim()
+      : form.sizeKey
+    form.qrUrl = String(parsed.qrUrl || '').trim()
+    form.content = String(parsed.content || '').trim()
+    // 当前界面未暴露主图/背景生成开关，避免旧本地状态把主图生成永久关掉。
+    form.generateHeroImage = true
+    form.generateBackgroundImage = false
+    adaptCanvasSize(true)
+    persistPosterForm()
+  } catch (error) {
+    console.warn('restore ai poster form failed', error)
+  }
+}
+
+function persistPosterForm() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(AI_POSTER_FORM_STORAGE_KEY, JSON.stringify(buildPersistedPosterFormState()))
+  } catch (error) {
+    console.warn('persist ai poster form failed', error)
+  }
+}
+
 const result = reactive({
   title: '',
   slogan: '',
@@ -295,6 +390,7 @@ const loading = reactive({
 })
 const activeGenerateMode = ref<PosterGenerationMode | ''>('')
 const activeRefineMode = ref<PosterGenerationMode>('fast')
+const AI_POSTER_LOADING_EVENT = 'ai-poster-loading'
 
 const generateActions = computed(() => [
   {
@@ -355,6 +451,23 @@ const currentPalette = ref<PosterPalette>({
   swatches: ['#FFF1F2', '#FFD6E0', '#FB7185', '#3F1020'],
 })
 const lastPosterResult = ref<PosterGenerateResult | null>(null)
+const selectedHeroCandidateIndex = ref(0)
+const pendingQualityCandidateSelection = ref(false)
+const heroCandidates = computed(() => Array.isArray(lastPosterResult.value?.heroCandidates) ? lastPosterResult.value?.heroCandidates || [] : [])
+const recommendedHeroCandidateIndex = computed(() => {
+  const raw = Number(lastPosterResult.value?.recommendedHeroCandidateIndex ?? lastPosterResult.value?.heroSelectionMeta?.recommendedIndex ?? 0)
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0
+})
+const heroSelectionTip = computed(() => {
+  const poster = lastPosterResult.value
+  if (!poster || !heroCandidates.value.length) return ''
+  const selectionMeta = poster.heroSelectionMeta
+  const modeText = poster.heroSelectionMode === 'manual'
+    ? '高质量模式可先挑主图，再继续上版。'
+    : '快速模式已自动选择最佳主图。'
+  const confidenceText = selectionMeta?.lowConfidence ? '当前推荐图把握一般，建议人工挑选。' : '已按留白、主体位置、清晰度和色调做过自动评分。'
+  return `${modeText}${confidenceText}`
+})
 const absoluteLayoutLayers = computed(() => {
   const layers = ((lastPosterResult.value?.designPlan as any)?.absoluteLayout?.layers || []) as Array<Record<string, any>>
   return layers.map((layer) => ({
@@ -367,27 +480,6 @@ const absoluteLayoutLayers = computed(() => {
     textAlign: String(layer.textAlign || ''),
   }))
 })
-const posterQaSummary = computed(() => {
-  const poster = lastPosterResult.value
-  if (!poster) return []
-  const copyDeck = poster.copyDeck
-  const factCardCount = Array.isArray(copyDeck?.factCards) ? copyDeck.factCards.length : 0
-  const proofCount = Array.isArray(copyDeck?.proofPoints) ? copyDeck.proofPoints.length : 0
-  const qualityHints = Array.isArray(poster.qualityHints) ? poster.qualityHints.filter(Boolean).join(' | ') : ''
-  const widgetCount = widgetStore.dWidgets.filter((item) => String(item?.name || '').startsWith('ai_')).length
-  return [
-    { label: '标题', value: String(copyDeck?.heroHeadline || poster.title || '-') },
-    { label: '按钮', value: String(copyDeck?.cta || poster.cta || '-') },
-    { label: '骨架族', value: String(poster.designPlan?.layoutFamily || '-') },
-    { label: '内容型', value: String((poster.designPlan as any)?.contentPattern || '-') },
-    { label: '信息卡', value: factCardCount > 0 ? `${factCardCount}条` : '-' },
-    { label: '卖点数', value: proofCount > 0 ? `${proofCount}条` : '-' },
-    { label: '价格块', value: copyDeck?.priceBlock?.value ? `${copyDeck.priceBlock.value}${copyDeck.priceBlock.suffix || ''}` : '-' },
-    { label: '图层数', value: widgetCount > 0 ? `${widgetCount}` : '-' },
-    { label: '提示', value: qualityHints || '-' },
-  ].filter((item) => item.value && item.value !== '-')
-})
-
 const activePalette = computed(() => currentPalette.value)
 
 function parseHexColor(input: string) {
@@ -455,13 +547,33 @@ function getPayload(generationMode: PosterGenerationMode = 'quality'): PosterGen
     generationMode,
     sourceImageUrl,
     baseImageUrl: pageBackgroundUrl || sourceImageUrl,
-    generateHeroImage: form.generateHeroImage,
+    generateHeroImage: true,
     generateBackgroundImage: false,
+    selectedHeroCandidateIndex: selectedHeroCandidateIndex.value,
   }
 }
 
 function getModeLabel(mode: PosterGenerationMode) {
   return mode === 'quality' ? '高质量' : '快速'
+}
+
+function emitAiPosterLoading(
+  status: 'start' | 'finish',
+  detail: {
+    action: 'generate' | 'copy' | 'image' | 'relayout' | 'recommend'
+    mode?: PosterGenerationMode
+    success?: boolean
+  },
+) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(AI_POSTER_LOADING_EVENT, {
+      detail: {
+        status,
+        ...detail,
+      },
+    }),
+  )
 }
 
 function getPosterTimeout(mode: PosterGenerationMode, kind: 'copy' | 'palette' | 'background' | 'image' | 'generate' | 'relayout') {
@@ -494,6 +606,12 @@ function syncResult(data: Pick<PosterGenerateResult, 'title' | 'slogan' | 'body'
 function normalizePosterMedia(poster: PosterGenerateResult): PosterGenerateResult {
   const bg = normalizeLoopbackMediaUrl(poster.background?.imageUrl || '') || ''
   const hero = normalizeLoopbackMediaUrl(poster.hero?.imageUrl || '') || ''
+  const heroCandidates = Array.isArray(poster.heroCandidates)
+    ? poster.heroCandidates.map((candidate) => ({
+      ...candidate,
+      imageUrl: normalizeLoopbackMediaUrl(candidate.imageUrl || '') || '',
+    }))
+    : []
   return {
     ...poster,
     background: {
@@ -504,7 +622,42 @@ function normalizePosterMedia(poster: PosterGenerateResult): PosterGenerateResul
       ...(poster.hero || { prompt: '' }),
       imageUrl: hero,
     },
+    heroCandidates,
   }
+}
+function buildPosterWithSelectedHero(poster: PosterGenerateResult, index: number): PosterGenerateResult {
+  const candidates = Array.isArray(poster.heroCandidates) ? poster.heroCandidates : []
+  if (!candidates.length) return poster
+  const safeIndex = Math.max(0, Math.min(index, candidates.length - 1))
+  const nextHero = candidates[safeIndex]
+  return {
+    ...poster,
+    hero: {
+      imageUrl: nextHero.imageUrl,
+      prompt: nextHero.prompt,
+    },
+    heroCandidates: candidates.map((candidate, candidateIndex) => ({
+      ...candidate,
+      selected: candidateIndex === safeIndex,
+    })),
+    multimodalLayoutHints: nextHero.multimodalLayoutHints || poster.multimodalLayoutHints,
+    heroSelectionMeta: {
+      ...(poster.heroSelectionMeta || {
+        recommendedIndex: recommendedHeroCandidateIndex.value,
+        selectionMode: poster.heroSelectionMode || 'manual',
+      }),
+      selectedIndex: safeIndex,
+    },
+  }
+}
+function applySelectedHeroCandidate() {
+  if (!lastPosterResult.value) return
+  const merged = buildPosterWithSelectedHero(lastPosterResult.value, selectedHeroCandidateIndex.value)
+  lastPosterResult.value = merged
+  const layout = buildPosterLayout({ input: getPayload(merged.heroSelectionMode === 'auto' ? 'fast' : 'quality'), result: merged })
+  applyGeneratedLayoutToCanvas(layout)
+  pendingQualityCandidateSelection.value = false
+  ElMessage.success(merged.heroSelectionMode === 'manual' ? '已应用所选主图并完成上版。' : '已切换主图。')
 }
 
 function formatProviderMeta(meta?: AiProviderMeta) {
@@ -564,6 +717,22 @@ function open() {
   applyPreset(form.presetKey || 'smart')
 }
 
+function applyGeneratedLayoutToCanvas(layout: { page: Record<string, any>; widgets: any[] }) {
+  const pageData = {
+    ...pageStore.getDPage(),
+    width: layout.page.width,
+    height: layout.page.height,
+    backgroundColor: layout.page.backgroundColor,
+    backgroundGradient: layout.page.backgroundGradient,
+    backgroundImage: layout.page.backgroundImage,
+    backgroundTransform: {},
+  } as any
+  pageStore.setDPage(pageData)
+  pageStore.setDCurrentPage(0)
+  widgetStore.setDLayouts([{ global: pageData, layers: layout.widgets as any[] }])
+  widgetStore.selectWidget({ uuid: '-1' })
+}
+
 function routeQuerySingle(key: string) {
   const v = route.query[key]
   return Array.isArray(v) ? String(v[0] || '') : String(v || '')
@@ -615,6 +784,7 @@ function applyPreset(key: string) {
     form.style = '高级简约'
     form.purpose = '品牌宣传'
     form.sizeKey = preset.sizeKey
+    adaptCanvasSize(true)
     return
   }
   if (canReplaceTheme) form.theme = preset.name
@@ -622,6 +792,7 @@ function applyPreset(key: string) {
   form.style = preset.style
   form.purpose = preset.purpose
   form.sizeKey = preset.sizeKey
+  adaptCanvasSize(true)
 }
 
 function isPresetActive(key: string) {
@@ -631,6 +802,8 @@ function isPresetActive(key: string) {
 async function recommendCopyAndPalette() {
   if (!assertAiLogin()) return
   loading.recommend = true
+  let success = false
+  emitAiPosterLoading('start', { action: 'recommend', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
     const payload = getPayload(mode)
@@ -680,18 +853,7 @@ async function recommendCopyAndPalette() {
         } as PosterGenerateResult
         lastPosterResult.value = merged
         const layout = buildPosterLayout({ input: payload, result: merged })
-        pageStore.setDPage({
-          ...pageStore.getDPage(),
-          width: layout.page.width,
-          height: layout.page.height,
-          backgroundColor: layout.page.backgroundColor,
-          backgroundGradient: layout.page.backgroundGradient,
-          backgroundImage: layout.page.backgroundImage,
-          backgroundTransform: {},
-        } as any)
-        widgetStore.setDWidgets([])
-        widgetStore.selectWidget({ uuid: '-1' })
-        layout.widgets.forEach((widget) => widgetStore.addWidget(widget))
+        applyGeneratedLayoutToCanvas(layout)
       } else {
         const page = pageStore.getDPage()
         pageStore.setDPage({
@@ -709,11 +871,13 @@ async function recommendCopyAndPalette() {
       }
       ElMessage.success(copyRes && paletteRes ? `${getModeLabel(mode)}模型已生成文案与推荐配色。` : copyRes ? `${getModeLabel(mode)}模型已生成推荐文案。` : `${getModeLabel(mode)}模型已生成推荐配色。`)
     }
+    success = true
   } catch (error) {
     console.error(error)
     notifyFriendlyError('推荐失败', error)
   } finally {
     loading.recommend = false
+    emitAiPosterLoading('finish', { action: 'recommend', mode: activeRefineMode.value, success })
   }
 }
 
@@ -721,15 +885,23 @@ async function applyPoster(generationMode: PosterGenerationMode = 'quality') {
   if (!assertAiLogin()) return
   loading.generate = true
   activeGenerateMode.value = generationMode
+  let success = false
+  emitAiPosterLoading('start', { action: 'generate', mode: generationMode })
   try {
     const payload = getPayload(generationMode)
     const timeout = getPosterTimeout(generationMode, 'generate')
     const poster = normalizePosterMedia(await requestAi<PosterGenerateResult>('ai/poster/generate', payload, timeout))
     lastPosterResult.value = poster
+    selectedHeroCandidateIndex.value = Math.max(0, Number(poster.heroSelectionMeta?.selectedIndex ?? poster.recommendedHeroCandidateIndex ?? 0))
+    pendingQualityCandidateSelection.value = generationMode === 'quality' && heroCandidates.value.length > 0
     syncResult(poster)
     currentPalette.value = poster.palette
     updateProviderTip(poster.providerMeta)
-
+    if (generationMode === 'quality' && heroCandidates.value.length > 0) {
+      success = true
+      ElMessage.success('高质量候选主图已生成，请先选择一张主图继续上版。')
+      return
+    }
     const layout = buildPosterLayout({
       input: payload,
       result: {
@@ -741,29 +913,20 @@ async function applyPoster(generationMode: PosterGenerationMode = 'quality') {
       },
     })
 
-    pageStore.setDPage({
-      ...pageStore.getDPage(),
-      width: layout.page.width,
-      height: layout.page.height,
-      backgroundColor: layout.page.backgroundColor,
-      backgroundGradient: layout.page.backgroundGradient,
-      backgroundImage: layout.page.backgroundImage,
-      backgroundTransform: {},
-    } as any)
-
-    widgetStore.setDWidgets([])
-    widgetStore.selectWidget({ uuid: '-1' })
     if (!layout.widgets.length) {
       throw new Error('AI 已返回结果，但当前排版未生成有效图层，请重试')
     }
-    layout.widgets.forEach((widget) => widgetStore.addWidget(widget))
-    ElMessage.success(generationMode === 'fast' ? '快速海报已生成，可以继续微调到成片效果。' : '高质量海报已生成，可以继续换字、换图和排版。')
+    applyGeneratedLayoutToCanvas(layout)
+    pendingQualityCandidateSelection.value = false
+    success = true
+    ElMessage.success(generationMode === 'fast' ? '快速海报已生成，系统已自动选出最佳主图。' : '高质量海报已生成，可以继续换字、换图和排版。')
   } catch (error) {
     console.error(error)
     notifyFriendlyError('生成失败', error)
   } finally {
     loading.generate = false
     activeGenerateMode.value = ''
+    emitAiPosterLoading('finish', { action: 'generate', mode: generationMode, success })
   }
 }
 
@@ -1033,18 +1196,7 @@ function applyCopyToCurrentCanvas(copy: Pick<PosterGenerateResult, 'title' | 'sl
     } as PosterGenerateResult
     lastPosterResult.value = merged
     const layout = buildPosterLayout({ input: getPayload(mode), result: merged })
-    pageStore.setDPage({
-      ...pageStore.getDPage(),
-      width: layout.page.width,
-      height: layout.page.height,
-      backgroundColor: layout.page.backgroundColor,
-      backgroundGradient: layout.page.backgroundGradient,
-      backgroundImage: layout.page.backgroundImage,
-      backgroundTransform: {},
-    } as any)
-    widgetStore.setDWidgets([])
-    widgetStore.selectWidget({ uuid: '-1' })
-    layout.widgets.forEach((widget) => widgetStore.addWidget(widget))
+    applyGeneratedLayoutToCanvas(layout)
     return true
   }
   if (ensurePosterWidgets()) {
@@ -1073,6 +1225,8 @@ async function replaceTextOnly() {
     return
   }
   loading.replaceText = true
+  let success = false
+  emitAiPosterLoading('start', { action: 'copy', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
     const before = {
@@ -1100,12 +1254,14 @@ async function replaceTextOnly() {
       before.slogan !== result.slogan ||
       before.body !== result.body ||
       before.cta !== result.cta
+    success = true
     ElMessage.success(changed ? `${getModeLabel(mode)}模型已替换文案。` : `${getModeLabel(mode)}模型已重新应用文案（本次推荐与上次相同）。`)
   } catch (error) {
     console.error(error)
     notifyFriendlyError('换字失败', error)
   } finally {
     loading.replaceText = false
+    emitAiPosterLoading('finish', { action: 'copy', mode: activeRefineMode.value, success })
   }
 }
 
@@ -1116,6 +1272,8 @@ async function replaceHeroOnly() {
     return
   }
   loading.image = true
+  let success = false
+  emitAiPosterLoading('start', { action: 'image', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
     const payload = getPayload(mode)
@@ -1169,12 +1327,14 @@ async function replaceHeroOnly() {
     }
     widgetStore.updateDWidgets()
     providerTip.value = providerMessage
+    success = true
     ElMessage.success(`${getModeLabel(mode)}模型已更新主图。`)
   } catch (error) {
     console.error(error)
     notifyFriendlyError('换图失败', error)
   } finally {
     loading.image = false
+    emitAiPosterLoading('finish', { action: 'image', mode: activeRefineMode.value, success })
   }
 }
 
@@ -1185,12 +1345,15 @@ async function relayoutLayout() {
     return
   }
   loading.relayout = true
+  let success = false
+  emitAiPosterLoading('start', { action: 'relayout', mode: activeRefineMode.value })
   try {
     const mode = activeRefineMode.value
     const relayout = await requestAi<RelayoutResult>('ai/poster/relayout', getPayload(mode), getPosterTimeout(mode, 'relayout'))
     if (!lastPosterResult.value) {
       const applied = relayoutCurrentTemplate(relayout.designPlan)
       providerTip.value = formatProviderMeta(relayout.providerMeta)
+      success = applied
       ElMessage.success(applied ? `${getModeLabel(mode)}模型已完成智能排版（模板模式）。` : '当前模板缺少可重排元素。')
       return
     }
@@ -1205,31 +1368,25 @@ async function relayoutLayout() {
     } as PosterGenerateResult
     lastPosterResult.value = merged
     const layout = buildPosterLayout({ input: getPayload(mode), result: merged })
-    pageStore.setDPage({
-      ...pageStore.getDPage(),
-      width: layout.page.width,
-      height: layout.page.height,
-      backgroundColor: layout.page.backgroundColor,
-      backgroundGradient: layout.page.backgroundGradient,
-      backgroundImage: layout.page.backgroundImage,
-      backgroundTransform: {},
-    } as any)
-    widgetStore.setDWidgets([])
-    widgetStore.selectWidget({ uuid: '-1' })
-    layout.widgets.forEach((widget) => widgetStore.addWidget(widget))
+    applyGeneratedLayoutToCanvas(layout)
     providerTip.value = formatProviderMeta(relayout.providerMeta)
+    success = true
     ElMessage.success(`${getModeLabel(mode)}模型已完成智能排版。`)
   } catch (error) {
     console.error(error)
     notifyFriendlyError('智能排版失败', error)
   } finally {
     loading.relayout = false
+    emitAiPosterLoading('finish', { action: 'relayout', mode: activeRefineMode.value, success })
   }
 }
 
-function adaptCanvasSize() {
+function adaptCanvasSize(silent = false) {
   const activeSize = sizePresets.find((item) => item.key === form.sizeKey) || sizePresets[0]
   const previousPage = pageStore.getDPage()
+  if (Number(previousPage.width || 0) === Number(activeSize.width) && Number(previousPage.height || 0) === Number(activeSize.height)) {
+    return
+  }
   pageStore.setDPage({
     ...previousPage,
     width: activeSize.width,
@@ -1239,12 +1396,15 @@ function adaptCanvasSize() {
     width: previousPage.width,
     height: previousPage.height,
   })
-  ElMessage.success('尺寸已自动适配。')
+  if (!silent) {
+    ElMessage.success('尺寸已自动适配。')
+  }
 }
 
 defineExpose({ open })
 
 onMounted(() => {
+  restorePersistedPosterForm()
   void maybeAutoGenerateFromWelcome()
 })
 
@@ -1254,10 +1414,34 @@ watch(
     void maybeAutoGenerateFromWelcome()
   },
 )
+
+watch(
+  () => ({
+    presetKey: form.presetKey,
+    theme: form.theme,
+    purpose: form.purpose,
+    industry: form.industry,
+    style: form.style,
+    sizeKey: form.sizeKey,
+    qrUrl: form.qrUrl,
+    content: form.content,
+  }),
+  () => {
+    persistPosterForm()
+  },
+  { deep: true },
+)
 </script>
 
 <style lang="less" scoped>
 .assistant {
+  --ai-poster-accent: #976dfd;
+  --ai-poster-accent-strong: #8757fb;
+  --ai-poster-accent-soft: #f4efff;
+  --ai-poster-accent-soft-2: #ede4ff;
+  --ai-poster-accent-border: #d7c6ff;
+  --ai-poster-accent-shadow: rgba(151, 109, 253, 0.18);
+  --ai-poster-accent-shadow-strong: rgba(151, 109, 253, 0.26);
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1313,6 +1497,116 @@ watch(
   }
   .section-title :deep(.el-icon) {
     color: #2563eb;
+  }
+
+  .candidate-tip {
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #475569;
+  }
+
+  .hero-candidate-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .hero-candidate-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid #dbe4f0;
+    border-radius: 8px;
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .hero-candidate-card.active {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.18);
+  }
+
+  .hero-candidate-card.recommended {
+    background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
+  }
+
+  .hero-candidate-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(124, 58, 237, 0.92);
+    color: #fff;
+    font-size: 11px;
+    line-height: 18px;
+  }
+
+  .hero-candidate-image {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 6px;
+    object-fit: cover;
+    background: #f3f4f6;
+  }
+
+  .hero-candidate-score {
+    font-size: 12px;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .hero-candidate-breakdown {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #64748b;
+  }
+
+  .candidate-actions {
+    margin-top: 10px;
+  }
+
+  .candidate-apply-btn {
+    width: 100%;
+  }
+
+  .provider-tip {
+    white-space: pre-line;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #334155;
+  }
+
+  .qa-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .qa-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  .qa-label {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .qa-value {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #0f172a;
+    word-break: break-word;
   }
 
   .strategy-grid {
@@ -1414,9 +1708,9 @@ watch(
 
   .preset-card:hover,
   .preset-card.active {
-    border-color: #7aa7ff;
-    background: linear-gradient(180deg, #eef5ff 0%, #ffffff 100%);
-    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12), 0 0 0 2px rgba(96, 165, 250, 0.12);
+    border-color: var(--ai-poster-accent);
+    background: linear-gradient(180deg, var(--ai-poster-accent-soft) 0%, #ffffff 100%);
+    box-shadow: 0 6px 18px var(--ai-poster-accent-shadow), 0 0 0 2px rgba(151, 109, 253, 0.12);
     transform: translateY(-1px);
   }
 
@@ -1446,9 +1740,9 @@ watch(
   }
 
   .generate-switch-card.active {
-    border-color: #5b88d9;
-    box-shadow: 0 0 0 2px rgba(91, 136, 217, 0.14);
-    background: linear-gradient(180deg, #eef4ff 0%, #e7f0ff 100%);
+    border-color: var(--ai-poster-accent);
+    box-shadow: 0 0 0 2px rgba(151, 109, 253, 0.14);
+    background: linear-gradient(180deg, #f5efff 0%, #efe6ff 100%);
   }
 
   .generate-switch-main {
@@ -1601,7 +1895,7 @@ watch(
     height: 20px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.88);
-    color: #31537f;
+    color: #6a43c7;
     font-size: 9px;
     font-weight: 700;
     line-height: 1;
@@ -1616,15 +1910,16 @@ watch(
     gap: 12px;
     margin: 2px 0 8px;
     padding: 8px 10px;
-    border: 1px solid #dce8f8;
+    border: 1px solid #d9e2f2;
     border-radius: 12px;
-    background: linear-gradient(180deg, #f8fbff 0%, #eff5ff 100%);
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
   }
 
   .refine-mode-label {
     font-size: 12px;
     font-weight: 700;
-    color: #1e3a5f;
+    color: #111827;
     white-space: nowrap;
   }
 
@@ -1636,12 +1931,12 @@ watch(
   }
 
   .refine-mode-chip {
-    min-height: 34px;
+    min-height: 32px;
     padding: 0 10px;
-    border: 1px solid #c9dbf6;
+    border: 1px solid #d6deea;
     border-radius: 10px;
-    background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
-    color: #335985;
+    background: #ffffff;
+    color: #111827;
     font-size: 12px;
     font-weight: 700;
     line-height: 1;
@@ -1649,10 +1944,10 @@ watch(
   }
 
   .refine-mode-chip.active {
-    border-color: #4b7fd6;
-    background: linear-gradient(135deg, #5f8ee0 0%, #3d6fc8 100%);
-    color: #ffffff;
-    box-shadow: 0 8px 18px rgba(61, 111, 200, 0.18);
+    border-color: #976dfd;
+    background: #ffffff;
+    color: #111827;
+    box-shadow: 0 0 0 2px rgba(151, 109, 253, 0.12);
   }
 
   .generate-mode-panel {
@@ -1675,18 +1970,18 @@ watch(
     justify-content: flex-start;
     gap: 8px;
     width: 100%;
-    min-height: 56px;
-    padding: 10px 12px;
-    font-size: 13px;
+    min-height: 42px;
+    padding: 6px 10px;
+    font-size: 12px;
     font-weight: 700;
     line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
-    border: 1px solid #c7d9ef;
-    color: #214a77;
-    background: linear-gradient(180deg, #ffffff 0%, #edf4fd 100%);
+    border: 1px solid #d7deea;
+    color: #111827;
+    background: #ffffff;
     border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(52, 90, 145, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   }
 
   .primary-actions {
@@ -1697,9 +1992,9 @@ watch(
 
   .primary-generate {
     width: 100%;
-    min-height: 56px;
-    padding: 10px 12px;
-    font-size: 13px;
+    min-height: 42px;
+    padding: 6px 10px;
+    font-size: 11px;
     font-weight: 700;
     border-radius: 12px;
     line-height: 1.25;
@@ -1713,38 +2008,31 @@ watch(
     margin-left: 0;
   }
 
-  .primary-generate--quality {
-    background: linear-gradient(180deg, #f4f9ff 0%, #dcecff 100%);
-    border-color: #9fc0ea;
-    color: #275387;
-    box-shadow: 0 8px 18px rgba(116, 164, 224, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  }
-
-  .primary-generate--quality .ai-action-card__icon,
-  .primary-generate--fast .ai-action-card__icon {
-    background: rgba(255, 255, 255, 0.82);
-    color: inherit;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  }
-
-  .primary-generate--quality .ai-action-card__cost,
-  .primary-generate--fast .ai-action-card__cost {
-    background: rgba(255, 255, 255, 0.92);
-    color: #2d5b91;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
-  }
-
-  .primary-generate--quality .ai-action-card__title,
-  .primary-generate--fast .ai-action-card__title {
-    color: inherit;
-  }
-
-  .primary-generate--fast {
-    background: linear-gradient(180deg, #ffffff 0%, #eaf4ff 100%);
-    border-color: #b5cff1;
+  .primary-actions :deep(.ai-action-card--quality),
+  .primary-actions :deep(.ai-action-card--fast) {
+    background: linear-gradient(135deg, #a17bfd 0%, #976dfd 58%, #8757fb 100%);
+    border-color: #8b63ef;
     color: #ffffff;
-    color: #295281;
-    box-shadow: 0 8px 18px rgba(134, 174, 227, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    box-shadow: 0 14px 30px rgba(151, 109, 253, 0.28);
+  }
+
+  .primary-actions :deep(.ai-action-card--quality .ai-action-card__icon),
+  .primary-actions :deep(.ai-action-card--fast .ai-action-card__icon) {
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+
+  .primary-actions :deep(.ai-action-card--quality .ai-action-card__cost),
+  .primary-actions :deep(.ai-action-card--fast .ai-action-card__cost) {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.86);
+    box-shadow: none;
+  }
+
+  .primary-actions :deep(.ai-action-card--quality .ai-action-card__title),
+  .primary-actions :deep(.ai-action-card--fast .ai-action-card__title) {
+    color: inherit;
   }
 
   .ai-action-card--header:deep(.el-button + .el-button),
@@ -1754,7 +2042,7 @@ watch(
 
   .primary-actions :deep(.el-button .el-icon),
   .actions :deep(.el-button .el-icon) {
-    font-size: 14px;
+    font-size: 13px;
     opacity: 0.92;
   }
 
@@ -1764,19 +2052,43 @@ watch(
   }
 
   .ai-action-card--header:deep(.el-button) {
-    min-height: 48px;
+    min-height: 44px;
     padding-right: 10px;
   }
 
   .primary-actions :deep(.el-button:hover),
   .actions :deep(.el-button:hover),
   .ai-action-card--header:deep(.el-button:hover) {
-    border-color: #9bbce6;
+    border-color: #976dfd;
+    box-shadow: 0 8px 18px rgba(151, 109, 253, 0.16);
     filter: saturate(1.01);
   }
 
+  .primary-actions :deep(.ai-action-card--quality:hover),
+  .primary-actions :deep(.ai-action-card--fast:hover) {
+    border-color: #7f52f7;
+    box-shadow: 0 16px 34px rgba(151, 109, 253, 0.34);
+    filter: saturate(1.03);
+  }
+
   .ai-action-card--secondary:deep(.el-button) {
-    min-height: 60px;
+    min-height: 52px;
+    color: #111827;
+    background: #ffffff;
+    border-color: #d7deea;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  }
+
+  .ai-action-card--secondary .ai-action-card__icon {
+    background: #f5f7fb;
+    color: #111827;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  }
+
+  .ai-action-card--secondary .ai-action-card__cost {
+    background: #f5f7fb;
+    color: #111827;
+    box-shadow: none;
   }
 
   .ai-action-card--secondary :deep(.el-button.is-loading),
@@ -1799,6 +2111,27 @@ watch(
   .compact-form :deep(.el-input__wrapper),
   .compact-form :deep(.el-select__wrapper) {
     min-height: 28px;
+  }
+
+  .size-select-item {
+    margin-top: 2px;
+  }
+
+  .size-select :deep(.el-select__wrapper) {
+    min-height: 24px;
+    padding: 0 8px;
+    border-radius: 9px;
+  }
+
+  .size-select :deep(.el-select__selected-item),
+  .size-select :deep(.el-select__placeholder) {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .size-select :deep(.el-select__caret) {
+    font-size: 11px;
   }
 
   .compact-form :deep(.el-textarea__inner) {

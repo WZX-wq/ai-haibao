@@ -11,7 +11,7 @@ import useCanvasStore from '../canvas'
 import { TInidDMovePayload, TMovePayload, dMove, initDMove, setDropOver, setMouseEvent, setdActiveElement, updateGroupSize, updateHoverUuid } from "./actions";
 import { TPageState } from "@/store/design/canvas/d";
 import { TInitResize, TSize, TdResizePayload, dResize, initDResize, resize, autoResizeAll } from "./actions/resize";
-import { TUpdateWidgetMultiplePayload, TUpdateWidgetPayload, TsetWidgetStyleData, addWidget, deleteWidget, setDWidgets, updateDWidgets, setWidgetStyle, updateWidgetData, updateWidgetMultiple, lockWidgets, setDLayouts } from "./actions/widget";
+import { TUpdateWidgetMultiplePayload, TUpdateWidgetPayload, TsetWidgetStyleData, addWidget, deleteWidget, setDWidgets, updateDWidgets, setWidgetStyle, updateWidgetData, updateWidgetMultiple, lockWidgets, setDLayouts, normalizeWidget } from "./actions/widget";
 import { addGroup } from "./actions/group";
 import { setTemplate } from "./actions/template";
 import { copyWidget, pasteWidget } from "./actions/clone";
@@ -218,8 +218,7 @@ const WidgetStore = defineStore<"widgetStore", TWidgetState, TGetter, TAction>("
       const pageStore = useCanvasStore() as TCanvasStore
       !this.dLayouts[pageStore.dCurrentPage] && pageStore.setDCurrentPage(pageStore.dCurrentPage - 1)
       // !this.dLayouts[pageStore.dCurrentPage] && pageStore.dCurrentPage--
-
-      return this.dLayouts[pageStore.dCurrentPage].layers
+      return this.dLayouts[pageStore.dCurrentPage].layers.map((item) => normalizeWidget(item))
     }
   }
 })

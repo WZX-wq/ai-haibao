@@ -88,6 +88,29 @@ export type PagedResult<T> = {
   limit: number
 }
 
+function readCookie(name: string) {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`))
+  return match?.[1] ? decodeURIComponent(match[1]) : ''
+}
+
+function looksLikeJwt(token: string) {
+  return !!token && token.includes('.') && token.split('.').length >= 3
+}
+
+function getRemoteApiWebToken() {
+  const values = [
+    typeof localStorage !== 'undefined' ? localStorage.getItem('api_web_token') : '',
+    typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('api_web_token') : '',
+    readCookie('api_web_token'),
+  ]
+  for (const value of values) {
+    const token = String(value || '').trim()
+    if (token && !looksLikeJwt(token)) return token
+  }
+  return ''
+}
+
 function toNumber(value: unknown, fallback = 0) {
   const num = Number(value)
   return Number.isFinite(num) ? num : fallback
@@ -210,9 +233,7 @@ export function getToken() {
   return (
     localStorage.getItem(LocalStorageKey.tokenKey) ||
     localStorage.getItem('token') ||
-    localStorage.getItem('kq_token') ||
     sessionStorage.getItem('token') ||
-    sessionStorage.getItem('kq_token') ||
     ''
   )
 }
@@ -223,10 +244,8 @@ export function setToken(token: string, remember = true) {
   if (remember) {
     localStorage.setItem(LocalStorageKey.tokenKey, value)
     localStorage.setItem('token', value)
-    localStorage.setItem('kq_token', value)
   } else {
     sessionStorage.setItem('token', value)
-    sessionStorage.setItem('kq_token', value)
   }
 }
 
@@ -234,18 +253,20 @@ export function clearToken() {
   if (typeof localStorage === 'undefined') return
   localStorage.removeItem(LocalStorageKey.tokenKey)
   localStorage.removeItem('token')
-  localStorage.removeItem('kq_token')
   sessionStorage.removeItem('token')
-  sessionStorage.removeItem('kq_token')
 }
 
 async function request<T>(path: string, params: Record<string, string | number> = {}) {
   const token = getToken()
+  const remoteApiWebToken = getRemoteApiWebToken()
   const payload = await fetch<T | { code?: number; msg?: string }>(
     resolveBase(path),
     params,
     'post',
-    { Authorization: token || '' },
+    {
+      Authorization: token || '',
+      ...(remoteApiWebToken ? { 'X-Api-Web-Token': remoteApiWebToken } : {}),
+    },
   )
 
   if (isBusinessError(payload)) {

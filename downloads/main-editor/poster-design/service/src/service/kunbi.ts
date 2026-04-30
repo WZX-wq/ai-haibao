@@ -7,6 +7,13 @@ const DEFAULT_KUNBI_API_BASE_URL = 'https://api-web.kunqiongai.com'
 const ALIPAY_RELAY_TTL_MS = 30 * 60 * 1000
 const alipayRelayStore = new Map<string, { html: string; orderSn: string; createdAt: number }>()
 
+function maskToken(token: string, left = 8) {
+  const raw = String(token || '').trim()
+  if (!raw) return ''
+  if (raw.length <= left) return raw
+  return `${raw.slice(0, left)}...(${raw.length})`
+}
+
 function getKunbiApiBaseUrl() {
   return String(process.env.KUNBI_API_BASE_URL || DEFAULT_KUNBI_API_BASE_URL).replace(/\/$/, '')
 }
@@ -220,6 +227,48 @@ function getRemoteSuccessData(payload: any) {
   return payload
 }
 
+function parseCookieHeader(cookieHeader: unknown) {
+  const map: Record<string, string> = {}
+  const raw = String(cookieHeader || '')
+  if (!raw) return map
+  raw.split(';').forEach((part) => {
+    const index = part.indexOf('=')
+    if (index <= 0) return
+    const key = part.slice(0, index).trim()
+    const value = part.slice(index + 1).trim()
+    if (!key) return
+    try {
+      map[key] = decodeURIComponent(value)
+    } catch {
+      map[key] = value
+    }
+  })
+  return map
+}
+
+function pickApiWebToken(...values: unknown[]) {
+  for (const value of values) {
+    const token = String(value || '').trim()
+    if (token && !token.includes('.')) return token
+  }
+  return ''
+}
+
+async function syncRemoteTokens(
+  userId: number,
+  providerName: string,
+  apiWebToken: string,
+) {
+  if (!apiWebToken) return
+  const db = await getMysqlPool()
+  await db.query(
+    `UPDATE oauth_identities
+        SET api_web_token = ?
+      WHERE user_id = ? AND provider_name = ?`,
+    [apiWebToken, userId, providerName],
+  )
+}
+
 async function getRemoteAccessToken(req: any) {
   const sessionData = await getCurrentSession(req)
   const userId = Number(sessionData.user.id || 0)
@@ -238,36 +287,69 @@ async function getRemoteAccessToken(req: any) {
     [userId, sessionData.user.provider],
   )
   const record = Array.isArray(rows) ? rows[0] : null
-  const accessToken = String(record?.access_token || '').trim()
-  const apiWebToken = String(record?.api_web_token || '').trim()
-  if (!accessToken) {
-    throw new Error('未找到鲲穹授权令牌，请重新登录后再试')
-  }
+  const dbApiWebToken = String(record?.api_web_token || '').trim()
+  const cookies = parseCookieHeader(req.headers?.cookie)
+  const requestApiWebToken = pickApiWebToken(
+    req.body?.token,
+    req.body?.kq_token,
+    req.headers?.['x-api-web-token'],
+    req.body?.api_web_token,
+    req.body?.apiWebToken,
+    cookies.kq_token,
+    cookies.user_token,
+    cookies.api_web_token,
+  )
+  const apiWebToken = requestApiWebToken || dbApiWebToken
   if (!apiWebToken) {
     throw new Error('当前登录会话缺少站点业务 token。localhost 无法自动拿到该 token，请改用 *.kunqiongai.com 域名登录或手动同步业务 token')
   }
+  if (requestApiWebToken && requestApiWebToken !== dbApiWebToken) {
+    await syncRemoteTokens(userId, sessionData.user.provider, apiWebToken)
+  }
   return {
-    accessToken,
     apiWebToken,
   }
 }
 
 async function postKunbiApi(req: any, remotePath: string, params: Record<string, any> = {}) {
-  const { accessToken, apiWebToken } = await getRemoteAccessToken(req)
+  const { apiWebToken } = await getRemoteAccessToken(req)
+  const cookieHeader = String(req.headers?.cookie || '')
   const body = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return
     body.append(key, String(value))
   })
 
+  console.log(
+    '[kunbi] request',
+    JSON.stringify({
+      path: remotePath,
+      hasCookie: !!cookieHeader,
+      cookieLength: cookieHeader.length,
+      hasApiWebTokenHeader: !!req.headers?.['x-api-web-token'],
+      apiWebToken: maskToken(apiWebToken),
+    }),
+  )
+
   const response = await axios.post(`${getKunbiApiBaseUrl()}${remotePath}`, body.toString(), {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       token: apiWebToken,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${apiWebToken}`,
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
     },
     timeout: 30000,
   })
+
+  console.log(
+    '[kunbi] response',
+    JSON.stringify({
+      path: remotePath,
+      status: response.status,
+      code: response.data?.code,
+      msg: response.data?.msg || response.data?.message || '',
+    }),
+  )
 
   const successData = getRemoteSuccessData(response.data)
   if (successData !== null) {

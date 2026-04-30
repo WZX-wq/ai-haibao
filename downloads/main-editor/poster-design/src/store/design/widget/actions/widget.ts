@@ -14,6 +14,38 @@ import { decodeTextIfNeeded, repairKnownMojibake } from '@/utils/decodeText'
 import { deepNormalizeLoopbackMediaUrls } from '@/utils/publicMediaUrl'
 const nanoid = customAlphabet('1234567890abcdef', 12)
 
+function canonicalizeWidgetType(rawType: unknown): string {
+  const cleaned = String(rawType || '').trim().replace(/^\/+/, '')
+  if (!cleaned) return 'w-image'
+  const normalized = cleaned
+    .replace(/\.vue$/i, '')
+    .replace(/style$/i, '')
+    .replace(/setting$/i, '')
+    .replace(/static$/i, '')
+    .replace(/-+$/g, '')
+    .trim()
+
+  const directMap: Record<string, string> = {
+    'w-image-style': 'w-image',
+    'w-image-setting': 'w-image',
+    'w-image-static': 'w-image',
+    'w-svg-style': 'w-svg',
+    'w-svg-setting': 'w-svg',
+    'w-qrcode-style': 'w-qrcode',
+    'w-qrcode-setting': 'w-qrcode',
+    'w-text-style': 'w-text',
+    'w-text-setting': 'w-text',
+    'w-group-style': 'w-group',
+    'w-group-setting': 'w-group',
+  }
+  if (directMap[normalized]) return directMap[normalized]
+  if (/^w-(text|image|svg|qrcode|group|mask)(?:-|$)/i.test(normalized)) {
+    const match = normalized.match(/^w-(text|image|svg|qrcode|group|mask)/i)
+    return match ? `w-${match[1].toLowerCase()}` : normalized
+  }
+  return normalized
+}
+
 /** 模板/作品 JSON 常含 uuid=-1 或多处重复，会导致 Vue key 与 vuedraggable item-key 冲突 */
 export function assignStableLayerUuids(layers: TdWidgetData[]) {
   const used = new Set<string>()
@@ -34,7 +66,11 @@ export function assignStableLayerUuids(layers: TdWidgetData[]) {
   }
 }
 
-function normalizeWidget(widget: TdWidgetData) {
+export function normalizeWidget(widget: TdWidgetData) {
+  deepNormalizeLoopbackMediaUrls(widget)
+  if (typeof widget.type === 'string') {
+    widget.type = canonicalizeWidgetType(widget.type)
+  }
   widget.name && (widget.name = repairKnownMojibake(widget.name))
   widget.text && (widget.text = decodeTextIfNeeded(widget.text))
   if (widget.fontClass?.alias) {
@@ -55,6 +91,9 @@ export type TUpdateWidgetPayload = {
 export function updateWidgetData(store: TWidgetStore, { uuid, key, value }: TUpdateWidgetPayload) {
   const widget = store.dWidgets.find((item) => item.uuid === uuid)
   if (widget && widget[key] !== value) {
+    if (typeof value === 'string' && (key === 'imgUrl' || key === 'mask')) {
+      value = deepNormalizeLoopbackMediaUrls(value) as TUpdateWidgetPayload['value']
+    }
     switch (key) {
       case 'width':
         // const minWidth = widget.record.minWidth
@@ -250,7 +289,13 @@ export function setDWidgets(state: TWidgetStore, e: TdWidgetData[]) {
 
 export function setDLayouts(state: TWidgetStore, data: any[]) {
   state.dLayouts = deepNormalizeLoopbackMediaUrls(data)
-  state.dWidgets = state.getWidgets()
+  state.dLayouts.forEach((layout: any) => {
+    if (Array.isArray(layout?.layers)) {
+      layout.layers = layout.layers.map((item: TdWidgetData) => normalizeWidget(item))
+      assignStableLayerUuids(layout.layers)
+    }
+  })
+  state.dWidgets = state.getWidgets().map((item) => normalizeWidget(item))
   const pageStore = useCanvasStore()
   pageStore.setDPage(data[pageStore.dCurrentPage].global)
   setTimeout(() => {

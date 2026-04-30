@@ -108,6 +108,814 @@ function resolveStructuredLayoutFamily(baseFamily, designPlan, copyDeck, sizePro
     }
     return effectiveBaseFamily || baseFamily;
 }
+const layoutStrategies = [
+    'hero-dominant',
+    'info-dominant',
+    'offer-dominant',
+    'recruitment-dense',
+    'cover-centered',
+];
+function clampNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+function estimatePosterLineCount(text, fontSize, width) {
+    const t = String(text || '').trim();
+    if (!t)
+        return 0;
+    const cjkCount = (t.match(/[\u3000-\u9FFF\uFF00-\uFFEF]/g) || []).length;
+    const cjkHeavy = cjkCount >= Math.max(1, t.length * 0.35);
+    const avgCharPx = cjkHeavy ? Math.max(fontSize * 0.98, 12) : Math.max(fontSize * 0.62, 10);
+    const charsPerLine = Math.max(3, Math.floor(Math.max(1, width) / avgCharPx));
+    return Math.max(1, Math.ceil(t.length / charsPerLine));
+}
+function resolveLayoutStrategy(baseFamily, designPlan, copyDeck, options = {}) {
+    const explicit = String(designPlan?.layoutStrategy || '').trim();
+    if (layoutStrategies.includes(explicit))
+        return explicit;
+    const family = normalizeLayoutFamily(baseFamily);
+    const contentPattern = String(designPlan?.contentPattern || '').trim();
+    const sceneText = `${options?.presetKey || ''} ${options?.industry || ''} ${options?.theme || ''} ${options?.purpose || ''} ${options?.style || ''} ${options?.content || ''} ${contentPattern}`.trim();
+    const factCount = Array.isArray(copyDeck?.factCards) ? copyDeck.factCards.filter((item) => String(item?.value || item?.hint || '').trim()).length : 0;
+    const proofCount = Array.isArray(copyDeck?.proofPoints) ? copyDeck.proofPoints.filter((item) => String(item || '').trim()).length : 0;
+    const hasPriceBlock = Boolean(String(copyDeck?.priceBlock?.value || '').trim());
+    if (/招聘|招募/.test(sceneText) || contentPattern === 'list-info' || family === 'list-recruitment')
+        return 'recruitment-dense';
+    if (hasPriceBlock || contentPattern === 'price-first' || family === 'premium-offer')
+        return 'offer-dominant';
+    if (family === 'grid-product' || family === 'clean-course' || factCount >= 3 || proofCount >= 4 || contentPattern === 'info-cards')
+        return 'info-dominant';
+    if (family === 'hero-center' || family === 'magazine-cover' || family === 'festive-frame' || contentPattern === 'cover-story')
+        return 'cover-centered';
+    return 'hero-dominant';
+}
+function normalizeBackendCompositionReport(report) {
+    const breakdown = report?.breakdown || {};
+    return {
+        totalScore: Number(report?.totalScore || 0),
+        breakdown: {
+            heroFit: Number(breakdown.heroFit || 0),
+            readability: Number(breakdown.readability || 0),
+            copyStrength: Number(breakdown.copyStrength || 0),
+            hierarchy: Number(breakdown.hierarchy || 0),
+            whitespace: Number(breakdown.whitespace || 0),
+            ctaVisibility: Number(breakdown.ctaVisibility || 0),
+            conflictPenalty: Number(breakdown.conflictPenalty || 0),
+            finishLevel: Number(breakdown.finishLevel || 0),
+        },
+        suggestions: Array.isArray(report?.suggestions) ? report.suggestions.filter(Boolean) : [],
+    };
+}
+function inferBackendRecommendedTreatment(report) {
+    const suggestions = normalizeBackendCompositionReport(report).suggestions;
+    const treatments = [];
+    suggestions.forEach((text) => {
+        const raw = String(text || '').trim();
+        if (!raw)
+            return;
+        if (/遮罩/.test(raw))
+            treatments.push('overlay');
+        if (/压暗|对比/.test(raw))
+            treatments.push('darken');
+        if (/纯化|模糊|纹理/.test(raw))
+            treatments.push('purify');
+        if (/换主图|主图候选|安全区不足/.test(raw))
+            treatments.push('switch-hero-candidate');
+    });
+    return Array.from(new Set(treatments));
+}
+function measureHeadlineBlock(text, pageWidth, pageHeight, options = {}) {
+    const width = Math.max(120, Math.round(options.width || pageWidth * 0.74));
+    const maxHeight = Math.max(72, Math.round(options.maxHeight || pageHeight * 0.18));
+    const baseFont = Math.max(24, Math.round(options.baseFont || getTextFont(pageWidth, 72, 40)));
+    const minFont = Math.max(18, Math.round(options.minFont || getTextFont(pageWidth, 42, 28)));
+    const fontSize = fitTextWidgetFont(text, width, maxHeight, baseFont, minFont, 2);
+    return {
+        text: String(text || '').trim(),
+        width,
+        fontSize,
+        lineCount: estimatePosterLineCount(text, fontSize, width),
+        height: estimateTextHeight(text, fontSize, width),
+    };
+}
+function measureSupportBlock(text, pageWidth, pageHeight, options = {}) {
+    const width = Math.max(120, Math.round(options.width || pageWidth * 0.62));
+    const maxHeight = Math.max(44, Math.round(options.maxHeight || pageHeight * 0.09));
+    const baseFont = Math.max(16, Math.round(options.baseFont || getTextFont(pageWidth, 30, 20)));
+    const minFont = Math.max(14, Math.round(options.minFont || getTextFont(pageWidth, 22, 16)));
+    const fontSize = fitTextWidgetFont(text, width, maxHeight, baseFont, minFont, 1);
+    return {
+        text: String(text || '').trim(),
+        width,
+        fontSize,
+        lineCount: estimatePosterLineCount(text, fontSize, width),
+        height: estimateTextHeight(text, fontSize, width),
+    };
+}
+function measureProofGroup(copyDeck, bodyText, pageWidth, pageHeight, options = {}) {
+    const facts = (copyDeck?.factCards || []).filter((item) => String(item?.value || item?.hint || '').trim());
+    const proofPoints = (copyDeck?.proofPoints || []).filter((item) => String(item || '').trim());
+    const body = String(bodyText || '').trim();
+    const lineWidth = Math.max(120, Math.round(options.width || pageWidth * 0.54));
+    const lineFont = Math.max(14, Math.round(options.fontSize || getTextFont(pageWidth, 22, 18)));
+    const infoItems = []
+        .concat(facts.map((item) => item.value || item.hint))
+        .concat(proofPoints)
+        .concat(body ? [body] : [])
+        .filter(Boolean);
+    const visibleCount = Math.min(infoItems.length, Number(options.maxVisible || 4));
+    const lines = infoItems.slice(0, visibleCount).map((item) => estimatePosterLineCount(item, lineFont, lineWidth));
+    const lineHeight = Math.round(lineFont * 1.5);
+    return {
+        rawCount: infoItems.length,
+        count: visibleCount,
+        lineWidth,
+        fontSize: lineFont,
+        height: Math.max(0, lines.reduce((sum, count) => sum + count * lineHeight, 0)),
+        overflow: Math.max(0, infoItems.length - visibleCount),
+    };
+}
+function measureCtaBlock(text, pageWidth, pageHeight, options = {}) {
+    const baseFont = Math.max(18, Math.round(options.baseFont || getTextFont(pageWidth, 30, 22)));
+    const minFont = Math.max(16, Math.round(options.minFont || getTextFont(pageWidth, 22, 18)));
+    const maxWidth = Math.max(160, Math.round(options.maxWidth || pageWidth * 0.34));
+    const fontSize = fitTextWidgetFont(text, maxWidth, Math.round(pageHeight * 0.08), baseFont, minFont, 1);
+    const contentWidth = estimateTextWidth(text, fontSize, maxWidth);
+    const width = clampNumber(contentWidth + Math.round(fontSize * 2.2), Math.round(pageWidth * 0.16), maxWidth);
+    const height = Math.max(Math.round(fontSize * 1.95), estimateTextHeight(text, fontSize, width) + Math.round(fontSize * 1.1));
+    return {
+        text: String(text || '').trim(),
+        fontSize,
+        contentWidth,
+        width,
+        height,
+    };
+}
+function measurePosterContent({ copyDeck, title, slogan, body, pageWidth, pageHeight, isWide, selectedFamily, sizeProfile }) {
+    const headline = measureHeadlineBlock(title, pageWidth, pageHeight, {
+        width: pageWidth * (isWide ? 0.42 : selectedFamily === 'hero-center' ? 0.82 : 0.74),
+        maxHeight: pageHeight * (sizeProfile === 'banner' ? 0.16 : 0.18),
+        baseFont: getTextFont(pageWidth, sizeProfile === 'banner' ? 82 : 92, sizeProfile === 'banner' ? 36 : 42),
+        minFont: getTextFont(pageWidth, sizeProfile === 'banner' ? 36 : 42, 28),
+    });
+    const support = measureSupportBlock(slogan, pageWidth, pageHeight, {
+        width: pageWidth * (isWide ? 0.38 : selectedFamily === 'hero-center' ? 0.78 : 0.62),
+        maxHeight: pageHeight * 0.09,
+        baseFont: getTextFont(pageWidth, sizeProfile === 'banner' ? 26 : 34, 20),
+        minFont: getTextFont(pageWidth, 22, 16),
+    });
+    const proof = measureProofGroup(copyDeck, body, pageWidth, pageHeight, {
+        width: pageWidth * (isWide ? 0.36 : 0.58),
+        maxVisible: selectedFamily === 'list-recruitment' ? 3 : 4,
+        fontSize: getTextFont(pageWidth, sizeProfile === 'banner' ? 18 : 22, 16),
+    });
+    const cta = measureCtaBlock(copyDeck?.cta || '立即了解', pageWidth, pageHeight, {
+        maxWidth: pageWidth * (selectedFamily === 'list-recruitment' ? 0.28 : 0.34),
+        baseFont: getTextFont(pageWidth, sizeProfile === 'banner' ? 26 : 32, 22),
+        minFont: getTextFont(pageWidth, 22, 18),
+    });
+    const densityScore = headline.lineCount * 1.5 + support.lineCount + proof.count + (proof.overflow > 0 ? 1 : 0);
+    const proofItems = []
+        .concat((copyDeck?.factCards || []).map((item) => item?.value || item?.hint))
+        .concat(copyDeck?.proofPoints || [])
+        .concat(body ? [body] : [])
+        .filter((item) => String(item || '').trim());
+    const longestProofPointLength = proofItems.reduce((max, item) => Math.max(max, String(item || '').trim().length), 0);
+    const ctaWidthRatio = cta.width / Math.max(pageWidth, 1);
+    const ctaWidthLevel = ctaWidthRatio >= 0.28 ? 'wide' : ctaWidthRatio >= 0.2 ? 'medium' : 'compact';
+    const contentDensity = densityScore >= 8 ? 'dense' : densityScore >= 5 ? 'balanced' : 'minimal';
+    const proofDensityLevel = proofItems.length >= 5 || longestProofPointLength >= 14 ? 'dense' : proofItems.length >= 3 || longestProofPointLength >= 10 ? 'balanced' : 'light';
+    const textAreaEstimate = headline.width * headline.height
+        + support.width * support.height
+        + proof.lineWidth * Math.max(proof.height, proof.fontSize * 1.5)
+        + cta.width * cta.height;
+    const textCoverageEstimateRatio = clampNumber(textAreaEstimate / Math.max(pageWidth * pageHeight, 1), 0.08, 0.68);
+    return {
+        headline,
+        support,
+        proof,
+        cta,
+        densityScore,
+        titleLines: headline.lineCount,
+        subtitleLines: support.lineCount,
+        proofPointCount: proofItems.length,
+        longestProofPointLength,
+        ctaWidthLevel,
+        contentDensity,
+        proofDensityLevel,
+        textAreaEstimate,
+        textCoverageEstimateRatio,
+    };
+}
+function evaluateBackgroundReadabilitySignals({ hints, metrics, includeHeroLayer, designPlan, backendCompositionReport }) {
+    const visual = hints?.visualAnalysis || {};
+    const tone = String(visual.dominantTone || '').trim();
+    const texture = String(visual.texture || '').trim();
+    const needsPanel = Boolean(visual.needsPanel);
+    const titleSafeZonePolicy = String(designPlan?.titleSafeZonePolicy || '').trim();
+    const ctaPlacementPolicy = String(designPlan?.ctaPlacementPolicy || '').trim();
+    const safeZones = Array.isArray(hints?.safeZones) ? hints.safeZones : [];
+    const avoidZones = Array.isArray(hints?.avoidZones) ? hints.avoidZones : [];
+    const primarySafeZone = safeZones.find((item) => {
+        const kind = String(item?.kind || 'safe').trim();
+        return kind === 'safe' || kind === 'title' || kind === 'text';
+    }) || safeZones[0] || null;
+    const ctaSafeZone = safeZones.find((item) => /cta|button|action/.test(String(item?.kind || '').trim())) || null;
+    const backend = normalizeBackendCompositionReport(backendCompositionReport);
+    const titleTexturePenalty = clampNumber((texture === 'detailed' ? 2.4 : texture === 'mixed' ? 1.2 : 0.2)
+        + (needsPanel ? 0.8 : 0)
+        + (titleSafeZonePolicy === 'strict-avoid-subject' && !primarySafeZone ? 0.9 : 0)
+        + Math.max(0, (72 - Number(backend.breakdown.readability || 0)) / 35), 0, 4.8);
+    const ctaContrastPenalty = clampNumber((tone === 'dark' ? 0.4 : tone === 'mixed' ? 1.1 : 0.5)
+        + (!ctaSafeZone && metrics.ctaWidthLevel === 'wide' ? 0.8 : 0)
+        + (ctaPlacementPolicy === 'bottom-safe' && !ctaSafeZone ? 0.9 : 0)
+        + Math.max(0, (70 - Number(backend.breakdown.ctaVisibility || 0)) / 42), 0, 4.8);
+    const avoidPenalty = clampNumber(avoidZones.length * 0.55, 0, 3.2);
+    const textConflictPenalty = clampNumber(titleTexturePenalty * 0.9 + ctaContrastPenalty * 0.7 + avoidPenalty + (includeHeroLayer ? 0.6 : 0), 0, 8);
+    const backendHeroFit = Number(backend.breakdown.heroFit || 0) > 0 ? Number(backend.breakdown.heroFit || 0) / 10 : 0;
+    const heroFit = clampNumber(10 - titleTexturePenalty - ctaContrastPenalty * 0.6 - avoidPenalty - (needsPanel ? 0.6 : 0) + (backendHeroFit ? (backendHeroFit - 5) * 0.35 : 0), 0, 10);
+    const recommendedTreatment = [];
+    if (needsPanel || texture === 'detailed')
+        recommendedTreatment.push('overlay');
+    if (tone === 'mixed' || tone === 'dark')
+        recommendedTreatment.push('darken');
+    if (avoidZones.length >= 2 || texture === 'detailed')
+        recommendedTreatment.push('purify');
+    if (heroFit < 5.8 || textConflictPenalty >= 4.8)
+        recommendedTreatment.push('switch-hero-candidate');
+    inferBackendRecommendedTreatment(backendCompositionReport).forEach((item) => recommendedTreatment.push(item));
+    const uniqueTreatments = Array.from(new Set(recommendedTreatment));
+    return {
+        tone,
+        texture,
+        needsPanel,
+        heroFit,
+        titleTexturePenalty,
+        ctaContrastPenalty,
+        textConflictPenalty,
+        primarySafeZone,
+        ctaSafeZone,
+        avoidZoneCount: avoidZones.length,
+        recommendedTreatment: uniqueTreatments,
+        shouldSuggestHeroSwap: uniqueTreatments.includes('switch-hero-candidate'),
+    };
+}
+function buildLayoutBudget({ strategy, pageWidth, pageHeight, isWide, sizeProfile, metrics, multimodalHints, readabilitySignals, designPlan }) {
+    const marginX = Math.round(pageWidth * 0.08);
+    const topInset = Math.round(pageHeight * 0.08);
+    const bottomInset = Math.round(pageHeight * 0.08);
+    const safeZone = readabilitySignals?.primarySafeZone;
+    const safeZoneWidth = safeZone?.w ? Math.round(pageWidth * Number(safeZone.w || 0)) : 0;
+    const safeZoneLeft = safeZone?.x ? Math.round(pageWidth * Number(safeZone.x || 0)) : marginX;
+    const titleWidthMax = Math.round(pageWidth * (isWide ? 0.42 : strategy === 'cover-centered' ? 0.84 : 0.52));
+    const infoWidthMax = Math.round(pageWidth * (isWide ? 0.38 : 0.58));
+    const heroTopDefault = strategy === 'cover-centered' ? 0 : Math.round(pageHeight * (isWide ? 0.14 : 0.3));
+    const titleMaxHeightRatio = metrics.contentDensity === 'dense' ? 0.22 : metrics.contentDensity === 'balanced' ? 0.19 : 0.16;
+    const subtitleMaxHeightRatio = metrics.contentDensity === 'dense' ? 0.11 : 0.09;
+    const proofMaxCount = strategy === 'recruitment-dense'
+        ? (metrics.proofDensityLevel === 'dense' ? 4 : 3)
+        : strategy === 'info-dominant'
+            ? (metrics.proofDensityLevel === 'dense' ? 3 : 2)
+            : (metrics.proofDensityLevel === 'dense' ? 3 : 2);
+    const designMaxProofCount = Math.max(0, Number(designPlan?.maxVisibleProofPoints || 0));
+    const textCoverageMaxRatio = clampNumber(strategy === 'cover-centered' ? 0.34 : strategy === 'offer-dominant' ? 0.38 : 0.42, 0.28, 0.46);
+    const ctaMinBottomGap = Math.round(pageHeight * (metrics.contentDensity === 'dense' ? 0.052 : 0.065));
+    const heroSafeZonePolicy = String(designPlan?.titleSafeZonePolicy || '').trim() || (strategy === 'cover-centered'
+        ? 'full-bleed-hero'
+        : strategy === 'recruitment-dense'
+            ? 'hero-background-only'
+            : metrics.contentDensity === 'dense'
+                ? 'protect-text-column'
+                : 'flexible');
+    const titleLeft = safeZoneWidth >= Math.round(pageWidth * 0.18) ? safeZoneLeft : marginX;
+    const titleMaxWidth = safeZoneWidth >= Math.round(pageWidth * 0.18)
+        ? clampNumber(safeZoneWidth, Math.round(pageWidth * 0.32), titleWidthMax)
+        : titleWidthMax;
+    const infoMaxWidth = safeZoneWidth >= Math.round(pageWidth * 0.16)
+        ? clampNumber(safeZoneWidth, Math.round(pageWidth * 0.24), infoWidthMax)
+        : infoWidthMax;
+    return {
+        titleMaxHeightRatio,
+        subtitleMaxHeightRatio,
+        proofMaxCount: designMaxProofCount > 0 ? Math.min(proofMaxCount, designMaxProofCount) : proofMaxCount,
+        textCoverageMaxRatio,
+        ctaMinBottomGap,
+        heroSafeZonePolicy,
+        hero: {
+            minWidth: Math.round(pageWidth * (isWide ? 0.34 : 0.66)),
+            maxWidth: pageWidth - marginX * 2,
+            minHeight: Math.round(pageHeight * (strategy === 'cover-centered' ? 0.52 : 0.24)),
+            maxHeight: Math.round(pageHeight * (strategy === 'cover-centered' ? 1 : 0.62)),
+            top: heroTopDefault,
+            priority: 0.78,
+        },
+        title: {
+            left: titleLeft,
+            top: topInset,
+            minWidth: Math.round(pageWidth * 0.32),
+            maxWidth: titleMaxWidth,
+            minHeight: metrics.headline.height,
+            maxHeight: Math.round(pageHeight * titleMaxHeightRatio),
+            priority: 1,
+        },
+        info: {
+            left: titleLeft,
+            top: topInset + metrics.headline.height + metrics.support.height + Math.round(pageHeight * 0.06),
+            minWidth: Math.round(pageWidth * 0.24),
+            maxWidth: infoMaxWidth,
+            minHeight: metrics.proof.height,
+            maxHeight: Math.round(pageHeight * Math.min(0.24, textCoverageMaxRatio - titleMaxHeightRatio - subtitleMaxHeightRatio)),
+            priority: 0.68,
+        },
+        cta: {
+            left: marginX,
+            minWidth: metrics.cta.width,
+            maxWidth: Math.round(pageWidth * 0.34),
+            minHeight: metrics.cta.height,
+            maxHeight: Math.round(pageHeight * 0.08),
+            bottom: Math.max(bottomInset, ctaMinBottomGap),
+            priority: 0.9,
+        },
+        safeZone: safeZone ? {
+            left: safeZoneLeft,
+            top: Math.round(pageHeight * Number(safeZone.y || 0)),
+            width: safeZoneWidth,
+            height: Math.round(pageHeight * Number(safeZone.h || 0)),
+        } : null,
+        readabilitySignals,
+        densityBand: metrics.contentDensity === 'dense' ? 'dense' : metrics.contentDensity === 'balanced' ? 'balanced' : 'light',
+        sizeProfile,
+    };
+}
+function solvePosterSections({ strategy, selectedFamily, pageWidth, pageHeight, isWide, includeHeroLayer, metrics, budget, readabilitySignals, variantName }) {
+    const gapS = Math.round(pageHeight * 0.018);
+    const gapM = Math.round(pageHeight * 0.028);
+    const variant = variantName || (strategy === 'offer-dominant'
+        ? (budget.densityBand === 'dense' ? 'offer-compact' : 'offer-focus')
+        : strategy === 'recruitment-dense'
+            ? (budget.densityBand === 'dense' ? 'dense-stack' : 'headline-stack')
+            : strategy === 'info-dominant'
+                ? (isWide ? 'split-info' : 'stack-info')
+                : strategy === 'cover-centered'
+                    ? 'cover-stack'
+                    : isWide ? 'hero-split' : 'hero-stack');
+    const centered = new Set(['centerCover', 'cover-stack', 'ctaFocus']).has(variant) || strategy === 'cover-centered';
+    const compactText = new Set(['leftCompact', 'offer-compact', 'dense-stack']).has(variant);
+    const ctaFocused = new Set(['ctaFocus', 'offer-focus']).has(variant);
+    const offerFocused = variant === 'offer-focus';
+    const leftHeroTitle = variant === 'leftHeroTitle';
+    const safeZone = budget.safeZone;
+    const titleWidthCap = centered
+        ? Math.round(pageWidth * (isWide ? 0.5 : 0.84))
+        : leftHeroTitle
+            ? Math.round(pageWidth * (isWide ? 0.36 : 0.46))
+        : compactText
+            ? Math.round(budget.title.maxWidth * 0.86)
+            : budget.title.maxWidth;
+    const titleWidth = clampNumber(metrics.headline.width, budget.title.minWidth, titleWidthCap);
+    const titleLeft = centered
+        ? Math.round((pageWidth - titleWidth) / 2)
+        : leftHeroTitle && safeZone
+            ? clampNumber(safeZone.left, budget.title.left, Math.round(pageWidth * 0.16))
+            : budget.title.left;
+    const titleTop = centered
+        ? Math.round(pageHeight * (selectedFamily === 'magazine-cover' ? 0.56 : ctaFocused ? 0.52 : 0.6))
+        : leftHeroTitle
+            ? Math.round(pageHeight * (isWide ? 0.14 : 0.12))
+        : strategy === 'recruitment-dense'
+            ? Math.round(pageHeight * (compactText ? 0.12 : 0.14))
+            : compactText
+                ? budget.title.top
+                : budget.title.top + Math.round(pageHeight * 0.01);
+    const titleRect = {
+        left: titleLeft,
+        top: titleTop,
+        width: titleWidth,
+        height: clampNumber(metrics.headline.height, metrics.headline.height, budget.title.maxHeight),
+    };
+    const supportWidth = clampNumber(metrics.support.width, Math.round(pageWidth * 0.24), Math.min(titleWidth, centered ? Math.round(pageWidth * 0.8) : budget.title.maxWidth));
+    const supportLeft = centered ? Math.round((pageWidth - supportWidth) / 2) : titleLeft;
+    const supportRect = {
+        left: supportLeft,
+        top: titleRect.top + titleRect.height + gapS,
+        width: supportWidth,
+        height: clampNumber(metrics.support.height, metrics.support.height, Math.round(pageHeight * budget.subtitleMaxHeightRatio)),
+    };
+    const infoWidth = clampNumber(metrics.proof.lineWidth, budget.info.minWidth, offerFocused ? Math.round(budget.info.maxWidth * 0.84) : compactText ? Math.round(budget.info.maxWidth * 0.9) : budget.info.maxWidth);
+    const infoRect = {
+        left: centered ? Math.round((pageWidth - infoWidth) / 2) : budget.info.left,
+        top: supportRect.top + supportRect.height + gapS,
+        width: infoWidth,
+        height: clampNumber(metrics.proof.height, 0, offerFocused ? Math.round(budget.info.maxHeight * 0.82) : budget.info.maxHeight),
+    };
+    const ctaWidth = clampNumber(metrics.cta.width, budget.cta.minWidth, ctaFocused ? Math.round(budget.cta.maxWidth * 1.06) : budget.cta.maxWidth);
+    const ctaDesiredTop = ctaFocused
+        ? pageHeight - budget.cta.bottom - metrics.cta.height
+        : infoRect.top + infoRect.height + gapM;
+    const ctaRect = {
+        left: centered || ctaFocused ? Math.round((pageWidth - ctaWidth) / 2) : offerFocused ? budget.info.left : budget.cta.left,
+        top: clampNumber(ctaDesiredTop, Math.round(pageHeight * (ctaFocused ? 0.78 : offerFocused ? 0.68 : 0.72)), pageHeight - budget.cta.bottom - budget.cta.minHeight),
+        width: ctaFocused ? Math.max(ctaWidth, Math.round(pageWidth * 0.22)) : ctaWidth,
+        height: metrics.cta.height,
+    };
+    const badgeWidth = clampNumber(Math.round(Math.max(pageWidth * 0.1, estimateTextWidth('限时', getTextFont(pageWidth, 18, 12)) + getTextFont(pageWidth, 18, 12) * 2)), Math.round(pageWidth * 0.1), Math.round(pageWidth * 0.22));
+    const badgeRect = {
+        left: centered ? Math.round((pageWidth - badgeWidth) / 2) : budget.title.left,
+        top: strategy === 'recruitment-dense' ? Math.round(pageHeight * 0.06) : Math.max(Math.round(pageHeight * 0.04), titleRect.top - Math.round(pageHeight * 0.07)),
+        width: badgeWidth,
+        height: Math.round(getTextFont(pageWidth, 18, 12) * 1.9),
+    };
+    const heroRect = includeHeroLayer
+        ? centered
+            ? { left: 0, top: 0, width: pageWidth, height: pageHeight }
+            : leftHeroTitle && isWide
+                ? {
+                    left: Math.round(pageWidth * 0.44),
+                    top: Math.round(pageHeight * 0.08),
+                    width: Math.round(pageWidth * 0.48),
+                    height: Math.round(pageHeight * 0.8),
+                }
+            : compactText && strategy === 'info-dominant' && !isWide
+                ? { left: Math.round((pageWidth - budget.hero.maxWidth) / 2), top: Math.round(pageHeight * 0.54), width: budget.hero.maxWidth, height: Math.round(pageHeight * 0.3) }
+                : strategy === 'recruitment-dense'
+                    ? { left: 0, top: 0, width: pageWidth, height: pageHeight }
+                    : isWide
+                        ? { left: pageWidth - budget.hero.maxWidth - Math.round(pageWidth * 0.08), top: budget.hero.top, width: budget.hero.maxWidth, height: budget.hero.maxHeight }
+                        : { left: 0, top: 0, width: pageWidth, height: pageHeight }
+        : null;
+    return {
+        variant,
+        titleRect,
+        supportRect,
+        infoRect,
+        ctaRect,
+        badgeRect,
+        heroRect,
+    };
+}
+function buildPosterLayoutVariants({ strategy, selectedFamily, pageWidth, pageHeight, isWide, includeHeroLayer, metrics, budget }) {
+    const defaultVariant = strategy === 'offer-dominant'
+        ? (budget.densityBand === 'dense' ? 'offer-compact' : 'offer-focus')
+        : strategy === 'recruitment-dense'
+            ? (budget.densityBand === 'dense' ? 'dense-stack' : 'headline-stack')
+            : strategy === 'info-dominant'
+                ? (isWide ? 'split-info' : 'stack-info')
+                : strategy === 'cover-centered'
+                    ? 'cover-stack'
+                    : isWide ? 'hero-split' : 'hero-stack';
+    const candidates = Array.from(new Set([
+        defaultVariant,
+        'leftHeroTitle',
+        'leftCompact',
+        'centerCover',
+        'ctaFocus',
+        strategy === 'offer-dominant' ? 'offer-focus' : '',
+        strategy === 'offer-dominant' ? 'offer-compact' : '',
+        strategy === 'recruitment-dense' ? 'dense-stack' : '',
+        strategy === 'recruitment-dense' ? 'headline-stack' : '',
+    ].filter(Boolean)));
+    return candidates.map((variantName) => solvePosterSections({
+        strategy,
+        selectedFamily,
+        pageWidth,
+        pageHeight,
+        isWide,
+        includeHeroLayer,
+        metrics,
+        budget,
+        readabilitySignals: budget.readabilitySignals,
+        variantName,
+    }));
+}
+function scorePosterLayoutVariant({ layout, metrics, budget, pageWidth, pageHeight, includeHeroLayer, readabilitySignals, backendCompositionReport, finalWidgetAudit = null }) {
+    if (!layout)
+        return { total: 0, breakdown: {} };
+    const pageArea = Math.max(1, pageWidth * pageHeight);
+    const titleArea = Math.max(0, layout.titleRect.width * layout.titleRect.height);
+    const supportArea = Math.max(0, layout.supportRect.width * layout.supportRect.height);
+    const infoArea = Math.max(0, layout.infoRect.width * layout.infoRect.height);
+    const ctaArea = Math.max(0, layout.ctaRect.width * layout.ctaRect.height);
+    const textCoverage = (titleArea + supportArea + infoArea + ctaArea) / pageArea;
+    const titleBottom = layout.titleRect.top + layout.titleRect.height;
+    const supportBottom = layout.supportRect.top + layout.supportRect.height;
+    const infoBottom = layout.infoRect.top + layout.infoRect.height;
+    const ctaTop = layout.ctaRect.top;
+    const verticalOrderClean = layout.titleRect.top < layout.supportRect.top && supportBottom <= infoBottom && infoBottom <= ctaTop;
+    const hierarchy = clampNumber((verticalOrderClean ? 7 : 4)
+        + (metrics.titleLines <= 2 ? 1.5 : 0)
+        + (layout.titleRect.width >= layout.supportRect.width ? 1 : 0)
+        + (Number(layout.ctaRect.width || 0) >= Number(metrics.cta.width || 0) * 0.92 ? 0.5 : 0), 0, 10);
+    const whitespaceGap = Math.min(
+        layout.supportRect.top - titleBottom,
+        layout.infoRect.top - supportBottom,
+        layout.ctaRect.top - infoBottom
+    );
+    const whitespace = clampNumber(10 - Math.abs(textCoverage - budget.textCoverageMaxRatio) * 30 + clampNumber(whitespaceGap / Math.max(pageHeight * 0.014, 1), -2, 2), 0, 10);
+    const fragmentation = clampNumber(10 - Math.max(0, metrics.proofPointCount - budget.proofMaxCount) * 2 - Math.max(0, metrics.titleLines - 2) * 1.4 - Math.max(0, metrics.subtitleLines - 2) * 1.2 - (metrics.proofDensityLevel === 'dense' ? 0.8 : 0), 0, 10);
+    const ctaProminence = clampNumber(4 + (ctaArea / pageArea) * 180 + (layout.variant === 'ctaFocus' || layout.variant === 'offer-focus' ? 2.2 : 0) + (metrics.ctaWidthLevel === 'compact' ? 1.1 : metrics.ctaWidthLevel === 'medium' ? 0.5 : -0.6), 0, 10);
+    const focusUniqueness = clampNumber(8.8
+        - (layout.variant === 'centerCover' || layout.variant === 'cover-stack' ? 0.2 : 0)
+        - (metrics.contentDensity === 'dense' ? 1.2 : 0.4)
+        - (textCoverage > budget.textCoverageMaxRatio ? 1.6 : 0)
+        - (!includeHeroLayer ? 1.2 : 0), 0, 10);
+    const backgroundConflict = clampNumber(10
+        - Number(readabilitySignals?.titleTexturePenalty || 0) * 1.15
+        - Number(readabilitySignals?.ctaContrastPenalty || 0) * 0.95
+        - Number(readabilitySignals?.textConflictPenalty || 0) * 0.72
+        - (layout.variant === 'centerCover' && Number(readabilitySignals?.needsPanel) ? 1.2 : 0), 0, 10);
+    const conflictPenalty = clampNumber(10
+        - (layout.titleRect.top < pageHeight * 0.12 && includeHeroLayer ? 1.2 : 0)
+        - (layout.ctaRect.top + layout.ctaRect.height > pageHeight - budget.ctaMinBottomGap ? 1.8 : 0)
+        - (textCoverage > budget.textCoverageMaxRatio + 0.04 ? 2.4 : 0)
+        - (layout.supportRect.width > layout.titleRect.width ? 0.8 : 0)
+        - Math.max(0, Number(readabilitySignals?.textConflictPenalty || 0) - 3.2) * 0.5, 0, 10);
+    const backend = normalizeBackendCompositionReport(backendCompositionReport);
+    const backendBlend = backend.totalScore > 0
+        ? ((Number(backend.breakdown.hierarchy || 0) / 10) * 0.2
+            + (Number(backend.breakdown.whitespace || 0) / 10) * 0.16
+            + (Number(backend.breakdown.readability || 0) / 10) * 0.17
+            + (Number(backend.breakdown.ctaVisibility || 0) / 10) * 0.17
+            + (Number(backend.breakdown.finishLevel || 0) / 10) * 0.18
+            + (Number(backend.breakdown.copyStrength || 0) / 10) * 0.12
+            - (Number(backend.breakdown.conflictPenalty || 0) / 10) * 0.08)
+        : 0;
+    const localTotal = hierarchy * 0.22
+        + whitespace * 0.2
+        + fragmentation * 0.15
+        + ctaProminence * 0.16
+        + focusUniqueness * 0.15
+        + backgroundConflict * 0.06
+        + conflictPenalty * 0.06;
+    const preAuditTotal = backend.totalScore > 0 ? localTotal * 0.72 + backendBlend * 0.28 : localTotal;
+    const auditPenalty = finalWidgetAudit
+        ? clampNumber(Number(finalWidgetAudit.overlapCount || 0) * 0.78
+            + Number(finalWidgetAudit.decoratedWasteRatio || 0) * 0.95
+            + Number(finalWidgetAudit.pageCoveragePenalty || 0) * 42, 0, 4.8)
+        : 0;
+    const total = clampNumber(preAuditTotal - auditPenalty, 0, 10);
+    return {
+        total,
+        breakdown: {
+            hierarchy,
+            readability: backgroundConflict,
+            whitespace,
+            fragmentation,
+            ctaProminence,
+            ctaVisibility: ctaProminence,
+            focusUniqueness,
+            backgroundConflict,
+            conflictPenalty,
+            finishLevel: backend.totalScore > 0 ? Number(backend.breakdown.finishLevel || 0) / 10 : total,
+            backendBlend,
+            textCoverage,
+            preAuditTotal,
+            auditPenalty,
+            finalOverlapCount: Number(finalWidgetAudit?.overlapCount || 0),
+            finalOverlapArea: Number(finalWidgetAudit?.overlapArea || 0),
+            decoratedWasteRatio: Number(finalWidgetAudit?.decoratedWasteRatio || 0),
+        },
+    };
+}
+function pickBestLayoutVariant({ variants, metrics, budget, pageWidth, pageHeight, includeHeroLayer, readabilitySignals, backendCompositionReport }) {
+    const scored = variants.map((layout) => ({
+        layout,
+        score: scorePosterLayoutVariant({
+            layout,
+            metrics,
+            budget,
+            pageWidth,
+            pageHeight,
+            includeHeroLayer,
+            readabilitySignals,
+            backendCompositionReport,
+        }),
+    }));
+    scored.sort((a, b) => Number(b.score.total || 0) - Number(a.score.total || 0));
+    const current = scored[0] || null;
+    return current ? { ...current, scored } : { layout: null, score: { total: 0, breakdown: {} }, scored: [] };
+}
+function tightenDecoratedTextBoxes(widgets, pageWidth) {
+    widgets.forEach((widget) => {
+        if (!widget || widget.type !== 'w-text' || isCollapsedWidget(widget))
+            return;
+        const name = String(widget.name || '');
+        const hasVisibleBackground = () => {
+            const backgroundColor = String(widget.backgroundColor || '').trim();
+            return backgroundColor && !isEffectivelyTransparentColor(backgroundColor);
+        };
+        if (!(/^(ai_cta|ai_badge|ai_price_tag|ai_meta_|ai_chip_|ai_card_|ai_recruit_card_)/.test(name)) && !(hasVisibleBackground() && /^(ai_title|ai_slogan|ai_body|ai_list_)/.test(name)))
+            return;
+        if (!hasVisibleBackground())
+            return;
+        const fontSize = Math.max(10, Number(widget.fontSize || 0));
+        const currentWidth = Math.max(48, Number(widget.width || 0));
+        const lineHeight = Math.max(1, Number(widget.lineHeight || 1.2));
+        const text = String(widget.text || '').trim();
+        const applyTightHeight = (paddingY, minHeight, maxHeight = Infinity) => {
+            const nextWidth = Math.max(24, Number(widget.width || currentWidth));
+            const contentWidth = Math.max(12, nextWidth - Math.max(0, Math.round(Number(paddingY || 0) * 2.4)));
+            const contentHeight = text
+                ? Math.max(fontSize, Math.round(estimateTextHeight(text, fontSize, contentWidth) * Math.max(1, lineHeight * 0.94)))
+                : fontSize;
+            const nextHeight = clampNumber(contentHeight + Math.max(4, Number(paddingY || 0)) * 2, Math.max(1, Number(minHeight || 0)), Math.max(1, Number(maxHeight || Infinity)));
+            widget.height = Math.round(nextHeight);
+            if (widget.record)
+                widget.record.height = Math.round(nextHeight);
+        };
+        if (name === 'ai_cta' || name === 'ai_badge' || name === 'ai_price_tag' || name.startsWith('ai_meta_') || name.startsWith('ai_chip_')) {
+            const minHeight = Math.round(fontSize * (name === 'ai_cta' ? 1.7 : 1.3));
+            const paddingY = Math.round(fontSize * (name === 'ai_cta' ? 0.42 : 0.26));
+            fitPosterInlineText(widget, pageWidth, {
+                minWidth: Math.max(42, Math.round(pageWidth * (name === 'ai_cta' ? 0.12 : 0.06))),
+                maxWidth: currentWidth,
+                minHeight,
+                paddingX: Math.round(fontSize * (name === 'ai_cta' ? 1.05 : 0.72)),
+            });
+            if (name === 'ai_cta') {
+                applyTightHeight(paddingY, minHeight, Math.round(fontSize * 2.35));
+            }
+            else {
+                applyTightHeight(paddingY, minHeight, Math.round(fontSize * 1.95));
+            }
+            return;
+        }
+        const minHeight = Math.round(fontSize * 1.32);
+        const paddingY = Math.round(fontSize * 0.24);
+        fitPosterTextBox(widget, pageWidth, 0, {
+            minWidth: Math.max(48, Math.round(pageWidth * (/^(ai_card_|ai_recruit_card_)/.test(name) ? 0.14 : 0.1))),
+            maxWidth: currentWidth,
+            minHeight,
+            paddingX: Math.round(fontSize * (/^(ai_card_|ai_recruit_card_)/.test(name) ? 0.88 : 0.66)),
+            paddingY,
+        });
+        applyTightHeight(paddingY, minHeight, Math.max(minHeight, Math.round(fontSize * (/^(ai_title|ai_slogan)/.test(name) ? 5.4 : 4.8))));
+        if (/^(ai_title|ai_slogan|ai_body|ai_list_)/.test(name) && isDarkPanelColor(widget.backgroundColor)) {
+            const rect = getWidgetRectPx(widget);
+            if (!rect)
+                return;
+            const text = String(widget.text || '').trim();
+            const contentWidth = estimateTextWidth(text, fontSize, rect.width);
+            const contentHeight = estimateTextHeight(text, fontSize, rect.width);
+            const wasteRatio = clampNumber((rect.width * rect.height - Math.max(1, contentWidth * contentHeight)) / Math.max(1, rect.width * rect.height), 0, 1);
+            if (wasteRatio >= 0.45) {
+                widget.backgroundColor = '#ffffff00';
+                widget.borderColor = '#ffffff00';
+                widget.borderWidth = 0;
+            }
+        }
+    });
+}
+function getWidgetRectPx(widget) {
+    if (!widget || isCollapsedWidget(widget))
+        return null;
+    const left = Number(widget.left || 0);
+    const top = Number(widget.top || 0);
+    const width = Math.max(0, Number(widget.width || 0));
+    const height = Math.max(0, Number(widget.height || 0));
+    if (!(width > 0 && height > 0))
+        return null;
+    return { left, top, right: left + width, bottom: top + height, width, height };
+}
+function syncWidgetTopLeftRecord(widget) {
+    if (!widget || !widget.record)
+        return;
+    widget.record.top = Math.round(Number(widget.top || 0));
+    widget.record.left = Math.round(Number(widget.left || 0));
+}
+function getRectIntersection(a, b) {
+    const left = Math.max(a.left, b.left);
+    const top = Math.max(a.top, b.top);
+    const right = Math.min(a.right, b.right);
+    const bottom = Math.min(a.bottom, b.bottom);
+    if (right <= left || bottom <= top)
+        return null;
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+function isWidgetFlowCandidate(widget) {
+    const name = String(widget?.name || '');
+    return widget && widget.type === 'w-text' && !isCollapsedWidget(widget) && /^(ai_title|ai_slogan|ai_body|ai_cta|ai_price_tag|ai_price_num|ai_badge|ai_meta_|ai_list_|ai_card_|ai_recruit_card_)/.test(name);
+}
+function resolvePosterTextFlowCollisions(widgets, pageWidth, pageHeight) {
+    const flowWidgets = widgets.filter((widget) => isWidgetFlowCandidate(widget));
+    const gap = Math.max(10, Math.round(pageHeight * 0.012));
+    const columnTolerance = Math.round(pageWidth * 0.18);
+    const sorted = flowWidgets
+        .map((widget) => ({ widget, rect: getWidgetRectPx(widget) }))
+        .filter((item) => item.rect)
+        .sort((a, b) => {
+        if (Math.abs(a.rect.left - b.rect.left) <= columnTolerance)
+            return a.rect.top - b.rect.top;
+        return a.rect.left - b.rect.left || a.rect.top - b.rect.top;
+    });
+    let moved = false;
+    for (let index = 1; index < sorted.length; index += 1) {
+        const previous = sorted[index - 1];
+        const current = sorted[index];
+        const previousRect = getWidgetRectPx(previous.widget);
+        const currentRect = getWidgetRectPx(current.widget);
+        if (!previousRect || !currentRect)
+            continue;
+        const horizontalOverlap = Math.min(previousRect.right, currentRect.right) - Math.max(previousRect.left, currentRect.left);
+        const sameColumn = horizontalOverlap > Math.min(previousRect.width, currentRect.width) * 0.2
+            || Math.abs(previousRect.left - currentRect.left) <= columnTolerance;
+        if (!sameColumn)
+            continue;
+        const requiredTop = previousRect.bottom + gap;
+        if (currentRect.top < requiredTop) {
+            current.widget.top = Math.round(requiredTop);
+            syncWidgetTopLeftRecord(current.widget);
+            clampWidgetInside(current.widget, pageWidth, pageHeight, Math.round(pageWidth * 0.03), Math.round(pageHeight * 0.03));
+            syncWidgetTopLeftRecord(current.widget);
+            moved = true;
+        }
+    }
+    const panel = widgets.find((item) => item.name === 'ai_text_panel');
+    if (panel && !isCollapsedWidget(panel)) {
+        const contentWidgets = flowWidgets.filter((widget) => {
+            const name = String(widget.name || '');
+            return !/^ai_badge$/.test(name);
+        });
+        if (contentWidgets.length) {
+            const visibleRects = contentWidgets.map((widget) => getWidgetRectPx(widget)).filter(Boolean);
+            if (visibleRects.length) {
+                const minLeft = Math.min(...visibleRects.map((rect) => rect.left));
+                const minTop = Math.min(...visibleRects.map((rect) => rect.top));
+                const maxRight = Math.max(...visibleRects.map((rect) => rect.right));
+                const maxBottom = Math.max(...visibleRects.map((rect) => rect.bottom));
+                const padX = Math.round(pageWidth * 0.03);
+                const padTop = Math.round(pageHeight * 0.024);
+                const padBottom = Math.round(pageHeight * 0.04);
+                const sparseContent = contentWidgets.length <= 3
+                    && !contentWidgets.some((widget) => /^(ai_body|ai_list_|ai_meta_|ai_chip_|ai_recruit_card_)/.test(String(widget?.name || '')));
+                const nextLeft = Math.max(Math.round(pageWidth * 0.04), minLeft - padX);
+                const nextTop = Math.max(Math.round(pageHeight * 0.04), minTop - padTop);
+                const nextWidth = Math.min(Math.round(pageWidth * (sparseContent ? 0.72 : 0.88)), maxRight - minLeft + padX * 2);
+                const nextHeight = Math.min(Math.round(pageHeight * (sparseContent ? 0.24 : 0.42)), Math.max(Math.round(pageHeight * (sparseContent ? 0.1 : 0.14)), maxBottom - minTop + padTop + padBottom));
+                applyWidgetRect(panel, {
+                    left: nextLeft,
+                    top: nextTop,
+                    width: nextWidth,
+                    height: nextHeight,
+                });
+            }
+        }
+    }
+    return moved;
+}
+function settleFinalPosterTextFlow(widgets, pageWidth, pageHeight, maxPasses = 3) {
+    let moved = false;
+    const passes = Math.max(1, Math.min(4, Number(maxPasses || 3)));
+    for (let index = 0; index < passes; index += 1) {
+        const before = auditFinalPosterWidgets(widgets, pageWidth, pageHeight);
+        const shifted = resolvePosterTextFlowCollisions(widgets, pageWidth, pageHeight);
+        tightenDecoratedTextBoxes(widgets, pageWidth);
+        const after = auditFinalPosterWidgets(widgets, pageWidth, pageHeight);
+        moved = moved || shifted || after.overlapCount < before.overlapCount || after.decoratedWasteRatio < before.decoratedWasteRatio;
+        if (!shifted && after.overlapCount >= before.overlapCount && after.decoratedWasteRatio >= before.decoratedWasteRatio) {
+            break;
+        }
+    }
+    return moved;
+}
+function auditFinalPosterWidgets(widgets, pageWidth, pageHeight) {
+    const candidates = widgets.filter((widget) => isWidgetFlowCandidate(widget));
+    let overlapCount = 0;
+    let overlapArea = 0;
+    let decoratedWasteRatio = 0;
+    const decorated = widgets.filter((widget) => widget && widget.type === 'w-text' && !isCollapsedWidget(widget) && String(widget.backgroundColor || '').trim() && !isEffectivelyTransparentColor(String(widget.backgroundColor || '').trim()));
+    for (let i = 0; i < candidates.length; i += 1) {
+        const left = getWidgetRectPx(candidates[i]);
+        if (!left)
+            continue;
+        for (let j = i + 1; j < candidates.length; j += 1) {
+            const right = getWidgetRectPx(candidates[j]);
+            if (!right)
+                continue;
+            const intersection = getRectIntersection(left, right);
+            if (!intersection)
+                continue;
+            overlapCount += 1;
+            overlapArea += intersection.width * intersection.height;
+        }
+    }
+    decorated.forEach((widget) => {
+        const rect = getWidgetRectPx(widget);
+        if (!rect)
+            return;
+        const fontSize = Math.max(10, Number(widget.fontSize || 0));
+        const text = String(widget.text || '').trim();
+        const contentWidth = estimateTextWidth(text, fontSize, rect.width);
+        const contentHeight = estimateTextHeight(text, fontSize, rect.width);
+        const contentArea = Math.max(1, contentWidth * contentHeight);
+        decoratedWasteRatio += clampNumber((rect.width * rect.height - contentArea) / Math.max(rect.width * rect.height, 1), 0, 1);
+    });
+    return {
+        overlapCount,
+        overlapArea,
+        decoratedWasteRatio: decorated.length ? Number((decoratedWasteRatio / decorated.length).toFixed(3)) : 0,
+        textWidgetCount: candidates.length,
+        pageCoveragePenalty: Number((overlapArea / Math.max(1, pageWidth * pageHeight)).toFixed(4)),
+    };
+}
 function resolvePresetLayoutFamily(presetKey, sizeProfile) {
     const key = String(presetKey || '').trim();
     const mapping = {
@@ -169,6 +977,92 @@ function normalizePosterSubline(text) {
         .replace(/\r?\n/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+function clipPosterLayerText(text, max) {
+    const safe = String(text || '').replace(/\s+/g, '').trim();
+    return safe.length > max ? safe.slice(0, max) : safe;
+}
+function getPosterCopyRichnessLimits(layoutFamily = '', sizeProfile = 'portrait', prioritizeAi = false) {
+    const compact = sizeProfile === 'banner';
+    const family = normalizeLayoutFamily(layoutFamily);
+    const generous = prioritizeAi ? 1 : 0;
+    const titleMax = compact
+        ? (prioritizeAi ? 20 : 16)
+        : /list-recruitment|clean-course/.test(family)
+            ? (prioritizeAi ? 24 : 18)
+            : /magazine-cover|hero-center|hero-left|premium-offer|grid-product|split-editorial|festive-frame|xiaohongshu-note/.test(family)
+                ? (prioritizeAi ? 22 : 16)
+                : (prioritizeAi ? 20 : 15);
+    const sloganMax = compact
+        ? (prioritizeAi ? 34 : 26)
+        : /list-recruitment|clean-course/.test(family)
+            ? (prioritizeAi ? 42 : 32)
+            : /hero-center|hero-left|split-editorial|magazine-cover|grid-product|premium-offer/.test(family)
+                ? (prioritizeAi ? 38 : 28)
+                : (prioritizeAi ? 36 : 26);
+    const bodySegmentCount = compact ? (prioritizeAi ? 5 : 4) : (prioritizeAi ? 7 : 5);
+    const bodySegmentLen = compact ? (prioritizeAi ? 18 : 16) : (prioritizeAi ? 24 : 18);
+    const bodyFallbackChars = compact ? (prioritizeAi ? 26 : 20) : (prioritizeAi ? 32 : 24);
+    const ctaMax = compact ? 8 : (prioritizeAi ? 10 : 8);
+    const detailCountBoost = /list-recruitment|clean-course|grid-product/.test(family) ? 1 : 0;
+    const chipBoost = /hero-center|magazine-cover|grid-product|split-editorial/.test(family) ? 1 : 0;
+    return {
+        titleMax,
+        sloganMax,
+        bodySegmentCount,
+        bodySegmentLen,
+        bodyFallbackChars,
+        ctaMax,
+        maxChipsFloor: 6 + generous + chipBoost,
+        maxDetailsFloor: 3 + generous + detailCountBoost,
+    };
+}
+function limitPosterSegments(values, maxCount = 3, maxLen = 14) {
+    const seed = Array.isArray(values) ? values : String(values || '').split(/[｜|\n]/);
+    const result = [];
+    seed.forEach((item) => {
+        const safe = String(item || '').replace(/\s+/g, ' ').trim();
+        if (!safe)
+            return;
+        const clipped = safe.length > maxLen ? safe.slice(0, maxLen) : safe;
+        if (result.some((existing) => isSamePosterText(existing, clipped)))
+            return;
+        result.push(clipped);
+    });
+    return result.slice(0, maxCount);
+}
+function enforcePosterAlignmentPolicy(widgets, family) {
+    const centerFamilies = new Set(['hero-center', 'magazine-cover', 'festive-frame', 'xiaohongshu-note']);
+    const align = centerFamilies.has(String(family || '').trim()) ? 'center' : 'left';
+    const title = widgets.find((item) => item.name === 'ai_title');
+    const slogan = widgets.find((item) => item.name === 'ai_slogan');
+    const body = widgets.find((item) => item.name === 'ai_body');
+    [title, slogan, body].forEach((widget) => {
+        if (!widget || isCollapsedWidget(widget))
+            return;
+        setWidgetAlign(widget, align);
+    });
+    const cta = widgets.find((item) => item.name === 'ai_cta');
+    if (cta && !isCollapsedWidget(cta))
+        setWidgetAlign(cta, 'center');
+}
+function enforcePosterHierarchyBudget(widgets) {
+    const title = widgets.find((item) => item.name === 'ai_title');
+    const slogan = widgets.find((item) => item.name === 'ai_slogan');
+    const body = widgets.find((item) => item.name === 'ai_body');
+    const cta = widgets.find((item) => item.name === 'ai_cta');
+    if (title && slogan) {
+        const titleFont = Math.max(Number(title.fontSize || 0), 32);
+        const sloganFont = Math.min(Math.max(Number(slogan.fontSize || 0), 18), Math.round(titleFont * 0.7));
+        title.fontSize = Math.max(titleFont, Math.round(sloganFont * 1.35));
+        slogan.fontSize = sloganFont;
+    }
+    if (body && slogan) {
+        body.fontSize = Math.min(Math.max(Number(body.fontSize || 0), 16), Math.round(Number(slogan.fontSize || 18) * 0.9));
+    }
+    if (cta) {
+        cta.fontSize = Math.min(Math.max(Number(cta.fontSize || 0), 18), Math.max(28, Math.round(Number((title === null || title === void 0 ? void 0 : title.fontSize) || 42) * 0.55)));
+    }
 }
 function isExplicitNotePosterContext(text) {
     return /小红书|种草|笔记|教程|攻略|合集|开箱|测评|打卡|探店|vlog|分享/.test(String(text || ''));
@@ -547,6 +1441,42 @@ function finalizeAiWidgetEditability(widgets) {
     });
     return widgets;
 }
+function normalizeAiPosterLayerOrder(widgets) {
+    if (!Array.isArray(widgets) || widgets.length <= 1)
+        return widgets;
+    const priority = (widget) => {
+        const name = String(widget?.name || '');
+        if (name === 'ai_hero')
+            return 0;
+        if (name === 'ai_hero_focus')
+            return 1;
+        if (name === 'ai_text_panel' || name === 'ai_course_bar')
+            return 2;
+        if (/^ai_deco_/.test(name))
+            return 3;
+        if (name === 'ai_badge')
+            return 4;
+        if (name === 'ai_title')
+            return 5;
+        if (name === 'ai_slogan')
+            return 6;
+        if (name === 'ai_body')
+            return 7;
+        if (/^ai_(card|recruit_card|list|meta|chip|festive_card)_/.test(name))
+            return 8;
+        if (name === 'ai_price_tag' || name === 'ai_price_num')
+            return 9;
+        if (name === 'ai_cta')
+            return 10;
+        if (name === 'ai_qrcode')
+            return 11;
+        return 20;
+    };
+    return widgets
+        .map((widget, index) => ({ widget, index, rank: priority(widget) }))
+        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+        .map((item) => item.widget);
+}
 function isPosterPriceLikeText(text) {
     const value = String(text || '').trim();
     if (!value || value === ' ')
@@ -601,6 +1531,10 @@ function tightenPosterInfoPanel(widgets, family, pageWidth, pageHeight) {
     const minTop = Math.min(...tracked.map((item) => Number(item.top || 0)));
     const maxRight = Math.max(...tracked.map((item) => Number(item.left || 0) + Number(item.width || 0)));
     const maxBottom = Math.max(...tracked.map((item) => Number(item.top || 0) + Number(item.height || 0)));
+    const sparseTracked = tracked.filter((item) => !/^ai_badge$/.test(String(item?.name || '')));
+    const contentCount = sparseTracked.length;
+    const denseInfoCount = sparseTracked.filter((item) => /^(ai_body|ai_list_|ai_meta_|ai_chip_|ai_recruit_card_)/.test(String(item?.name || ''))).length;
+    const sparseContent = contentCount <= 3 && denseInfoCount === 0;
     const padX = Math.round(pageWidth * 0.035);
     const padTop = Math.round(pageHeight * 0.028);
     const padBottom = Math.round(pageHeight * 0.05);
@@ -609,21 +1543,22 @@ function tightenPosterInfoPanel(widgets, family, pageWidth, pageHeight) {
     let width = Math.min(pageWidth - left - Math.round(pageWidth * 0.05), maxRight - left + padX);
     let height = Math.min(pageHeight - top - Math.round(pageHeight * 0.04), maxBottom - top + padBottom);
     if (family === 'split-editorial' || family === 'hero-left' || family === 'list-recruitment') {
-        width = Math.min(width, Math.round(pageWidth * 0.47));
+        width = Math.min(width, Math.round(pageWidth * (sparseContent ? 0.4 : 0.47)));
     }
     if (family === 'hero-center') {
-        const targetWidth = Math.min(Math.round(pageWidth * 0.86), Math.max(width, Math.round(pageWidth * 0.66)));
+        const minWidth = Math.round(pageWidth * (sparseContent ? 0.42 : 0.66));
+        const targetWidth = Math.min(Math.round(pageWidth * (sparseContent ? 0.72 : 0.86)), Math.max(width, minWidth));
         left = Math.round((pageWidth - targetWidth) / 2);
         width = targetWidth;
     }
     if (family === 'clean-course') {
-        width = Math.min(Math.round(pageWidth * 0.84), Math.max(width, Math.round(pageWidth * 0.72)));
+        width = Math.min(Math.round(pageWidth * (sparseContent ? 0.72 : 0.84)), Math.max(width, Math.round(pageWidth * (sparseContent ? 0.46 : 0.72))));
     }
     applyWidgetRect(panel, {
         left,
         top,
         width,
-        height: Math.max(height, Math.round(pageHeight * 0.16)),
+        height: Math.max(height, Math.round(pageHeight * (sparseContent ? 0.11 : 0.16))),
     });
 }
 function fitPanelTextStack(widgets, family, pageWidth) {
@@ -644,7 +1579,7 @@ function fitPanelTextStack(widgets, family, pageWidth) {
         });
     });
 }
-function applyMinimumReadablePosterTypography(widgets, pageWidth, pageHeight) {
+function applyMinimumReadablePosterTypography(widgets, pageWidth, pageHeight, options = {}) {
     const portrait = pageHeight >= pageWidth * 1.08;
     const minBadgeFont = getTextFont(pageWidth, portrait ? 26 : 24, 18);
     const minChipFont = getTextFont(pageWidth, portrait ? 22 : 20, 16);
@@ -663,50 +1598,73 @@ function applyMinimumReadablePosterTypography(widgets, pageWidth, pageHeight) {
             const maxFont = Number.isFinite(Number(widget.aiReadableMaxFont)) ? Number(widget.aiReadableMaxFont) : Infinity;
             widget.fontSize = Math.min(maxFont, Math.max(Number(widget.fontSize || 0), minFont));
             widget.lineHeight = Math.max(Number(widget.lineHeight || 0), 1.04);
-            widget.height = Math.max(Number(widget.height || 0), estimateTextHeight(String(widget.text || ''), Number(widget.fontSize || minTitleFont), Number(widget.width || pageWidth * 0.7)));
-            if (widget.record)
-                widget.record.height = Math.round(Number(widget.height || 0));
+            fitPosterTextBox(widget, pageWidth, pageHeight, {
+                fitWidth: false,
+                minHeight: Math.round(Number(widget.fontSize || minTitleFont) * 1.1),
+                paddingY: Math.round(Number(widget.fontSize || minTitleFont) * 0.18),
+            });
         }
         else if (name === 'ai_slogan') {
             const minFont = Number.isFinite(Number(widget.aiReadableMinFont)) ? Number(widget.aiReadableMinFont) : minSloganFont;
             const maxFont = Number.isFinite(Number(widget.aiReadableMaxFont)) ? Number(widget.aiReadableMaxFont) : Infinity;
             widget.fontSize = Math.min(maxFont, Math.max(Number(widget.fontSize || 0), minFont));
             widget.lineHeight = Math.max(Number(widget.lineHeight || 0), 1.18);
-            widget.height = Math.max(Number(widget.height || 0), estimateTextHeight(String(widget.text || ''), Number(widget.fontSize || minSloganFont), Number(widget.width || pageWidth * 0.66)));
-            if (widget.record)
-                widget.record.height = Math.round(Number(widget.height || 0));
+            fitPosterTextBox(widget, pageWidth, pageHeight, {
+                fitWidth: false,
+                minHeight: Math.round(Number(widget.fontSize || minSloganFont) * 2.3),
+                paddingY: Math.round(Number(widget.fontSize || minSloganFont) * 0.18),
+            });
         }
         else if (name === 'ai_body' || name.startsWith('ai_list_') || name.startsWith('ai_card_') || name.startsWith('ai_recruit_card_')) {
             const minFont = Number.isFinite(Number(widget.aiReadableMinFont)) ? Number(widget.aiReadableMinFont) : minBodyFont;
             const maxFont = Number.isFinite(Number(widget.aiReadableMaxFont)) ? Number(widget.aiReadableMaxFont) : Infinity;
             widget.fontSize = Math.min(maxFont, Math.max(Number(widget.fontSize || 0), minFont));
             widget.lineHeight = Math.max(Number(widget.lineHeight || 0), 1.24);
-            widget.height = Math.max(Number(widget.height || 0), estimateTextHeight(String(widget.text || ''), Number(widget.fontSize || minBodyFont), Number(widget.width || pageWidth * 0.6)));
-            if (widget.record)
-                widget.record.height = Math.round(Number(widget.height || 0));
+            fitPosterTextBox(widget, pageWidth, pageHeight, {
+                fitWidth: false,
+                minHeight: Math.round(Number(widget.fontSize || minBodyFont) * (name === 'ai_body' ? 3.2 : 2.25)),
+                paddingY: Math.round(Number(widget.fontSize || minBodyFont) * 0.18),
+            });
         }
         else if (name === 'ai_cta') {
             const minFont = Number.isFinite(Number(widget.aiReadableMinFont)) ? Number(widget.aiReadableMinFont) : minCtaFont;
             const maxFont = Number.isFinite(Number(widget.aiReadableMaxFont)) ? Number(widget.aiReadableMaxFont) : Infinity;
             widget.fontSize = Math.min(maxFont, Math.max(Number(widget.fontSize || 0), minFont));
-            widget.height = Math.max(Number(widget.height || 0), Math.round(pageHeight * 0.048));
-            if (widget.record)
-                widget.record.height = Math.round(Number(widget.height || 0));
+            fitPosterTextBox(widget, pageWidth, pageHeight, {
+                minWidth: Math.round(pageWidth * 0.15),
+                maxWidth: Math.min(Math.round(pageWidth * 0.3), Math.max(Number(widget.width || 0), Math.round(pageWidth * 0.15))),
+                minHeight: Math.round(Number(widget.fontSize || minCtaFont) * 1.9),
+                paddingX: Math.round(Number(widget.fontSize || minCtaFont) * 1.15),
+                paddingY: Math.round(Number(widget.fontSize || minCtaFont) * 0.55),
+            });
         }
         else if (name === 'ai_badge' || name === 'ai_price_tag') {
             const minFont = Number.isFinite(Number(widget.aiReadableMinFont)) ? Number(widget.aiReadableMinFont) : minBadgeFont;
             const maxFont = Number.isFinite(Number(widget.aiReadableMaxFont)) ? Number(widget.aiReadableMaxFont) : Infinity;
             widget.fontSize = Math.min(maxFont, Math.max(Number(widget.fontSize || 0), minFont));
-            widget.height = Math.max(Number(widget.height || 0), Math.round(pageHeight * 0.04));
-            widget.width = Math.max(Number(widget.width || 0), Math.round(pageWidth * 0.2));
-            if (widget.record) {
-                widget.record.height = Math.round(Number(widget.height || 0));
-                widget.record.width = Math.round(Number(widget.width || 0));
-            }
+            fitPosterTextBox(widget, pageWidth, pageHeight, {
+                minWidth: Math.round(pageWidth * 0.1),
+                maxWidth: Math.min(Math.round(pageWidth * 0.24), Math.max(Number(widget.width || 0), Math.round(pageWidth * 0.1))),
+                minHeight: Math.round(Number(widget.fontSize || minBadgeFont) * 1.65),
+                paddingX: Math.round(Number(widget.fontSize || minBadgeFont) * 0.95),
+                paddingY: Math.round(Number(widget.fontSize || minBadgeFont) * 0.42),
+            });
+            fitPosterInlineText(widget, pageWidth, {
+                minWidth: Math.round(pageWidth * 0.08),
+                maxWidth: Math.round(pageWidth * 0.2),
+                minHeight: Math.round(Number(widget.fontSize || minBadgeFont) * 1.4),
+                paddingX: Math.round(Number(widget.fontSize || minBadgeFont) * 0.72),
+            });
         }
         else if (name === 'ai_price_num') {
             widget.fontSize = Math.max(Number(widget.fontSize || 0), minPriceFont);
             widget.lineHeight = Math.max(Number(widget.lineHeight || 0), 1.02);
+            fitPosterInlineText(widget, pageWidth, {
+                minWidth: Math.round(pageWidth * 0.1),
+                maxWidth: Math.round(pageWidth * 0.18),
+                minHeight: Math.round(Number(widget.fontSize || minPriceFont) * 1.08),
+                paddingX: Math.round(Number(widget.fontSize || minPriceFont) * 0.18),
+            });
         }
         else if (name.startsWith('ai_chip_')) {
             const minFont = Number.isFinite(Number(widget.aiReadableMinFont)) ? Number(widget.aiReadableMinFont) : minChipFont;
@@ -727,6 +1685,9 @@ function applyMinimumReadablePosterTypography(widgets, pageWidth, pageHeight) {
             }
         }
     });
+    if (options.resolveCollisions) {
+        settleFinalPosterTextFlow(widgets, pageWidth, pageHeight, options.maxPasses || 2);
+    }
 }
 function fitAiHeroToPage(hero, pageWidth, pageHeight) {
     if (!hero || hero.name !== 'ai_hero')
@@ -1105,17 +2066,20 @@ function applyMultimodalLayoutHints(widgets, result, pageWidth, pageHeight, pale
                 w: Math.min(0.96, maxX - minX + 0.05),
                 h: Math.min(0.94, maxY - minY + 0.06),
             }, pageWidth, pageHeight, { keepFontSize: true });
-            panelWidget.backgroundColor = withAlpha(primaryPanelColor, layoutFamily === 'hero-center' || layoutFamily === 'magazine-cover' ? '9a' : 'bc');
+            panelWidget.backgroundColor = toSoftPanelBackground(palette, primaryPanelColor || palette.surface || '#ffffff', layoutFamily === 'hero-center' || layoutFamily === 'magazine-cover' ? 'd0' : 'dc');
             panelWidget.borderWidth = 1;
-            panelWidget.borderColor = withAlpha(getMultimodalTextStyle(hints, 'heroHeadline')?.stroke || blendColor(primaryPanelColor, '#ffffff', 0.2), '58');
+            panelWidget.borderColor = toSoftPanelBorder(palette, getMultimodalTextStyle(hints, 'heroHeadline')?.stroke || primaryPanelColor || palette.primary || '#8b5cf6', '42');
         }
-        else if (!needsPanel && !new Set(['grid-product', 'premium-offer', 'clean-course', 'list-recruitment']).has(layoutFamily)) {
+        else if (!needsPanel && !new Set(['grid-product', 'premium-offer', 'clean-course']).has(layoutFamily)) {
             panelWidget.backgroundColor = '#ffffff00';
             panelWidget.borderWidth = 0;
             panelWidget.borderColor = '#ffffff00';
             panelWidget.height = 2;
             if (panelWidget.record)
                 panelWidget.record.height = 2;
+        }
+        if (layoutFamily === 'list-recruitment') {
+            hidePanelSurface(panelWidget);
         }
     }
     return {
@@ -1143,37 +2107,29 @@ function clampHeroIntoBounds(hero, bounds) {
     }
 }
 function getReadablePanelStyle(palette, readability) {
-    const prefersDarkPanel = contrastRatio(readability.text, palette.background || '#ffffff') < 5;
-    const panelBase = chooseReadableColor(prefersDarkPanel
-        ? [
-            blendColor('#0f172a', palette.primary || '#2563eb', 0.12),
-            '#16202f',
-            '#1e293b',
-        ]
-        : [
-            blendColor(palette.surface || '#ffffff', '#ffffff', 0.18),
-            blendColor(palette.background || '#f8fafc', '#ffffff', 0.28),
-            '#fffaf0',
-            '#f8fafc',
-        ], [palette.background || '#ffffff', palette.secondary || '#f8fafc'], 2.4);
-    const borderColor = blendColor(panelBase, readability.text, prefersDarkPanel ? 0.22 : 0.14);
+    const panelBase = getSoftPanelBaseColor(palette, palette.surface || palette.background || '#ffffff');
+    const borderColor = blendColor(panelBase, readability.text, 0.12);
     return {
-        panelBackground: withAlpha(panelBase, prefersDarkPanel ? 'd6' : 'ef'),
-        panelBorder: withAlpha(borderColor, prefersDarkPanel ? '96' : '88'),
+        panelBackground: withAlpha(panelBase, 'e8'),
+        panelBorder: withAlpha(borderColor, '52'),
     };
 }
 function shouldUseLargeTextPanel(layoutFamily, hints, panelColor) {
     const family = String(layoutFamily || '').trim();
     if (new Set(['grid-product', 'clean-course']).has(family))
         return true;
+    if (family === 'list-recruitment')
+        return false;
     if (!String(panelColor || '').trim())
         return false;
     const tone = String(hints?.visualAnalysis?.dominantTone || '').trim();
     const texture = String(hints?.visualAnalysis?.texture || '').trim();
     const needsPanel = Boolean(hints?.visualAnalysis?.needsPanel);
-    if (family === 'list-recruitment')
-        return needsPanel || tone === 'dark' || texture === 'detailed';
-    return needsPanel || tone === 'dark' || texture === 'detailed';
+    const darkOrDetailedScene = tone === 'dark' || texture === 'detailed';
+    if (new Set(['hero-center', 'premium-offer', 'festive-frame', 'magazine-cover']).has(family)) {
+        return darkOrDetailedScene;
+    }
+    return needsPanel || darkOrDetailedScene;
 }
 function hidePanelSurface(panelWidget) {
     if (!panelWidget)
@@ -1186,6 +2142,158 @@ function hidePanelSurface(panelWidget) {
     panelWidget.opacity = 0;
     if (panelWidget.record)
         panelWidget.record.height = 2;
+}
+function parsePanelColor(color) {
+    const raw = String(color || '').trim().toLowerCase();
+    if (!raw || raw === 'transparent' || raw === '#ffffff00' || raw === '#00000000')
+        return null;
+    const hex = raw.replace('#', '');
+    if (/^[0-9a-f]{6}([0-9a-f]{2})?$/.test(hex)) {
+        const value = hex.slice(0, 6);
+        const alpha = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+        return {
+            r: parseInt(value.slice(0, 2), 16),
+            g: parseInt(value.slice(2, 4), 16),
+            b: parseInt(value.slice(4, 6), 16),
+            a: alpha,
+        };
+    }
+    const rgba = raw.match(/^rgba?\(([^)]+)\)$/);
+    if (rgba) {
+        const parts = rgba[1].split(',').map((item) => Number(String(item).trim()));
+        if (parts.length >= 3) {
+            return {
+                r: Number.isFinite(parts[0]) ? parts[0] : 0,
+                g: Number.isFinite(parts[1]) ? parts[1] : 0,
+                b: Number.isFinite(parts[2]) ? parts[2] : 0,
+                a: Number.isFinite(parts[3]) ? parts[3] : 1,
+            };
+        }
+    }
+    return null;
+}
+function isDarkPanelColor(color) {
+    const parsed = parsePanelColor(color);
+    if (!parsed)
+        return false;
+    const luminance = (parsed.r * 0.299 + parsed.g * 0.587 + parsed.b * 0.114) / 255;
+    return parsed.a >= 0.28 && luminance <= 0.46;
+}
+function getSoftPanelBaseColor(palette, seedColor = '') {
+    const seed = String(seedColor || '').trim();
+    const surface = String(palette?.surface || '#ffffff').trim() || '#ffffff';
+    const background = String(palette?.background || '#f8fafc').trim() || '#f8fafc';
+    const primary = String(palette?.primary || '#8b5cf6').trim() || '#8b5cf6';
+    if (seed && !isDarkPanelColor(seed)) {
+        return blendColor(seed, '#ffffff', 0.76);
+    }
+    return blendColor(blendColor(surface, background, 0.45), primary, 0.08);
+}
+function toSoftPanelBackground(palette, seedColor = '', alpha = 'dc') {
+    return withAlpha(getSoftPanelBaseColor(palette, seedColor), alpha);
+}
+function toSoftPanelBorder(palette, seedColor = '', alpha = '52') {
+    const base = getSoftPanelBaseColor(palette, seedColor);
+    const primary = String(palette?.primary || '#8b5cf6').trim() || '#8b5cf6';
+    return withAlpha(blendColor(base, primary, 0.26), alpha);
+}
+function getPosterPanelContentWidgets(widgets, panelWidget = null, pageWidth = 0, pageHeight = 0) {
+    if (!Array.isArray(widgets))
+        return [];
+    const panelRect = panelWidget ? getWidgetRectPx(panelWidget) : null;
+    const attachMarginX = pageWidth > 0 ? Math.round(pageWidth * 0.04) : 48;
+    const attachMarginY = pageHeight > 0 ? Math.round(pageHeight * 0.05) : 72;
+    return widgets.filter((item) => item
+        && !isCollapsedWidget(item)
+        && /^(ai_badge|ai_title|ai_slogan|ai_body|ai_cta|ai_price_tag|ai_price_num|ai_meta_|ai_list_|ai_chip_|ai_card_|ai_recruit_card_)/.test(String(item.name || ''))
+        && (!panelRect || (() => {
+            const rect = getWidgetRectPx(item);
+            if (!rect)
+                return false;
+            if (getRectIntersection(panelRect, rect))
+                return true;
+            const horizontallyAttached = rect.right >= panelRect.left - attachMarginX && rect.left <= panelRect.right + attachMarginX;
+            const verticallyAttached = rect.bottom >= panelRect.top - attachMarginY && rect.top <= panelRect.bottom + attachMarginY;
+            return horizontallyAttached && verticallyAttached;
+        })()));
+}
+function getPosterPanelContentBounds(widgets, panelWidget = null, pageWidth = 0, pageHeight = 0) {
+    const visibleRects = getPosterPanelContentWidgets(widgets, panelWidget, pageWidth, pageHeight)
+        .map((widget) => ({ widget, rect: getWidgetRectPx(widget) }))
+        .filter((item) => item.rect);
+    if (!visibleRects.length)
+        return null;
+    const minLeft = Math.min(...visibleRects.map((item) => item.rect.left));
+    const minTop = Math.min(...visibleRects.map((item) => item.rect.top));
+    const maxRight = Math.max(...visibleRects.map((item) => item.rect.right));
+    const maxBottom = Math.max(...visibleRects.map((item) => item.rect.bottom));
+    return {
+        rects: visibleRects,
+        left: minLeft,
+        top: minTop,
+        right: maxRight,
+        bottom: maxBottom,
+        width: maxRight - minLeft,
+        height: maxBottom - minTop,
+        contentCount: visibleRects.filter((item) => !/^ai_badge$/.test(String(item.widget?.name || ''))).length,
+        denseInfoCount: visibleRects.filter((item) => /^(ai_body|ai_list_|ai_meta_|ai_chip_|ai_recruit_card_)/.test(String(item.widget?.name || ''))).length,
+    };
+}
+function neutralizeOversizedDarkPanels(widgets, pageWidth, pageHeight, palette) {
+    if (!Array.isArray(widgets) || !pageWidth || !pageHeight)
+        return;
+    const panelWidget = widgets.find((item) => item?.name === 'ai_text_panel');
+    if (!panelWidget)
+        return;
+    const widthRatio = Number(panelWidget.width || 0) / Math.max(1, pageWidth);
+    const heightRatio = Number(panelWidget.height || 0) / Math.max(1, pageHeight);
+    const areaRatio = widthRatio * heightRatio;
+    if (!isDarkPanelColor(panelWidget.backgroundColor) || widthRatio < 0.08 || heightRatio < 0.05 || areaRatio < 0.015)
+        return;
+    const contentBounds = getPosterPanelContentBounds(widgets, panelWidget, pageWidth, pageHeight);
+    if (contentBounds) {
+        const sparseContent = contentBounds.contentCount <= 3 && contentBounds.denseInfoCount === 0;
+        const panelArea = Math.max(1, Number(panelWidget.width || 0) * Number(panelWidget.height || 0));
+        const contentArea = Math.max(1, contentBounds.width * contentBounds.height);
+        const wasteRatio = panelArea / contentArea;
+        const padX = Math.round(pageWidth * (sparseContent ? 0.024 : 0.03));
+        const padTop = Math.round(pageHeight * (sparseContent ? 0.016 : 0.022));
+        const padBottom = Math.round(pageHeight * (sparseContent ? 0.026 : 0.034));
+        const nextWidth = Math.min(Math.round(pageWidth * (sparseContent ? 0.72 : 0.86)), contentBounds.width + padX * 2);
+        const nextHeight = Math.min(Math.round(pageHeight * (sparseContent ? 0.22 : 0.38)), Math.max(Math.round(pageHeight * (sparseContent ? 0.09 : 0.13)), contentBounds.height + padTop + padBottom));
+        const nextLeft = Math.max(Math.round(pageWidth * 0.04), Math.min(contentBounds.left - padX, pageWidth - nextWidth - Math.round(pageWidth * 0.04)));
+        const nextTop = Math.max(Math.round(pageHeight * 0.04), Math.min(contentBounds.top - padTop, pageHeight - nextHeight - Math.round(pageHeight * 0.04)));
+        if (wasteRatio > (sparseContent ? 1.45 : 2.4) || areaRatio > (sparseContent ? 0.09 : 0.18)) {
+            applyWidgetRect(panelWidget, {
+                left: nextLeft,
+                top: nextTop,
+                width: nextWidth,
+                height: nextHeight,
+            });
+        }
+        const projectedAreaRatio = (nextWidth / Math.max(1, pageWidth)) * (nextHeight / Math.max(1, pageHeight));
+        if (sparseContent && (wasteRatio > 1.8 || projectedAreaRatio > 0.085)) {
+            hidePanelSurface(panelWidget);
+            return;
+        }
+    }
+    const originalColor = panelWidget.backgroundColor;
+    const nextAreaRatio = (Number(panelWidget.width || 0) / Math.max(1, pageWidth)) * (Number(panelWidget.height || 0) / Math.max(1, pageHeight));
+    panelWidget.backgroundColor = toSoftPanelBackground(palette, originalColor, nextAreaRatio > 0.08 ? 'c8' : 'aa');
+    panelWidget.borderColor = toSoftPanelBorder(palette, originalColor, nextAreaRatio > 0.08 ? '34' : '22');
+    panelWidget.borderWidth = Math.min(Number(panelWidget.borderWidth || 1), 1);
+    panelWidget.opacity = 1;
+    const strongText = chooseReadableColor(['#111827', '#0f172a', '#1f2937', '#334155'], [panelWidget.backgroundColor, palette?.background || '#ffffff'], 5.1);
+    const mutedText = chooseReadableColor(['#334155', '#475569', '#4b5563', '#64748b'], [panelWidget.backgroundColor, palette?.background || '#ffffff'], 4.4);
+    widgets.forEach((widget) => {
+        const role = String(widget?.name || '');
+        if (role === 'ai_title' || role === 'ai_body') {
+            widget.color = strongText;
+        }
+        else if (role === 'ai_slogan' || role.startsWith('ai_meta_') || role.startsWith('ai_list_') || role.startsWith('ai_chip_')) {
+            widget.color = mutedText;
+        }
+    });
 }
 function collectProtocolPosterFacts(copyDeck, limit = 4, lineLimit = 18) {
     const factRows = [];
@@ -1233,6 +2341,328 @@ function getPrimaryAvoidZones(hints, limit = 3) {
             .map((item) => normalizeMultimodalRect(item, { x: 0.3, y: 0.3, w: 0.2, h: 0.2 }))
             .slice(0, limit)
         : [];
+}
+function getAiPriorityPosterContext(options = {}, widgets = [], pageWidth = 0, pageHeight = 0) {
+    const designPlan = options?.designPlan || options?.result?.designPlan || {};
+    const copyDeck = options?.copyDeck || {};
+    const presetKey = String(options?.input?.presetKey || '').trim();
+    const family = normalizeLayoutFamily(designPlan.layoutFamily || options?.layoutFamily || '');
+    const sceneText = `${presetKey} ${options?.input?.theme || ''} ${options?.input?.industry || ''} ${options?.input?.purpose || ''} ${options?.input?.style || ''} ${options?.input?.content || ''}`.trim();
+    const wide = pageWidth > pageHeight * 1.06;
+    const recruitmentLike = widgets.some((item) => /^ai_(recruit_card|list)_/.test(String(item?.name || '')))
+        || family === 'list-recruitment'
+        || /招聘|招募|岗位|诚聘/.test(sceneText);
+    const courseLike = family === 'clean-course' || presetKey === 'course' || /课程|招生|训练营|讲座|培训/.test(sceneText);
+    const commerceLike = presetKey === 'commerce' || /电商|促销|上新|抢购|折扣|零售/.test(sceneText);
+    const foodLike = presetKey === 'food' || /餐饮|美食|咖啡|茶饮|汉堡|轻食/.test(sceneText);
+    const campaignLike = presetKey === 'campaign' || /活动|峰会|发布会|市集|年会|展会/.test(sceneText);
+    const fitnessLike = presetKey === 'fitness' || /健身|训练|瑜伽|普拉提|体能/.test(sceneText);
+    const priceText = [
+        String(widgets.find((item) => item?.name === 'ai_price_num')?.text || '').trim(),
+        `${String(copyDeck?.priceBlock?.value || '').trim()}${String(copyDeck?.priceBlock?.suffix || '').trim()}`.trim(),
+    ].find(Boolean) || '';
+    return {
+        family,
+        presetKey,
+        sceneText,
+        wide,
+        recruitmentLike,
+        courseLike,
+        commerceLike,
+        foodLike,
+        campaignLike,
+        fitnessLike,
+        courseBanner: wide && courseLike,
+        keepPriceBlock: isNumericPriceDisplay(priceText),
+    };
+}
+function hideAiPriorityTemplateResidue(widgets, context) {
+    if (!Array.isArray(widgets))
+        return;
+    const hideByPattern = (pattern) => {
+        widgets
+            .filter((item) => pattern.test(String(item?.name || '')))
+            .forEach((item) => hideWidgetBlock(item));
+    };
+    hideByPattern(/^ai_(deco|festive_card)_/);
+    if (context.recruitmentLike || context.courseBanner) {
+        hideByPattern(/^ai_(recruit_card|list|card|chip|meta)_/);
+        hideByPattern(/^ai_price_(tag|num)$/);
+        return;
+    }
+    if (context.commerceLike || context.foodLike || context.campaignLike || context.fitnessLike) {
+        hideByPattern(/^ai_(recruit_card|list|meta|card)_/);
+        if (!context.keepPriceBlock) {
+            hideByPattern(/^ai_price_(tag|num)$/);
+        }
+        widgets
+            .filter((item) => /^ai_chip_/.test(String(item?.name || '')))
+            .forEach((chip, index) => {
+            if (index > 0)
+                hideWidgetBlock(chip);
+        });
+    }
+}
+function applyAiPriorityContextPolish(widgets, pageWidth, pageHeight, palette, context) {
+    const accent = String(palette?.primary || '#2563eb').trim() || '#2563eb';
+    const panel = widgets.find((item) => item.name === 'ai_text_panel');
+    const title = widgets.find((item) => item.name === 'ai_title');
+    const slogan = widgets.find((item) => item.name === 'ai_slogan');
+    const body = widgets.find((item) => item.name === 'ai_body');
+    const badge = widgets.find((item) => item.name === 'ai_badge');
+    const cta = widgets.find((item) => item.name === 'ai_cta');
+    const chip = widgets.find((item) => /^ai_chip_/.test(String(item?.name || '')) && !isCollapsedWidget(item));
+    if (context.recruitmentLike) {
+        hidePanelSurface(panel);
+        if (body)
+            hideWidgetBlock(body);
+        if (chip)
+            hideWidgetBlock(chip);
+        if (title) {
+            showWidgetBlock(title);
+            applyWidgetRect(title, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.14),
+                width: Math.round(pageWidth * 0.44),
+                height: Math.round(pageHeight * 0.16),
+            });
+            title.fontSize = Math.max(Number(title.fontSize || 0), getTextFont(pageWidth, 58, 46));
+            title.lineHeight = 1.02;
+            title.color = '#fffaf4';
+            title.textEffects = [];
+            setWidgetAlign(title, 'left');
+            fitPosterTextBox(title, pageWidth, pageHeight, {
+                fitWidth: false,
+                minHeight: Math.round(Number(title.fontSize || 46) * 1.08),
+                paddingY: Math.round(Number(title.fontSize || 46) * 0.16),
+            });
+        }
+        if (slogan) {
+            showWidgetBlock(slogan);
+            applyWidgetRect(slogan, {
+                left: Math.round(pageWidth * 0.08),
+                top: title
+                    ? Number(title.top || 0) + Number(title.height || 0) + Math.round(pageHeight * 0.03)
+                    : Math.round(pageHeight * 0.24),
+                width: Math.round(pageWidth * 0.4),
+                height: Math.round(pageHeight * 0.075),
+            });
+            slogan.fontSize = Math.max(Number(slogan.fontSize || 0), getTextFont(pageWidth, 28, 20));
+            slogan.lineHeight = 1.16;
+            slogan.color = '#f8fafc';
+            slogan.textEffects = [];
+            setWidgetAlign(slogan, 'left');
+            fitPosterTextBox(slogan, pageWidth, pageHeight, {
+                fitWidth: false,
+                minHeight: Math.round(Number(slogan.fontSize || 20) * 1.16),
+                paddingY: Math.round(Number(slogan.fontSize || 20) * 0.16),
+            });
+        }
+        if (badge) {
+            showWidgetBlock(badge);
+            applyWidgetRect(badge, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.06),
+                width: Math.round(pageWidth * 0.18),
+                height: Math.round(pageHeight * 0.045),
+            });
+            badge.backgroundColor = accent;
+            badge.borderColor = accent;
+            badge.borderWidth = 0;
+            badge.color = '#111111';
+            badge.radius = Math.max(16, Math.round(pageWidth * 0.016));
+            setWidgetAlign(badge, 'center');
+            fitPosterTextBox(badge, pageWidth, pageHeight, {
+                minWidth: Math.round(pageWidth * 0.1),
+                maxWidth: Math.round(pageWidth * 0.22),
+                minHeight: Math.round(Number(badge.fontSize || 18) * 1.6),
+                paddingX: Math.round(Number(badge.fontSize || 18) * 0.95),
+                paddingY: Math.round(Number(badge.fontSize || 18) * 0.42),
+            });
+        }
+        if (cta) {
+            showWidgetBlock(cta);
+            applyWidgetRect(cta, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.84),
+                width: Math.round(pageWidth * 0.24),
+                height: Math.round(pageHeight * 0.07),
+            });
+            cta.backgroundColor = '#0f172a';
+            cta.borderColor = '#0f172a';
+            cta.borderWidth = 0;
+            cta.color = '#ffffff';
+            cta.radius = Math.max(18, Math.round(pageWidth * 0.018));
+            setWidgetAlign(cta, 'center');
+            fitPosterTextBox(cta, pageWidth, pageHeight, {
+                minWidth: Math.round(pageWidth * 0.15),
+                maxWidth: Math.round(pageWidth * 0.3),
+                minHeight: Math.round(Number(cta.fontSize || 18) * 1.9),
+                paddingX: Math.round(Number(cta.fontSize || 18) * 1.15),
+                paddingY: Math.round(Number(cta.fontSize || 18) * 0.55),
+            });
+        }
+        return;
+    }
+    if (context.courseBanner) {
+        hidePanelSurface(panel);
+        if (body && String(body.text || '').trim().length > 18)
+            hideWidgetBlock(body);
+        if (title && !isCollapsedWidget(title)) {
+            applyWidgetRect(title, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.11),
+                width: Math.round(pageWidth * 0.46),
+                height: Math.round(pageHeight * 0.3),
+            });
+            title.fontSize = Math.max(Number(title.fontSize || 0), getTextFont(pageWidth, 40, 30));
+            title.lineHeight = 1.04;
+            setWidgetAlign(title, 'left');
+        }
+        if (slogan && !isCollapsedWidget(slogan)) {
+            applyWidgetRect(slogan, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.38),
+                width: Math.round(pageWidth * 0.38),
+                height: Math.round(pageHeight * 0.11),
+            });
+            slogan.fontSize = Math.max(Number(slogan.fontSize || 0), getTextFont(pageWidth, 18, 13));
+            slogan.lineHeight = 1.16;
+            setWidgetAlign(slogan, 'left');
+        }
+        if (badge && !isCollapsedWidget(badge)) {
+            badge.backgroundColor = `${accent}f0`;
+            badge.borderColor = accent;
+            badge.borderWidth = 0;
+            badge.color = '#111111';
+            badge.radius = Math.max(10, Math.round(pageWidth * 0.012));
+        }
+        if (cta && !isCollapsedWidget(cta)) {
+            applyWidgetRect(cta, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.66),
+                width: Math.round(pageWidth * 0.2),
+                height: Math.round(pageHeight * 0.11),
+            });
+            cta.fontSize = Math.max(Number(cta.fontSize || 0), getTextFont(pageWidth, 18, 13));
+            cta.backgroundColor = '#0f172a';
+            cta.borderColor = '#0f172a';
+            cta.borderWidth = 0;
+            cta.color = '#ffffff';
+            cta.radius = Math.max(12, Math.round(pageWidth * 0.014));
+            setWidgetAlign(cta, 'center');
+        }
+        return;
+    }
+    if (context.commerceLike || context.foodLike) {
+        hidePanelSurface(panel);
+        if (title && !isCollapsedWidget(title)) {
+            applyWidgetRect(title, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.12),
+                width: Math.round(pageWidth * 0.46),
+                height: Math.round(pageHeight * 0.18),
+            });
+            title.fontSize = Math.max(Number(title.fontSize || 0), getTextFont(pageWidth, context.wide ? 44 : 48, context.wide ? 28 : 34));
+            title.lineHeight = 1.02;
+            setWidgetAlign(title, 'left');
+        }
+        if (slogan && !isCollapsedWidget(slogan)) {
+            applyWidgetRect(slogan, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.32),
+                width: Math.round(pageWidth * 0.38),
+                height: Math.round(pageHeight * 0.08),
+            });
+            slogan.fontSize = Math.max(Number(slogan.fontSize || 0), getTextFont(pageWidth, 22, 16));
+            slogan.lineHeight = 1.14;
+            setWidgetAlign(slogan, 'left');
+        }
+        if (body && String(body.text || '').trim().length > 16) {
+            body.text = compactDeckLine(String(body.text || '').trim(), 16);
+        }
+        if (body && !isCollapsedWidget(body)) {
+            applyWidgetRect(body, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.44),
+                width: Math.round(pageWidth * 0.26),
+                height: Math.round(pageHeight * 0.06),
+            });
+            body.fontSize = Math.max(Number(body.fontSize || 0), getTextFont(pageWidth, 18, 14));
+            body.lineHeight = 1.14;
+            setWidgetAlign(body, 'center');
+            body.backgroundColor = `${accent}f0`;
+            body.borderColor = accent;
+            body.borderWidth = 0;
+            body.color = '#111111';
+            body.radius = Math.max(14, Math.round(pageWidth * 0.016));
+            body.textEffects = [];
+        }
+        if (badge && !isCollapsedWidget(badge)) {
+            applyWidgetRect(badge, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.05),
+                width: Math.round(pageWidth * 0.18),
+                height: Math.round(pageHeight * 0.045),
+            });
+            badge.backgroundColor = `${accent}f2`;
+            badge.borderColor = accent;
+            badge.borderWidth = 0;
+            badge.color = '#111111';
+        }
+        if (chip && !isCollapsedWidget(chip)) {
+            const chipTop = slogan && !isCollapsedWidget(slogan)
+                ? Number(slogan.top || 0) + Number(slogan.height || 0) + Math.round(pageHeight * 0.018)
+                : Math.round(pageHeight * 0.42);
+            applyWidgetRect(chip, {
+                left: Math.round(pageWidth * 0.08),
+                top: chipTop,
+                width: Math.round(pageWidth * 0.24),
+                height: Math.round(pageHeight * 0.05),
+            });
+            chip.backgroundColor = `${accent}f0`;
+            chip.borderColor = accent;
+            chip.borderWidth = 0;
+            chip.color = '#111111';
+            chip.radius = Math.max(14, Math.round(pageWidth * 0.014));
+            chip.fontSize = Math.max(Number(chip.fontSize || 0), getTextFont(pageWidth, 18, 14));
+            setWidgetAlign(chip, 'center');
+            fitPosterInlineText(chip, pageWidth, {
+                minWidth: Math.round(pageWidth * 0.14),
+                maxWidth: Math.round(pageWidth * 0.3),
+                minHeight: Math.round(Number(chip.fontSize || 14) * 1.3),
+                paddingX: Math.round(Number(chip.fontSize || 14) * 0.72),
+            });
+            if (slogan && !isCollapsedWidget(slogan) && Number(chip.top || 0) < widgetTextBottom(slogan) + Math.round(pageHeight * 0.012)) {
+                chip.top = widgetTextBottom(slogan) + Math.round(pageHeight * 0.018);
+            }
+        }
+        if (cta && !isCollapsedWidget(cta)) {
+            applyWidgetRect(cta, {
+                left: Math.round(pageWidth * 0.08),
+                top: Math.round(pageHeight * 0.78),
+                width: Math.round(pageWidth * 0.24),
+                height: Math.round(pageHeight * 0.07),
+            });
+            cta.backgroundColor = accent;
+            cta.borderColor = accent;
+            cta.borderWidth = 0;
+            cta.color = '#111111';
+            cta.radius = Math.max(18, Math.round(pageWidth * 0.018));
+            setWidgetAlign(cta, 'center');
+        }
+        return;
+    }
+    if (context.campaignLike || context.fitnessLike) {
+        if (cta && !isCollapsedWidget(cta)) {
+            cta.backgroundColor = accent;
+            cta.borderColor = accent;
+            cta.borderWidth = 0;
+            cta.color = '#111111';
+            cta.radius = Math.max(18, Math.round(pageWidth * 0.018));
+            setWidgetAlign(cta, 'center');
+        }
+    }
 }
 function rectOverlapsNormalizedArea(rectPx, area, pageWidth, pageHeight, threshold = 0.1) {
     if (!rectPx || !area || pageWidth <= 0 || pageHeight <= 0)
@@ -1587,6 +3017,12 @@ function applyProtocolDrivenPosterFinish(widgets, family, pageWidth, pageHeight,
                     priceTag.color = '#ffffff';
                     priceTag.textEffects = [];
                     setWidgetAlign(priceTag, 'center');
+                    fitPosterInlineText(priceTag, pageWidth, {
+                        minWidth: Math.round(pageWidth * 0.08),
+                        maxWidth: Math.round(pageWidth * 0.18),
+                        minHeight: Math.round(Number(priceTag.fontSize || 16) * 1.35),
+                        paddingX: Math.round(Number(priceTag.fontSize || 16) * 0.72),
+                    });
                 }
                 showWidgetBlock(priceNum);
                 applyPlacementToWidget(priceNum, {
@@ -1602,6 +3038,22 @@ function applyProtocolDrivenPosterFinish(widgets, family, pageWidth, pageHeight,
                 priceNum.color = accent;
                 priceNum.textEffects = [];
                 setWidgetAlign(priceNum, 'left');
+                fitPosterInlineText(priceNum, pageWidth, {
+                    minWidth: Math.round(pageWidth * 0.1),
+                    maxWidth: Math.round(pageWidth * 0.18),
+                    minHeight: Math.round(Number(priceNum.fontSize || 28) * 1.06),
+                    paddingX: Math.round(Number(priceNum.fontSize || 28) * 0.12),
+                });
+                const supportBottom = Math.max(widgetTextBottom(title), widgetTextBottom(slogan), widgetTextBottom(body));
+                const priceTop = Math.max(Number(priceTag?.top || 0) || Number(priceNum.top || 0), supportBottom + Math.round(pageHeight * 0.026));
+                if (priceTag && !isCollapsedWidget(priceTag)) {
+                    priceTag.top = priceTop;
+                    priceNum.top = priceTag.top + Number(priceTag.height || 0) + Math.round(pageHeight * 0.008);
+                    priceNum.left = Number(priceTag.left || priceNum.left || 0);
+                }
+                else {
+                    priceNum.top = priceTop;
+                }
             }
         }
         const floatingFacts = collectProtocolPosterFacts(copyDeck, 3, 14)
@@ -1716,6 +3168,338 @@ function applyProtocolDrivenPosterFinish(widgets, family, pageWidth, pageHeight,
         return true;
     }
     return false;
+}
+function applyAiPriorityPosterFinish(widgets, pageWidth, pageHeight, options = {}) {
+    const hints = getPosterMultimodalHints(options?.result);
+    if (!hints)
+        return false;
+    const palette = options?.palette || {};
+    const context = getAiPriorityPosterContext(options, widgets, pageWidth, pageHeight);
+    const panel = widgets.find((item) => item.name === 'ai_text_panel');
+    const hero = widgets.find((item) => item.name === 'ai_hero');
+    const title = widgets.find((item) => item.name === 'ai_title');
+    const slogan = widgets.find((item) => item.name === 'ai_slogan');
+    const body = widgets.find((item) => item.name === 'ai_body');
+    const badge = widgets.find((item) => item.name === 'ai_badge');
+    const cta = widgets.find((item) => item.name === 'ai_cta');
+    const priceTag = widgets.find((item) => item.name === 'ai_price_tag');
+    const priceNum = widgets.find((item) => item.name === 'ai_price_num');
+    const qr = widgets.find((item) => item.name === 'ai_qrcode');
+    const recruitmentLike = widgets.some((item) => /^ai_(recruit_card|list)_/.test(String(item?.name || '')));
+    const primarySafeZone = getPrimarySafeZone(hints, { x: 0.06, y: 0.08, w: 0.34, h: 0.24 });
+    const avoidZones = getPrimaryAvoidZones(hints, 3);
+    const visualTone = String(hints?.visualAnalysis?.dominantTone || '').trim();
+    const visualTexture = String(hints?.visualAnalysis?.texture || '').trim();
+    const safeZoneLargeEnough = Boolean(primarySafeZone) && Number(primarySafeZone?.w || 0) >= 0.28 && Number(primarySafeZone?.h || 0) >= 0.16;
+    const needsPanel = Boolean(hints.visualAnalysis?.needsPanel)
+        && !recruitmentLike
+        && !context.courseBanner
+        && !(context.commerceLike || context.foodLike)
+        && !safeZoneLargeEnough;
+    const floatingTextRisk = clampNumber((visualTexture === 'detailed' ? 0.52 : visualTexture === 'mixed' ? 0.34 : 0.14)
+        + (visualTone === 'light' ? 0.26 : visualTone === 'mixed' ? 0.18 : 0.08)
+        + (avoidZones.length >= 2 ? 0.16 : avoidZones.length === 1 ? 0.07 : 0)
+        + (safeZoneLargeEnough ? -0.14 : 0.08)
+        + (needsPanel ? 0.16 : 0), 0, 1);
+    hideAiPriorityTemplateResidue(widgets, context);
+    if (hero) {
+        hero.fullBleed = true;
+        applyWidgetRect(hero, {
+            left: 0,
+            top: 0,
+            width: pageWidth,
+            height: pageHeight,
+        });
+        hero.left = 0;
+        hero.top = 0;
+        hero.width = pageWidth;
+        hero.height = pageHeight;
+        hero.opacity = 1;
+        if (hero.record) {
+            hero.record.width = pageWidth;
+            hero.record.height = pageHeight;
+        }
+        fitAiHeroToPage(hero, pageWidth, pageHeight);
+    }
+    if (panel) {
+        if (!needsPanel) {
+            hidePanelSurface(panel);
+        }
+        else {
+            const panelRect = primarySafeZone || { x: 0.06, y: 0.08, w: 0.36, h: 0.34 };
+            applyWidgetRect(panel, {
+                left: Math.round(pageWidth * panelRect.x),
+                top: Math.round(pageHeight * panelRect.y),
+                width: Math.round(pageWidth * panelRect.w),
+                height: Math.round(pageHeight * Math.min(0.46, Math.max(panelRect.h + 0.12, 0.24))),
+            });
+            panel.backgroundColor = toSoftPanelBackground(palette, palette.surface || '#ffffff', 'bc');
+            panel.borderColor = toSoftPanelBorder(palette, palette.surface || '#ffffff', '36');
+            panel.borderWidth = 1;
+            panel.radius = Math.max(18, Math.round(pageWidth * 0.016));
+            panel.opacity = 1;
+        }
+    }
+    const placementMap = [
+        { role: 'heroHeadline', widget: title, fontScale: 0.6, minFont: 40, maxFont: 92 },
+        { role: 'supportLine', widget: slogan, fontScale: 0.36, minFont: 20, maxFont: 34 },
+        { role: 'body', widget: body, fontScale: 0.26, minFont: 16, maxFont: 28 },
+        { role: 'cta', widget: cta, fontScale: 0.32, minFont: 18, maxFont: 30 },
+        { role: 'badge', widget: badge, fontScale: 0.28, minFont: 14, maxFont: 22 },
+    ];
+    placementMap.forEach((item) => {
+        if (!item.widget || isCollapsedWidget(item.widget))
+            return;
+        const placement = getMultimodalPlacement(hints, item.role);
+        if (placement) {
+            applyPlacementToWidget(item.widget, placement, pageWidth, pageHeight, item);
+            nudgeWidgetOutOfAvoidZones(item.widget, avoidZones, pageWidth, pageHeight, { preferLeft: true, preferUp: true, threshold: 0.05 });
+        }
+    });
+    const portrait = pageHeight >= pageWidth * 1.08;
+    const visibleTextWidgets = [badge, title, slogan, body].filter((item) => item && !isCollapsedWidget(item));
+    const defaultColumnLeft = visibleTextWidgets.length
+        ? Math.min(...visibleTextWidgets.map((item) => Number(item.left || 0)))
+        : Math.round(pageWidth * 0.08);
+    const defaultColumnWidth = visibleTextWidgets.length
+        ? Math.max(...visibleTextWidgets.map((item) => Number(item.width || 0)))
+        : Math.round(pageWidth * (portrait ? 0.48 : 0.42));
+    const panelVisible = panel && !isCollapsedWidget(panel) && Number(panel.height || 0) > 8 && Number(panel.opacity ?? 1) > 0.02;
+    const columnLeft = panelVisible
+        ? Number(panel.left || 0) + Math.round(pageWidth * 0.032)
+        : defaultColumnLeft;
+    const columnWidth = panelVisible
+        ? Math.max(Math.round(pageWidth * 0.28), Number(panel.width || 0) - Math.round(pageWidth * 0.064))
+        : Math.max(defaultColumnWidth, Math.round(pageWidth * (portrait ? 0.46 : 0.38)));
+    if (badge && !isCollapsedWidget(badge)) {
+        applyWidgetRect(badge, {
+            left: columnLeft,
+            width: Math.max(Number(badge.width || 0), Math.round(pageWidth * (portrait ? 0.18 : 0.14))),
+        });
+    }
+    if (title && !isCollapsedWidget(title)) {
+        const titleText = String(title.text || '').trim();
+        const cjkHeavy = isCjkHeavyPosterText(titleText);
+        const targetWidth = Math.min(Math.round(pageWidth * (portrait ? 0.58 : 0.46)), Math.max(columnWidth, Math.round(pageWidth * (cjkHeavy ? 0.5 : 0.42))));
+        const targetHeight = Math.max(Math.round(pageHeight * (portrait ? 0.12 : 0.11)), Math.min(Math.round(pageHeight * (portrait ? 0.18 : 0.15)), Number(title.height || 0)));
+        applyWidgetRect(title, {
+            left: columnLeft,
+            width: targetWidth,
+            height: targetHeight,
+        });
+        title.fontSize = fitTextWidgetFont(titleText, Number(title.width || targetWidth), targetHeight, Math.min(Number(title.fontSize || 0) || getTextFont(pageWidth, portrait ? 82 : 70, portrait ? 44 : 36), getTextFont(pageWidth, portrait ? 86 : 72, portrait ? 48 : 38)), getTextFont(pageWidth, portrait ? 54 : 42, portrait ? 34 : 28), 2);
+        title.lineHeight = Math.max(1.02, Math.min(Number(title.lineHeight || 1.04), 1.08));
+        title.height = estimateTextHeight(titleText, Number(title.fontSize || 0), Number(title.width || targetWidth));
+        if (recruitmentLike) {
+            title.color = '#fffaf4';
+            title.textEffects = [];
+        }
+        else {
+            applyCompactReadableTextTreatment(title, 'title', pageWidth, palette, {
+                tone: visualTone,
+                texture: visualTexture,
+                risk: Math.max(0.34, floatingTextRisk * 0.86),
+                useBackdrop: false,
+            });
+        }
+        if (title.record)
+            title.record.height = Math.round(Number(title.height || 0));
+    }
+    if (slogan && !isCollapsedWidget(slogan)) {
+        const sloganText = String(slogan.text || '').trim();
+        const sloganRiskBoost = floatingTextRisk >= 0.55 ? 1 : floatingTextRisk >= 0.34 ? 0.6 : 0;
+        const targetHeight = Math.max(Math.round(pageHeight * (floatingTextRisk >= 0.55 ? 0.052 : 0.046)), Math.min(Math.round(pageHeight * (floatingTextRisk >= 0.55 ? 0.092 : 0.082)), Number(slogan.height || 0) + Math.round(pageHeight * 0.008 * sloganRiskBoost)));
+        applyWidgetRect(slogan, {
+            left: columnLeft,
+            width: Math.max(Math.round(pageWidth * (portrait ? (floatingTextRisk >= 0.55 ? 0.48 : 0.44) : floatingTextRisk >= 0.55 ? 0.38 : 0.34)), Math.min(Math.max(columnWidth, Math.round(pageWidth * (portrait ? 0.46 : 0.36))), Number(slogan.width || columnWidth) + Math.round(pageWidth * 0.02))),
+            height: targetHeight,
+        });
+        slogan.fontSize = fitTextWidgetFont(sloganText, Number(slogan.width || 0), targetHeight, Math.min(Number(slogan.fontSize || 0) || getTextFont(pageWidth, 30, 22), getTextFont(pageWidth, 34, 24)), getTextFont(pageWidth, 22, 16), 1);
+        slogan.lineHeight = Math.max(1.14, Math.min(Number(slogan.lineHeight || 1.18), 1.22));
+        slogan.height = estimateTextHeight(sloganText, Number(slogan.fontSize || 0), Number(slogan.width || 0));
+        if (recruitmentLike) {
+            slogan.color = '#f8fafc';
+            slogan.textEffects = [];
+        }
+        else {
+            slogan.aiReadableMinFont = Math.max(Number(slogan.aiReadableMinFont || 0), getTextFont(pageWidth, floatingTextRisk >= 0.55 ? 28 : 24, floatingTextRisk >= 0.55 ? 22 : 18));
+            applyCompactReadableTextTreatment(slogan, 'slogan', pageWidth, palette, {
+                tone: visualTone,
+                texture: visualTexture,
+                risk: floatingTextRisk,
+                useBackdrop: !panelVisible && floatingTextRisk >= 0.56,
+            });
+        }
+        if (slogan.record)
+            slogan.record.height = Math.round(Number(slogan.height || 0));
+    }
+    if (body && !isCollapsedWidget(body)) {
+        const bodyText = String(body.text || '').trim();
+        const targetHeight = Math.max(Math.round(pageHeight * (floatingTextRisk >= 0.55 ? 0.058 : 0.05)), Math.min(Math.round(pageHeight * (floatingTextRisk >= 0.55 ? 0.112 : 0.1)), Number(body.height || 0) + Math.round(pageHeight * (floatingTextRisk >= 0.55 ? 0.012 : 0.006))));
+        applyWidgetRect(body, {
+            left: columnLeft,
+            width: Math.max(Math.round(pageWidth * (portrait ? (floatingTextRisk >= 0.55 ? 0.46 : 0.4) : floatingTextRisk >= 0.55 ? 0.38 : 0.34)), Math.min(Math.max(columnWidth, Math.round(pageWidth * (portrait ? 0.44 : 0.36))), Number(body.width || columnWidth) + Math.round(pageWidth * 0.018))),
+            height: targetHeight,
+        });
+        body.fontSize = fitTextWidgetFont(bodyText, Number(body.width || 0), targetHeight, Math.min(Number(body.fontSize || 0) || getTextFont(pageWidth, 24, 18), getTextFont(pageWidth, 28, 20)), getTextFont(pageWidth, 18, 14), 1);
+        body.lineHeight = Math.max(1.18, Math.min(Number(body.lineHeight || 1.24), 1.28));
+        body.height = estimateTextHeight(bodyText, Number(body.fontSize || 0), Number(body.width || 0));
+        body.aiReadableMinFont = Math.max(Number(body.aiReadableMinFont || 0), getTextFont(pageWidth, floatingTextRisk >= 0.55 ? 22 : 20, floatingTextRisk >= 0.55 ? 17 : 15));
+        applyCompactReadableTextTreatment(body, 'body', pageWidth, palette, {
+            tone: visualTone,
+            texture: visualTexture,
+            risk: Math.max(0.28, floatingTextRisk * 0.92),
+            useBackdrop: !panelVisible && floatingTextRisk >= 0.62,
+        });
+        if (body.record)
+            body.record.height = Math.round(Number(body.height || 0));
+    }
+    const pricePlacement = getMultimodalPlacement(hints, 'priceBlock');
+    if (pricePlacement) {
+        if (priceTag && !isCollapsedWidget(priceTag)) {
+            applyPlacementToWidget(priceTag, pricePlacement, pageWidth, pageHeight, { role: 'priceBlock', fontScale: 0.24, minFont: 14, maxFont: 24 });
+            nudgeWidgetOutOfAvoidZones(priceTag, avoidZones, pageWidth, pageHeight, { preferLeft: true, preferUp: true, threshold: 0.05 });
+        }
+        if (priceNum && !isCollapsedWidget(priceNum)) {
+            const numPlacement = {
+                x: pricePlacement.x,
+                y: Math.min(0.92, pricePlacement.y + pricePlacement.h * 0.28),
+                w: pricePlacement.w,
+                h: Math.max(0.06, pricePlacement.h * 0.72),
+                align: pricePlacement.align || 'left',
+            };
+            applyPlacementToWidget(priceNum, numPlacement, pageWidth, pageHeight, { role: 'priceBlock', fontScale: 0.5, minFont: 28, maxFont: 72 });
+            nudgeWidgetOutOfAvoidZones(priceNum, avoidZones, pageWidth, pageHeight, { preferLeft: true, preferUp: true, threshold: 0.05 });
+        }
+    }
+    if (qr && !isCollapsedWidget(qr) && primarySafeZone) {
+        const qrSize = Math.round(Math.max(pageWidth * 0.11, 120));
+        applyWidgetRect(qr, {
+            left: Math.max(Math.round(pageWidth * 0.06), pageWidth - qrSize - Math.round(pageWidth * 0.08)),
+            top: Math.max(Math.round(pageHeight * 0.06), pageHeight - qrSize - Math.round(pageHeight * 0.08)),
+            width: qrSize,
+            height: qrSize,
+        });
+        qr.dotColor = '#111111';
+        qr.dotColor2 = '#111111';
+    }
+    if (cta && !isCollapsedWidget(cta)) {
+        const stackBottom = [badge, title, slogan, body]
+            .filter((item) => item && !isCollapsedWidget(item))
+            .reduce((max, item) => Math.max(max, widgetTextBottom(item)), 0);
+        const desiredWidth = Math.min(Math.max(Math.round(pageWidth * (portrait ? 0.2 : 0.16)), Math.round(String(cta.text || '').trim().length * pageWidth * 0.022)), Math.round(pageWidth * (portrait ? 0.28 : 0.22)));
+        const desiredHeight = Math.max(Math.round(pageHeight * 0.05), Math.min(Math.round(pageHeight * 0.072), Number(cta.height || 0)));
+        applyWidgetRect(cta, {
+            left: columnLeft,
+            top: Math.max(Number(cta.top || 0), stackBottom + Math.round(pageHeight * 0.024)),
+            width: desiredWidth,
+            height: desiredHeight,
+        });
+        cta.fontSize = fitTextWidgetFont(String(cta.text || '').trim(), Number(cta.width || desiredWidth), desiredHeight, Math.min(Number(cta.fontSize || 0) || getTextFont(pageWidth, 24, 18), getTextFont(pageWidth, 28, 20)), getTextFont(pageWidth, 18, 14), 1);
+        if (cta.record)
+            cta.record.height = Math.round(Number(cta.height || desiredHeight));
+        if (qr && !isCollapsedWidget(qr)) {
+            const qrSize = Math.min(Math.round(pageWidth * 0.14), Math.max(Math.round(pageWidth * 0.09), Number(qr.width || 0) || 120));
+            const rightGap = Math.round(pageWidth * 0.022);
+            const canPlaceRight = Number(cta.left || 0) + Number(cta.width || 0) + rightGap + qrSize <= pageWidth - Math.round(pageWidth * 0.08);
+            applyWidgetRect(qr, {
+                left: canPlaceRight
+                    ? Number(cta.left || 0) + Number(cta.width || 0) + rightGap
+                    : Math.max(Math.round(pageWidth * 0.06), pageWidth - qrSize - Math.round(pageWidth * 0.08)),
+                top: canPlaceRight
+                    ? Number(cta.top || 0) + Math.round((Number(cta.height || desiredHeight) - qrSize) / 2)
+                    : Math.max(Number(cta.top || 0) - Math.round(pageHeight * 0.01), pageHeight - qrSize - Math.round(pageHeight * 0.08)),
+                width: qrSize,
+                height: qrSize,
+            });
+        }
+    }
+    if (panelVisible) {
+        const textTracked = [badge, title, slogan, body]
+            .filter((item) => item && !isCollapsedWidget(item));
+        const ctaGap = cta && !isCollapsedWidget(cta) && textTracked.length
+            ? Number(cta.top || 0) - Math.max(...textTracked.map((item) => widgetTextBottom(item)))
+            : Infinity;
+        const tracked = cta && !isCollapsedWidget(cta) && ctaGap <= Math.round(pageHeight * 0.11)
+            ? [...textTracked, cta]
+            : textTracked;
+        if (tracked.length) {
+            const minLeft = Math.min(...tracked.map((item) => Number(item.left || 0)));
+            const minTop = Math.min(...tracked.map((item) => Number(item.top || 0)));
+            const maxRight = Math.max(...tracked.map((item) => Number(item.left || 0) + Number(item.width || 0)));
+            const maxBottom = Math.max(...tracked.map((item) => Number(item.top || 0) + Number(item.height || 0)));
+            const padX = Math.round(pageWidth * 0.03);
+            const padTop = Math.round(pageHeight * 0.024);
+            const padBottom = Math.round(pageHeight * 0.032);
+            applyWidgetRect(panel, {
+                left: Math.max(Math.round(pageWidth * 0.04), minLeft - padX),
+                top: Math.max(Math.round(pageHeight * 0.04), minTop - padTop),
+                width: Math.min(Math.round(pageWidth * (portrait ? 0.5 : 0.4)), maxRight - minLeft + padX * 2),
+                height: Math.min(Math.round(pageHeight * (portrait ? 0.3 : 0.24)), Math.max(Math.round(pageHeight * 0.14), maxBottom - minTop + padTop + padBottom)),
+            });
+        }
+    }
+    applyAiPriorityContextPolish(widgets, pageWidth, pageHeight, palette, context);
+    neutralizeOversizedDarkPanels(widgets, pageWidth, pageHeight, palette);
+    return true;
+}
+function applyCompactReadableTextTreatment(widget, role, pageWidth, palette, options = {}) {
+    if (!widget || isCollapsedWidget(widget))
+        return;
+    const tone = String(options.tone || '').trim();
+    const texture = String(options.texture || '').trim();
+    const risk = clampNumber(Number(options.risk || 0), 0, 1);
+    const useBackdrop = Boolean(options.useBackdrop) && risk >= 0.5 && role !== 'title';
+    const lightScene = tone === 'light';
+    const darkScene = tone === 'dark';
+    const mixedScene = tone === 'mixed' || texture === 'mixed' || texture === 'detailed';
+    const preferDarkText = lightScene || (!darkScene && role !== 'title' && risk >= 0.64);
+    const accent = String(palette?.primary || '#8b5cf6').trim() || '#8b5cf6';
+    const darkText = chooseReadableColor(['#111111', '#0f172a', '#1f2937', accent], ['#ffffff', '#f8fafc', '#fef3c7'], 6.1);
+    const lightText = chooseReadableColor(['#ffffff', '#f8fafc', '#eef2ff'], ['#0f172a', '#111827', accent], 5.8);
+    widget.color = preferDarkText ? darkText : lightText;
+    widget.borderWidth = 0;
+    widget.borderColor = '#ffffff00';
+    if (useBackdrop) {
+        const seed = preferDarkText
+            ? blendColor(String(palette?.surface || '#ffffff').trim() || '#ffffff', '#ffffff', 0.92)
+            : blendColor(String(palette?.background || '#0f172a').trim() || '#0f172a', '#0b1220', 0.72);
+        widget.backgroundColor = withAlpha(seed, preferDarkText ? 'e6' : 'd8');
+        widget.radius = Math.max(10, Math.round(pageWidth * (role === 'body' ? 0.011 : 0.013)));
+    }
+    else {
+        widget.backgroundColor = '#ffffff00';
+        widget.radius = 0;
+    }
+    if (preferDarkText) {
+        widget.textEffects = mixedScene
+            ? [{
+                    filling: { enable: true, type: 0, color: widget.color },
+                    stroke: { enable: true, width: role === 'slogan' ? 0.5 : 0.35, color: '#ffffffe8' },
+                    shadow: {
+                        enable: true,
+                        offsetX: 0,
+                        offsetY: 1,
+                        blur: role === 'slogan' ? 5 : 4,
+                        color: 'rgba(255,255,255,0.26)',
+                    },
+                }]
+            : [];
+        return;
+    }
+    widget.textEffects = (mixedScene || role === 'title')
+        ? [{
+                filling: { enable: true, type: 0, color: widget.color },
+                stroke: { enable: role === 'title' && risk >= 0.45, width: role === 'title' ? 0.8 : 0.4, color: 'rgba(8,15,28,0.54)' },
+                shadow: {
+                    enable: true,
+                    offsetX: 0,
+                    offsetY: role === 'title' ? 3 : 2,
+                    blur: role === 'title' ? 12 : 8,
+                    color: role === 'title' ? 'rgba(8,15,28,0.34)' : 'rgba(8,15,28,0.26)',
+                },
+            }]
+        : [];
 }
 function isNumericPriceDisplay(text) {
     const value = String(text || '').trim();
@@ -1859,12 +3643,78 @@ function estimateTextHeight(text, fontSize, width) {
     const lines = Math.max(1, Math.ceil(t.length / charsPerLine));
     return Math.round(fontSize * getLineHeight(fontSize) * lines + fontSize * 0.72);
 }
+function estimateTextWidth(text, fontSize, maxWidth = Infinity) {
+    const t = getSafeText(text, '').replace(/\n+/g, '');
+    if (!t.length)
+        return Math.round(fontSize * 1.2);
+    const cjkCount = (t.match(/[\u3000-\u9FFF\uFF00-\uFFEF]/g) || []).length;
+    const cjkHeavy = cjkCount >= Math.max(1, t.length * 0.35);
+    const avgCharPx = cjkHeavy ? Math.max(fontSize * 0.98, 12) : Math.max(fontSize * 0.62, 10);
+    const rawWidth = Math.round(t.length * avgCharPx + fontSize * 0.4);
+    if (!Number.isFinite(maxWidth) || maxWidth <= 0)
+        return rawWidth;
+    return Math.min(rawWidth, Math.round(maxWidth));
+}
+function fitPosterTextBox(widget, pageWidth, pageHeight, options = {}) {
+    if (!widget || isCollapsedWidget(widget) || widget.type !== 'w-text')
+        return;
+    const text = String(widget.text || '').trim();
+    const fontSize = Math.max(10, Number(widget.fontSize || options.minFont || 16));
+    const currentWidth = Math.max(1, Number(widget.width || 0) || Math.round(pageWidth * 0.2));
+    const paddingX = Math.max(8, Number(options.paddingX || Math.round(fontSize * 0.9)));
+    const paddingY = Math.max(4, Number(options.paddingY || Math.round(fontSize * 0.38)));
+    const contentWidth = estimateTextWidth(text, fontSize, currentWidth);
+    const nextWidth = options.fitWidth === false
+        ? currentWidth
+        : Math.max(Number(options.minWidth || 0), Math.min(Number(options.maxWidth || currentWidth), contentWidth + paddingX * 2));
+    const nextHeight = Math.max(Number(options.minHeight || 0), estimateTextHeight(text, fontSize, nextWidth) + paddingY * 2);
+    widget.width = Math.round(nextWidth);
+    widget.height = Math.round(nextHeight);
+    if (widget.record) {
+        widget.record.width = Math.round(widget.width);
+        widget.record.height = Math.round(widget.height);
+    }
+}
+function fitPosterInlineText(widget, pageWidth, options = {}) {
+    if (!widget || isCollapsedWidget(widget) || widget.type !== 'w-text')
+        return;
+    const text = String(widget.text || '').trim();
+    if (!text) {
+        hideWidgetBlock(widget);
+        return;
+    }
+    const fontSize = Math.max(10, Number(widget.fontSize || options.minFont || 16));
+    const paddingX = Math.max(6, Number(options.paddingX || Math.round(fontSize * 0.72)));
+    const minWidth = Math.max(24, Number(options.minWidth || 0));
+    const maxWidth = Math.max(minWidth, Number(options.maxWidth || Number(widget.width || 0) || pageWidth * 0.3));
+    const nextWidth = clampNumber(estimateTextWidth(text, fontSize, maxWidth) + paddingX * 2, minWidth, maxWidth);
+    widget.width = Math.round(nextWidth);
+    widget.height = Math.max(Math.round(Number(options.minHeight || 0)), Math.round(estimateTextHeight(text, fontSize, nextWidth)));
+    if (widget.record) {
+        widget.record.width = Math.round(widget.width);
+        widget.record.height = Math.round(widget.height);
+    }
+}
 function fitTitleFont(text, width, height, baseFont) {
     let fontSize = baseFont;
     while (fontSize > 30 && estimateTextHeight(text, fontSize, width) > height) {
         fontSize -= 2;
     }
     return fontSize;
+}
+function fitTextWidgetFont(text, width, height, baseFont, minFont = 16, step = 1) {
+    let fontSize = Math.max(minFont, Math.round(baseFont || minFont));
+    while (fontSize > minFont && estimateTextHeight(text, fontSize, width) > height) {
+        fontSize -= step;
+    }
+    return Math.max(minFont, fontSize);
+}
+function isCjkHeavyPosterText(text) {
+    const value = String(text || '').trim();
+    if (!value)
+        return false;
+    const cjkCount = (value.match(/[\u3000-\u9FFF\uFF00-\uFFEF]/g) || []).length;
+    return cjkCount >= Math.max(2, value.length * 0.4);
 }
 function splitBodyLines(body, maxLines) {
     const t = getSafeText(body, '');
@@ -1892,28 +3742,32 @@ function getPosterContentProfile(layoutFamily, density = 'balanced', sizeProfile
     const compact = sizeProfile === 'banner';
     switch (layoutFamily) {
         case 'magazine-cover':
-            return { maxBodyLines: 2, maxBodyChars: 18, maxChips: 4, maxCards: 0, maxDetails: 4 };
+            return { maxBodyLines: dense ? 4 : 5, maxBodyChars: compact ? 24 : 30, maxChips: 7, maxCards: 0, maxDetails: 7 };
         case 'premium-offer':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 30, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'hero-center':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 30, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'hero-left':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 30, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'xiaohongshu-note':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 30, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'festive-frame':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 5, maxBodyChars: compact ? 22 : 28, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'split-editorial':
-            return { maxBodyLines: dense ? 2 : 3, maxBodyChars: compact ? 14 : 16, maxChips: 5, maxCards: 0, maxDetails: 4 };
+            return { maxBodyLines: dense ? 4 : 5, maxBodyChars: compact ? 22 : 28, maxChips: 8, maxCards: 0, maxDetails: 7 };
         case 'clean-course':
-            return { maxBodyLines: 3, maxBodyChars: compact ? 14 : 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 28, maxChips: 8, maxCards: 0, maxDetails: 8 };
         case 'list-recruitment':
-            return { maxBodyLines: 2, maxBodyChars: 18, maxChips: 4, maxCards: 0, maxDetails: 4 };
+            return { maxBodyLines: dense ? 4 : 5, maxBodyChars: compact ? 22 : 28, maxChips: 7, maxCards: 0, maxDetails: 8 };
         case 'grid-product':
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 3, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 28, maxChips: 8, maxCards: 4, maxDetails: 8 };
         default:
-            return { maxBodyLines: 3, maxBodyChars: 16, maxChips: 5, maxCards: 0, maxDetails: 5 };
+            return { maxBodyLines: dense ? 4 : 6, maxBodyChars: compact ? 22 : 28, maxChips: 8, maxCards: 0, maxDetails: 8 };
     }
+}
+function isFoodCommercePosterContext(input, result = {}, layoutFamily = '') {
+    const sceneText = `${input?.industry || ''} ${input?.purpose || ''} ${input?.theme || ''} ${input?.content || ''} ${result?.posterIntent?.scene || ''} ${result?.designPlan?.contentPattern || ''} ${layoutFamily || ''}`.trim();
+    return /餐饮|美食|咖啡|茶饮|轻食|甜品|烘焙|火锅|烧烤|小吃|粉面|卤味|新品|上新|尝鲜|套餐|到店/.test(sceneText);
 }
 function derivePosterBadge(input, result) {
     const preferred = compactPosterSnippet(result === null || result === void 0 ? void 0 : result.badge, 10);
@@ -1967,13 +3821,13 @@ function collectPosterSegments(texts) {
     texts.filter(Boolean).forEach((text) => {
         String(text || '')
             .split(/[\n｜|/；;•·,，。]/)
-            .map((item) => compactPosterSnippet(item, 18))
+            .map((item) => compactPosterSnippet(item, 22))
             .filter(Boolean)
             .forEach((item) => all.push(item));
     });
     return all;
 }
-function collectPosterProofPoints(result, maxCount = 5) {
+function collectPosterProofPoints(result, maxCount = 6) {
     const lines = Array.isArray(result === null || result === void 0 ? void 0 : result.copyDeck?.proofPoints)
         ? result.copyDeck.proofPoints
         : Array.isArray(result === null || result === void 0 ? void 0 : result.proofPoints)
@@ -1981,7 +3835,7 @@ function collectPosterProofPoints(result, maxCount = 5) {
         : [];
     const merged = [];
     lines.forEach((item) => {
-        const safe = compactPosterSnippet(item, 16);
+        const safe = compactPosterSnippet(item, 24);
         if (!safe)
             return;
         if (merged.some((current) => isSamePosterText(current, safe)))
@@ -1991,7 +3845,8 @@ function collectPosterProofPoints(result, maxCount = 5) {
     return merged.slice(0, Math.max(1, maxCount));
 }
 function compactDeckLine(value, max = 18) {
-    return compactPosterSnippet(String(value || '').trim(), max);
+    const normalizedMax = max <= 8 ? max : max <= 12 ? max + 2 : max + 4;
+    return compactPosterSnippet(String(value || '').trim(), normalizedMax);
 }
 function normalizeCtaAlternatives(values, maxCount = 4) {
     const source = Array.isArray(values) ? values : String(values || '').split(/[\n｜|/；;,]/);
@@ -2006,67 +3861,270 @@ function normalizeCtaAlternatives(values, maxCount = 4) {
     });
     return result.slice(0, Math.max(1, maxCount));
 }
+function enrichPosterCopyDeckWithFallbacks(deck, input, result) {
+    const next = { ...(deck || {}) };
+    const structuredFacts = extractPosterStructuredFacts(input, result);
+    const fallbackSegments = uniquePosterItems([
+        ...collectPosterProofPoints(result, 8),
+        ...collectPosterSegments([
+            input?.content,
+            result?.body,
+            result?.offerLine,
+            result?.urgencyLine,
+            result?.slogan,
+            next.offerLine,
+            next.actionReason,
+            next.audienceLine,
+            next.trustLine,
+        ]),
+        structuredFacts?.benefit,
+        structuredFacts?.audience,
+        structuredFacts?.place,
+        structuredFacts?.time,
+        structuredFacts?.salary,
+    ], 10, 22).filter((item) => item && !isWeakGeneratedPosterLine(item));
+    const proofPool = uniquePosterItems([
+        ...(Array.isArray(next.proofPoints) ? next.proofPoints : []),
+        next.offerLine,
+        next.actionReason,
+        next.audienceLine,
+        next.trustLine,
+        next.urgencyLine,
+        ...fallbackSegments,
+    ], 8, 22).filter((item) => item && !isWeakGeneratedPosterLine(item));
+    const pickFresh = (...patterns) => fallbackSegments.find((item) => {
+        if (!item)
+            return false;
+        if ([next.offerLine, next.actionReason, next.audienceLine, next.trustLine, next.urgencyLine]
+            .filter(Boolean)
+            .some((existing) => isSamePosterText(existing, item))) {
+            return false;
+        }
+        return patterns.length ? patterns.some((pattern) => pattern.test(String(item || ''))) : true;
+    }) || '';
+    const supportFallback = uniquePosterItems([
+        next.supportLine,
+        [next.offerLine, next.actionReason].filter(Boolean).join(' · '),
+        [next.offerLine, next.urgencyLine].filter(Boolean).join(' · '),
+        fallbackSegments.slice(0, 2).join(' · '),
+        fallbackSegments.slice(0, 3).join(' · '),
+    ], 4, 40).find((item) => String(item || '').trim().length >= 10 && !isWeakGeneratedPosterLine(item)) || '';
+    next.supportLine = compactDeckLine(String(next.supportLine || '').trim().length >= 10 ? next.supportLine : supportFallback, 36);
+    next.offerLine = compactDeckLine(next.offerLine || pickFresh(/优惠|折|减|赠|尝鲜|新品|主推|上新|报名|开课|招聘|薪|福利|限时|限量/), 24);
+    next.actionReason = compactDeckLine(next.actionReason || pickFresh(/风味|轻负担|低卡|高蛋白|清爽|推荐|成长|陪跑|带教|核心|主打|省心|体验|收获/), 22);
+    next.audienceLine = compactDeckLine(next.audienceLine || structuredFacts?.audience || pickFresh(/适合|面向|针对|通勤|学生|新手|家庭|白领|上班族|应届|有经验/), 22);
+    next.trustLine = compactDeckLine(next.trustLine || structuredFacts?.benefit || structuredFacts?.place || pickFresh(/到店|门店|线上|线下|直播|包邮|发货|双休|五险|总部|直营|校区|答疑|配送/), 22);
+    next.urgencyLine = compactDeckLine(next.urgencyLine || structuredFacts?.time || pickFresh(/限时|限量|本周|今日|截止|售完|即止|优先|抢先/), 20);
+    next.proofPoints = proofPool.slice(0, 8);
+    if (!Array.isArray(next.factCards) || !next.factCards.length) {
+        next.factCards = uniquePosterItems([
+            next.offerLine,
+            next.actionReason,
+            next.trustLine,
+            next.audienceLine,
+            ...fallbackSegments,
+        ], 4, 22).map((value, index) => ({
+            label: ['亮点', '权益', '适合', '补充'][index] || '亮点',
+            value,
+            hint: compactDeckLine(index === 0 ? next.urgencyLine : index === 1 ? next.actionReason : next.trustLine, 14),
+        }));
+    }
+    return next;
+}
 export function getPosterCopyDeck(input, result) {
     const existing = result === null || result === void 0 ? void 0 : result.copyDeck;
     if (existing && typeof existing === 'object') {
-        return {
-            heroHeadline: compactDeckLine(existing.heroHeadline || result.title, 18),
-            supportLine: compactDeckLine(existing.supportLine || result.slogan || existing.offerLine, 26),
-            offerLine: compactDeckLine(existing.offerLine || result.offerLine, 18),
-            urgencyLine: compactDeckLine(existing.urgencyLine || result.urgencyLine, 16),
-            actionReason: compactDeckLine(existing.actionReason, 18),
-            cta: compactDeckLine(existing.cta || result.cta, 8),
-            ctaAlternatives: normalizeCtaAlternatives(existing.ctaAlternatives, 4),
+        return enrichPosterCopyDeckWithFallbacks({
+            heroHeadline: compactDeckLine(existing.heroHeadline || result.title, 24),
+            supportLine: compactDeckLine(existing.supportLine || result.slogan || existing.offerLine, 42),
+            offerLine: compactDeckLine(existing.offerLine || result.offerLine, 28),
+            urgencyLine: compactDeckLine(existing.urgencyLine || result.urgencyLine, 24),
+            actionReason: compactDeckLine(existing.actionReason, 24),
+            cta: compactDeckLine(existing.cta || result.cta, 10),
+            ctaAlternatives: normalizeCtaAlternatives(existing.ctaAlternatives, 5),
             badge: compactDeckLine(existing.badge || result.badge, 6),
-            proofPoints: Array.isArray(existing.proofPoints) ? existing.proofPoints.map((item) => compactDeckLine(item, 16)).filter(Boolean).slice(0, 5) : collectPosterProofPoints(result, 5),
+            proofPoints: Array.isArray(existing.proofPoints) ? existing.proofPoints.map((item) => compactDeckLine(item, 24)).filter(Boolean).slice(0, 8) : collectPosterProofPoints(result, 8),
             factCards: Array.isArray(existing.factCards) ? existing.factCards
                 .map((item) => ({
                 label: compactDeckLine(item === null || item === void 0 ? void 0 : item.label, 6),
-                value: compactDeckLine(item === null || item === void 0 ? void 0 : item.value, 14),
-                hint: compactDeckLine(item === null || item === void 0 ? void 0 : item.hint, 12),
+                value: compactDeckLine(item === null || item === void 0 ? void 0 : item.value, 24),
+                hint: compactDeckLine(item === null || item === void 0 ? void 0 : item.hint, 20),
             }))
                 .filter((item) => item.value)
-                .slice(0, 4) : [],
+                .slice(0, 5) : [],
             priceBlock: existing.priceBlock && (existing.priceBlock.value || existing.priceBlock.note) ? {
                 tag: compactDeckLine(existing.priceBlock.tag, 6),
-                value: compactDeckLine(existing.priceBlock.value, 12),
+                value: compactDeckLine(existing.priceBlock.value, 16),
                 suffix: compactDeckLine(existing.priceBlock.suffix, 4),
-                note: compactDeckLine(existing.priceBlock.note, 16),
+                note: compactDeckLine(existing.priceBlock.note, 22),
             } : null,
-            audienceLine: compactDeckLine(existing.audienceLine, 18),
-            trustLine: compactDeckLine(existing.trustLine, 18),
-        };
+            audienceLine: compactDeckLine(existing.audienceLine, 24),
+            trustLine: compactDeckLine(existing.trustLine, 24),
+        }, input, result);
     }
-    const proofPoints = collectPosterProofPoints(result, 5);
-    const infoLines = collectPosterSegments([input.content, result.body, result.offerLine, result.urgencyLine]).map((item) => compactDeckLine(item, 16)).filter(Boolean);
+    const proofPoints = collectPosterProofPoints(result, 8);
+    const infoLines = collectPosterSegments([input.content, result.body, result.offerLine, result.urgencyLine]).map((item) => compactDeckLine(item, 24)).filter(Boolean);
     const merged = Array.from(new Set([...proofPoints, ...infoLines].filter(Boolean)));
-    return {
-        heroHeadline: compactDeckLine(result.title, 18),
-        supportLine: compactDeckLine(result.slogan || result.offerLine, 26),
-        offerLine: compactDeckLine(result.offerLine || merged[0], 18),
-        urgencyLine: compactDeckLine(result.urgencyLine || merged[1], 16),
-        actionReason: compactDeckLine(merged[2], 18),
-        cta: compactDeckLine(result.cta, 8),
-        ctaAlternatives: normalizeCtaAlternatives(result === null || result === void 0 ? void 0 : result.ctaAlternatives, 4),
+    return enrichPosterCopyDeckWithFallbacks({
+        heroHeadline: compactDeckLine(result.title, 24),
+        supportLine: compactDeckLine(result.slogan || result.offerLine, 42),
+        offerLine: compactDeckLine(result.offerLine || merged[0], 28),
+        urgencyLine: compactDeckLine(result.urgencyLine || merged[1], 24),
+        actionReason: compactDeckLine(merged[2], 24),
+        cta: compactDeckLine(result.cta, 10),
+        ctaAlternatives: normalizeCtaAlternatives(result === null || result === void 0 ? void 0 : result.ctaAlternatives, 5),
         badge: compactDeckLine(result.badge, 6),
-        proofPoints: merged.slice(0, 5),
+        proofPoints: merged.slice(0, 8),
         factCards: [],
         priceBlock: null,
         audienceLine: '',
         trustLine: '',
+    }, input, result);
+}
+function hasTrustedProviderMeta(meta) {
+    return Boolean(meta
+        && typeof meta === 'object'
+        && !meta.isMockFallback
+        && !['none', 'ai-protocol', 'design-plan-derived', 'local'].includes(String(meta.provider || '').trim().toLowerCase()));
+}
+function shouldPrioritizeAiPosterRecommendations(result) {
+    const providerMeta = result?.providerMeta || {};
+    return hasTrustedProviderMeta(providerMeta.multimodalLayout)
+        || hasTrustedProviderMeta(providerMeta.relayout)
+        || hasTrustedProviderMeta(providerMeta.copy);
+}
+function getAiPreferredCopyDeck(input, result) {
+    const deck = getPosterCopyDeck(input, result);
+    return {
+        ...deck,
+        heroHeadline: compactDeckLine(deck.heroHeadline, 24),
+        supportLine: compactDeckLine(deck.supportLine, 42),
+        offerLine: compactDeckLine(deck.offerLine, 28),
+        urgencyLine: compactDeckLine(deck.urgencyLine, 24),
+        actionReason: compactDeckLine(deck.actionReason, 24),
+        audienceLine: compactDeckLine(deck.audienceLine, 24),
+        trustLine: compactDeckLine(deck.trustLine, 24),
+        cta: compactDeckLine(deck.cta, 10),
+        badge: compactDeckLine(deck.badge, 6),
+        ctaAlternatives: normalizeCtaAlternatives(deck.ctaAlternatives, 5),
+        proofPoints: uniquePosterItems(deck.proofPoints || [], 8, 24),
+        factCards: Array.isArray(deck.factCards)
+            ? deck.factCards
+                .map((item) => ({
+                label: compactDeckLine(item?.label, 6),
+                value: compactDeckLine(item?.value, 24),
+                hint: compactDeckLine(item?.hint, 20),
+            }))
+                .filter((item) => item.value || item.hint)
+                .slice(0, 5)
+            : [],
+        priceBlock: deck.priceBlock
+            ? {
+                tag: compactDeckLine(deck.priceBlock.tag, 6),
+                value: compactDeckLine(deck.priceBlock.value, 16),
+                suffix: compactDeckLine(deck.priceBlock.suffix, 4),
+                note: compactDeckLine(deck.priceBlock.note, 22),
+            }
+            : null,
     };
 }
-function derivePosterInfoChips(input, result, bodyLines, maxCount = 3) {
+function getPosterSpecializedCopyCaps(family, input, result) {
+    const normalizedFamily = normalizeLayoutFamily(family);
+    const scene = inferPosterScene(input, result);
+    const banner = getSizeProfile(Number(result?.size?.width || 0) || resolvePosterSize(input?.sizeKey, result?.size).width, Number(result?.size?.height || 0) || resolvePosterSize(input?.sizeKey, result?.size).height) === 'banner';
+    const caps = {
+        heroHeadline: banner ? 18 : 22,
+        supportLine: banner ? 26 : 34,
+        offerLine: banner ? 18 : 22,
+        urgencyLine: banner ? 16 : 20,
+        actionReason: banner ? 16 : 20,
+        audienceLine: banner ? 16 : 20,
+        trustLine: banner ? 16 : 20,
+        cta: 8,
+        proofCount: banner ? 4 : 6,
+        proofItem: banner ? 16 : 18,
+        factCount: normalizedFamily === 'grid-product' ? 4 : normalizedFamily === 'list-recruitment' ? 4 : 3,
+        factValue: banner ? 16 : 18,
+        factHint: banner ? 12 : 14,
+    };
+    if (['premium-offer', 'hero-center', 'hero-left', 'clean-course'].includes(normalizedFamily)) {
+        caps.supportLine = banner ? 28 : 38;
+        caps.offerLine = banner ? 18 : 24;
+        caps.actionReason = banner ? 16 : 22;
+        caps.trustLine = banner ? 16 : 22;
+        caps.proofCount = banner ? 4 : 7;
+        caps.proofItem = banner ? 16 : 20;
+        caps.factCount = normalizedFamily === 'hero-center' ? 4 : Math.max(caps.factCount, 4);
+        caps.factValue = banner ? 16 : 20;
+    }
+    if (['magazine-cover', 'split-editorial', 'xiaohongshu-note'].includes(normalizedFamily)) {
+        caps.heroHeadline = banner ? 18 : 24;
+        caps.supportLine = banner ? 24 : 32;
+        caps.proofCount = banner ? 4 : 5;
+        caps.factCount = Math.max(caps.factCount, 3);
+    }
+    if (scene === 'recruitment') {
+        caps.supportLine = banner ? 24 : 32;
+        caps.offerLine = banner ? 18 : 22;
+        caps.audienceLine = banner ? 16 : 20;
+        caps.trustLine = banner ? 16 : 22;
+        caps.proofCount = banner ? 4 : 6;
+        caps.factCount = 4;
+        caps.factValue = banner ? 16 : 20;
+    }
+    if (scene === 'course') {
+        caps.supportLine = banner ? 26 : 36;
+        caps.offerLine = banner ? 18 : 22;
+        caps.actionReason = banner ? 16 : 22;
+        caps.factCount = Math.max(caps.factCount, 4);
+    }
+    return caps;
+}
+function normalizeSpecializedPosterDeck(deck, family, input, result) {
+    const caps = getPosterSpecializedCopyCaps(family, input, result);
+    return {
+        ...deck,
+        heroHeadline: compactDeckLine(deck.heroHeadline, caps.heroHeadline),
+        supportLine: compactDeckLine(deck.supportLine, caps.supportLine),
+        offerLine: compactDeckLine(deck.offerLine, caps.offerLine),
+        urgencyLine: compactDeckLine(deck.urgencyLine, caps.urgencyLine),
+        actionReason: compactDeckLine(deck.actionReason, caps.actionReason),
+        audienceLine: compactDeckLine(deck.audienceLine, caps.audienceLine),
+        trustLine: compactDeckLine(deck.trustLine, caps.trustLine),
+        cta: compactDeckLine(deck.cta, caps.cta),
+        ctaAlternatives: normalizeCtaAlternatives(deck.ctaAlternatives, 5),
+        proofPoints: uniquePosterItems((deck.proofPoints || []).filter((item) => !isWeakGeneratedPosterLine(item)), caps.proofCount, caps.proofItem),
+        factCards: Array.isArray(deck.factCards)
+            ? deck.factCards
+                .map((item) => ({
+                label: compactDeckLine(item?.label, 6),
+                value: compactDeckLine(item?.value, caps.factValue),
+                hint: compactDeckLine(item?.hint, caps.factHint),
+            }))
+                .filter((item) => item.value || item.hint)
+                .slice(0, caps.factCount)
+            : [],
+        priceBlock: deck.priceBlock
+            ? {
+                tag: compactDeckLine(deck.priceBlock.tag, 6),
+                value: compactDeckLine(deck.priceBlock.value, 16),
+                suffix: compactDeckLine(deck.priceBlock.suffix, 4),
+                note: compactDeckLine(deck.priceBlock.note, 22),
+            }
+            : null,
+    };
+}
+function derivePosterInfoChips(input, result, bodyLines, maxCount = 4) {
     const joined = [input.content, result.body, result.slogan, result.title, result.offerLine, result.urgencyLine].filter(Boolean).join(' ');
     const recruitmentMode = String(input.presetKey || '').trim() === 'recruitment' || /招聘|招募/.test(`${input.purpose || ''}${input.industry || ''}${input.theme || ''}`);
     const chips = [];
     const append = (value) => {
-        const text = compactPosterSnippet(value, 14);
+        const text = compactPosterSnippet(value, 18);
         if (!text)
             return;
         if (chips.includes(text))
             return;
-        if (text === compactPosterSnippet(result.title, 14))
+        if (text === compactPosterSnippet(result.title, 18))
             return;
         chips.push(text);
     };
@@ -2095,10 +4153,10 @@ function derivePosterInfoChips(input, result, bodyLines, maxCount = 3) {
     collectPosterSegments([input.content, result.body, result.slogan]).forEach((line) => append(line));
     return chips.slice(0, Math.max(1, maxCount));
 }
-function derivePosterDetailLines(input, result, bodyLines, infoChips, maxCount = 2) {
+function derivePosterDetailLines(input, result, bodyLines, infoChips, maxCount = 3) {
     const items = [];
     const append = (value) => {
-        const text = compactPosterSnippet(value, 16);
+        const text = compactPosterSnippet(value, 20);
         if (!text)
             return;
         if (items.some((item) => isSamePosterText(item, text)))
@@ -2703,14 +4761,14 @@ function buildFamilySpecializedCopyDeck(deck, family, input, result) {
         next.ctaAlternatives = uniquePosterItems([next.cta, ...next.ctaAlternatives], 4, 8);
         next.proofPoints = uniquePosterItems([next.offerLine, next.actionReason, ...next.proofPoints], 5, 16);
     }
-    return next;
+    return normalizeSpecializedPosterDeck(next, family, input, result);
 }
 function derivePosterHighlights(input, result, profile = {}) {
     let copyDeck = getPosterCopyDeck(input, result);
     const maxBodyLines = Number.isFinite(profile.maxBodyLines) ? Number(profile.maxBodyLines) : 3;
     const maxBodyChars = Number.isFinite(profile.maxBodyChars) ? Number(profile.maxBodyChars) : 16;
     const splitLimit = Math.max(1, maxBodyLines || 1);
-    const proofPoints = collectPosterProofPoints(result, Math.max(splitLimit + 2, 5));
+    const proofPoints = collectPosterProofPoints(result, Math.max(splitLimit + 3, 7));
     const clauses = splitBodyLines(result.body, splitLimit)
         .map((item) => String(item || '').replace(/^[·•\-\s]+/, '').trim())
         .filter(Boolean);
@@ -2724,12 +4782,12 @@ function derivePosterHighlights(input, result, profile = {}) {
         .filter(Boolean);
     const badge = copyDeck.badge || derivePosterBadge(input, result);
     const price = copyDeck.priceBlock ? { tag: copyDeck.priceBlock.tag || '限时礼遇', value: `${copyDeck.priceBlock.value || ''}${copyDeck.priceBlock.suffix || ''}`.trim() } : extractPriceInfo([input.content, result.offerLine, result.slogan, result.body, result.title]);
-    const infoChips = derivePosterInfoChips(input, result, bodyLines, Number.isFinite(profile.maxChips) ? Number(profile.maxChips) : 3);
+    const infoChips = derivePosterInfoChips(input, result, bodyLines, Number.isFinite(profile.maxChips) ? Number(profile.maxChips) : 4);
     const detailLines = [copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine]
         .filter(Boolean)
-        .concat(derivePosterDetailLines(input, result, bodyLines, infoChips, Number.isFinite(profile.maxDetails) ? Number(profile.maxDetails) : 2))
+        .concat(derivePosterDetailLines(input, result, bodyLines, infoChips, Number.isFinite(profile.maxDetails) ? Number(profile.maxDetails) : 3))
         .filter((line, index, arr) => arr.findIndex((item) => isSamePosterText(item, line)) === index)
-        .slice(0, Math.max(0, Number.isFinite(profile.maxDetails) ? Number(profile.maxDetails) : 2));
+        .slice(0, Math.max(0, Number.isFinite(profile.maxDetails) ? Number(profile.maxDetails) : 3));
     const normalizedBodyLines = bodyLines;
     return {
         badge,
@@ -3070,13 +5128,13 @@ function applyPosterDensityGuard(widgets, family, pageWidth, pageHeight, options
     const recruitCards = widgets.filter((item) => String(item?.name || '').startsWith('ai_recruit_card_'));
     const heroCenterCommerceMode = family === 'hero-center' && hasPrice && contentPattern === 'info-cards';
     const compareTexts = heroCenterCommerceMode ? [titleText, sloganText].filter(Boolean) : [titleText, sloganText, bodyText].filter(Boolean);
-    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_chip_'), heroCenterCommerceMode ? 3 : family === 'premium-offer' ? 1 : 2, compareTexts);
-    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_meta_'), heroCenterCommerceMode ? 1 : family === 'premium-offer' || family === 'festive-frame' ? 0 : 2, compareTexts);
-    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_festive_card_'), hasPrice ? 0 : 2, compareTexts);
-    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_list_'), 2, compareTexts);
-    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_recruit_card_'), 2, compareTexts);
+    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_chip_'), heroCenterCommerceMode ? 5 : family === 'premium-offer' ? 3 : family === 'split-editorial' ? 4 : 4, compareTexts);
+    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_meta_'), heroCenterCommerceMode ? 3 : family === 'premium-offer' || family === 'festive-frame' ? 2 : 3, compareTexts);
+    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_festive_card_'), hasPrice ? 2 : 3, compareTexts);
+    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_list_'), 4, compareTexts);
+    dedupeWidgetGroupByText(widgets, (name) => name.startsWith('ai_recruit_card_'), 4, compareTexts);
     if (family === 'festive-frame') {
-        metas.forEach((widget) => hideWidgetBlock(widget));
+        metas.slice(1).forEach((widget) => hideWidgetBlock(widget));
         if (bodyText && (isPosterEchoText(bodyText, sloganText) || isPosterEchoText(bodyText, titleText) || bodyText.length > 18)) {
             hideWidgetBlock(body);
         }
@@ -3088,34 +5146,40 @@ function applyPosterDensityGuard(widgets, family, pageWidth, pageHeight, options
             chips.forEach((widget) => hideWidgetBlock(widget));
         }
         else {
-            chips.slice(1).forEach((widget) => hideWidgetBlock(widget));
+            chips.slice(2).forEach((widget) => hideWidgetBlock(widget));
             festiveCards.slice(2).forEach((widget) => hideWidgetBlock(widget));
         }
     }
     if (family === 'premium-offer') {
-        if (bodyText && (hasPrice || bodyText.length > 16 || isPosterEchoText(bodyText, titleText) || isPosterEchoText(bodyText, sloganText))) {
-            hideWidgetBlock(body);
+        if (bodyText && (hasPrice || bodyText.length > 18 || isPosterEchoText(bodyText, titleText) || isPosterEchoText(bodyText, sloganText))) {
+            if (bodyText.length > 28 || isPosterEchoText(bodyText, titleText) || isPosterEchoText(bodyText, sloganText))
+                hideWidgetBlock(body);
+            else
+                body.fontSize = Math.min(Number(body.fontSize || 20), getTextFont(pageWidth, 18, 15));
         }
         if (sloganText && (isPosterEchoText(sloganText, titleText) || sloganText.length > 22)) {
             slogan.fontSize = Math.min(Number(slogan.fontSize || 20), getTextFont(pageWidth, 19, 16));
         }
-        metas.forEach((widget) => hideWidgetBlock(widget));
-        chips.slice(1).forEach((widget) => hideWidgetBlock(widget));
+        metas.slice(2).forEach((widget) => hideWidgetBlock(widget));
+        chips.slice(3).forEach((widget) => hideWidgetBlock(widget));
     }
     if (heroCenterCommerceMode) {
         if (sloganText && (isPosterEchoText(sloganText, titleText) || sloganText.length > 20)) {
-            hideWidgetBlock(slogan);
+            if (isPosterEchoText(sloganText, titleText))
+                hideWidgetBlock(slogan);
+            else
+                slogan.fontSize = Math.min(Number(slogan.fontSize || 22), getTextFont(pageWidth, 20, 17));
         }
         if (bodyText && bodyText.length > 24) {
             body.fontSize = Math.min(Number(body.fontSize || 22), getTextFont(pageWidth, 20, 16));
         }
-        metas.slice(1).forEach((widget) => hideWidgetBlock(widget));
-        chips.slice(3).forEach((widget) => hideWidgetBlock(widget));
+        metas.slice(3).forEach((widget) => hideWidgetBlock(widget));
+        chips.slice(5).forEach((widget) => hideWidgetBlock(widget));
     }
     if (family === 'list-recruitment') {
         metas.forEach((widget) => hideWidgetBlock(widget));
-        listRows.slice(2).forEach((widget) => hideWidgetBlock(widget));
-        recruitCards.slice(2).forEach((widget) => hideWidgetBlock(widget));
+        listRows.slice(3).forEach((widget) => hideWidgetBlock(widget));
+        recruitCards.slice(3).forEach((widget) => hideWidgetBlock(widget));
         const visibleRecruitTexts = recruitCards
             .filter((widget) => !isCollapsedWidget(widget))
             .map((widget) => String(widget.text || '').trim())
@@ -3154,17 +5218,17 @@ function applyPosterDensityGuard(widgets, family, pageWidth, pageHeight, options
         isWide: pageWidth > pageHeight,
     });
     const finalBottom = aiTextStackBottom(widgets);
-    const emergencyLimit = Math.round(pageHeight * (family === 'list-recruitment' ? 0.8 : 0.74));
-    if (finalBottom > emergencyLimit) {
-        if (!isCollapsedWidget(body))
-            hideWidgetBlock(body);
-        else if (!isCollapsedWidget(slogan) && family !== 'list-recruitment')
-            hideWidgetBlock(slogan);
+        const emergencyLimit = Math.round(pageHeight * (family === 'list-recruitment' ? 0.82 : 0.76));
+        if (finalBottom > emergencyLimit) {
+            if (!isCollapsedWidget(body))
+                hideWidgetBlock(body);
+            else if (!isCollapsedWidget(slogan) && family !== 'list-recruitment')
+                hideWidgetBlock(slogan);
         chips.forEach((widget, index) => {
-            if (index > 0)
+            if (index > 1)
                 hideWidgetBlock(widget);
         });
-        metas.forEach((widget) => hideWidgetBlock(widget));
+        metas.slice(1).forEach((widget) => hideWidgetBlock(widget));
         compressHeaderStack(widgets, {
             height: pageHeight,
             safeBottom,
@@ -6308,6 +8372,37 @@ export function dedupePosterTitleSlogan(title, slogan) {
 function clampRatio(value, min = 0, max = 1) {
     return Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : min));
 }
+function resolveAbsoluteMetric(layer, primaryKey, aliasKey, pageExtent, fallbackRatio = 0) {
+    const primary = Number(layer?.[primaryKey]);
+    if (Number.isFinite(primary)) {
+        if (primary >= 0 && primary <= 1) {
+            return clampRatio(primary, 0, 1);
+        }
+        if (pageExtent > 0) {
+            return clampRatio(primary / pageExtent, 0, 1);
+        }
+    }
+    const alias = Number(layer?.[aliasKey]);
+    if (Number.isFinite(alias)) {
+        if (alias >= 0 && alias <= 1) {
+            return clampRatio(alias, 0, 1);
+        }
+        if (pageExtent > 0) {
+            return clampRatio(alias / pageExtent, 0, 1);
+        }
+    }
+    return clampRatio(fallbackRatio, 0, 1);
+}
+function resolveAbsoluteFontSize(layer, pageWidth, pageHeight) {
+    const raw = Number(layer?.fontSize ?? layer?.font_size ?? layer?.fontsize ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) {
+        return 0;
+    }
+    if (raw > 1.5) {
+        return Math.max(12, Math.round(raw));
+    }
+    return Math.max(12, Math.round(raw * Math.min(pageWidth, pageHeight)));
+}
 function findRoleWidget(widgets, role) {
     const roleMap = {
         title: ['ai_title'],
@@ -6420,19 +8515,23 @@ function ensureAbsoluteRoleWidgets(widgets, absoluteLayout, pageWidth, pageHeigh
 function applyAbsoluteLayerToWidget(widget, layer, pageWidth, pageHeight) {
     if (!widget || !layer)
         return;
-    const left = Math.round(clampRatio(layer.left) * pageWidth);
-    const top = Math.round(clampRatio(layer.top) * pageHeight);
-    const width = Math.round(clampRatio(layer.width, 0.04, 1) * pageWidth);
-    const height = Math.round(clampRatio(layer.height, 0.04, 1) * pageHeight);
+    const leftRatio = resolveAbsoluteMetric(layer, 'left', 'x', pageWidth, Number(widget.left || 0) / Math.max(1, pageWidth));
+    const topRatio = resolveAbsoluteMetric(layer, 'top', 'y', pageHeight, Number(widget.top || 0) / Math.max(1, pageHeight));
+    const widthRatio = resolveAbsoluteMetric(layer, 'width', 'w', pageWidth, Math.max(0.04, Number(widget.width || 0) / Math.max(1, pageWidth)));
+    const heightRatio = resolveAbsoluteMetric(layer, 'height', 'h', pageHeight, Math.max(0.04, Number(widget.height || 0) / Math.max(1, pageHeight)));
+    const left = Math.round(clampRatio(leftRatio) * pageWidth);
+    const top = Math.round(clampRatio(topRatio) * pageHeight);
+    const width = Math.round(clampRatio(widthRatio, 0.04, 1) * pageWidth);
+    const height = Math.round(clampRatio(heightRatio, 0.04, 1) * pageHeight);
     applyWidgetRect(widget, { left, top, width, height });
     if (widget.type === 'w-text') {
         const align = ['left', 'center', 'right'].includes(String(layer.textAlign || '').trim())
             ? String(layer.textAlign).trim()
             : widget.textAlign || 'left';
         setWidgetAlign(widget, align);
-        const fontRatio = Number(layer.fontSize || 0);
-        if (Number.isFinite(fontRatio) && fontRatio > 0) {
-            widget.fontSize = Math.max(12, Math.round(fontRatio * Math.min(pageWidth, pageHeight)));
+        const nextFontSize = resolveAbsoluteFontSize(layer, pageWidth, pageHeight);
+        if (nextFontSize > 0) {
+            widget.fontSize = nextFontSize;
         }
     }
     if (widget.name === 'ai_hero') {
@@ -6472,13 +8571,13 @@ function applyTextStrategyPlan(widgets, designPlan, palette) {
             height: Math.max(Number(panelWidget?.height || 0), bodyBottom - titleTop + Math.round((bodyWidget?.fontSize || 20) * 1.3)),
         });
         panelWidget.backgroundColor = textStrategy === 'panel'
-            ? withAlpha(backgroundTone === 'dark' ? '#08111d' : blendColor(palette.background || '#ffffff', '#ffffff', 0.16), backgroundTone === 'dark' ? 'f2' : 'eb')
+            ? toSoftPanelBackground(palette, backgroundTone === 'dark' ? palette.primary || '#8b5cf6' : blendColor(palette.background || '#ffffff', '#ffffff', 0.16), backgroundTone === 'dark' ? 'd6' : 'eb')
             : panelWidget.backgroundColor;
     }
     if (panelWidget && !skipForcedPanel && (textStrategy === 'panel' || backgroundTone === 'dark')) {
-        const panelBg = String(panelWidget.backgroundColor || '#08111d').trim() || '#08111d';
-        const strongText = chooseReadableColor(['#ffffff', '#f8fafc', '#e2e8f0', '#0f172a', '#111111'], [panelBg], 5.6);
-        const mutedText = chooseReadableColor(['#e2e8f0', '#cbd5e1', '#ffffff', '#334155'], [panelBg], 4.6);
+        const panelBg = String(panelWidget.backgroundColor || withAlpha(getSoftPanelBaseColor(palette), 'e8')).trim() || withAlpha(getSoftPanelBaseColor(palette), 'e8');
+        const strongText = chooseReadableColor(['#0f172a', '#111111', '#1f2937', '#ffffff'], [panelBg], 5.6);
+        const mutedText = chooseReadableColor(['#334155', '#475569', '#64748b', '#ffffff'], [panelBg], 4.6);
         [titleWidget, bodyWidget].forEach((widget) => {
             if (widget)
                 widget.color = strongText;
@@ -6582,11 +8681,13 @@ export function buildPosterLayout({ input, result }) {
     const height = resolvedSize.height;
     const palette = result.palette;
     const readability = resolveReadablePalette(palette);
-    let copyDeck = getPosterCopyDeck(input, result);
+    const prioritizeAiRecommendations = shouldPrioritizeAiPosterRecommendations(result);
+    const initialRichnessLimits = getPosterCopyRichnessLimits(result.designPlan?.layoutFamily || '', getSizeProfile(width, height), prioritizeAiRecommendations);
+    let copyDeck = prioritizeAiRecommendations ? getAiPreferredCopyDeck(input, result) : getPosterCopyDeck(input, result);
     let head = dedupePosterTitleSlogan(copyDeck.heroHeadline || result.title, copyDeck.supportLine || result.slogan);
-    let layoutTitle = normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(copyDeck.heroHeadline || result.title, '').trim());
-    let layoutSlogan = normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(copyDeck.supportLine || result.slogan, '').trim());
-    let bodySeed = [copyDeck.offerLine, ...(copyDeck.proofPoints || []), copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine]
+    let layoutTitle = clipPosterLayerText(normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(copyDeck.heroHeadline || result.title, '').trim()), initialRichnessLimits.titleMax);
+    let layoutSlogan = clipPosterLayerText(normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(copyDeck.supportLine || result.slogan, '').trim()), initialRichnessLimits.sloganMax);
+    let bodySeed = limitPosterSegments([copyDeck.offerLine, ...(copyDeck.proofPoints || []), copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine, copyDeck.urgencyLine], initialRichnessLimits.bodySegmentCount, initialRichnessLimits.bodySegmentLen)
         .filter(Boolean)
         .join('｜');
     let layoutBody = stripInternalPromptEcho(bodySeed || result.body) || getSafeText(result.body, '补充描述文案');
@@ -6629,8 +8730,13 @@ export function buildPosterLayout({ input, result }) {
         || templateHintedFamily === 'xiaohongshu-note');
     const modelRecommendedFamily = normalizeLayoutFamily(multimodalHints?.layoutDecision?.recommendedFamily || result.designPlan?.layoutFamily);
     const modelHasRecommendation = Boolean(modelRecommendedFamily);
+    const inferredScene = inferPosterScene(input, result);
+    const strictSceneFamilyLock = !isWide && ['recruitment', 'course', 'commerce', 'food', 'festival', 'event'].includes(inferredScene);
     const shouldPromoteHintedFamily = Boolean(hintedFamily && (hintedConfidence >= 0.35 || structuredHintedFamily));
-    const shouldPromoteTemplateFamily = Boolean(!modelHasRecommendation && templateHintedFamily && (templateHintedScore >= 0.9 || structuredTemplateFamily));
+    const shouldPromoteTemplateFamily = Boolean(!strictSceneFamilyLock
+        && !modelHasRecommendation
+        && templateHintedFamily
+        && (templateHintedScore >= 0.9 || structuredTemplateFamily));
     const aiPriorityFamily = normalizeLayoutFamily((shouldPromoteHintedFamily ? hintedFamily : '')
         || modelRecommendedFamily
         || (shouldPromoteTemplateFamily ? templateHintedFamily : '')
@@ -6677,28 +8783,38 @@ export function buildPosterLayout({ input, result }) {
         aiPriorityFamily,
         lockAiFamily: Boolean(aiPriorityFamily),
     });
-    copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
-    const inferredScene = inferPosterScene(input, result);
+    if (!prioritizeAiRecommendations) {
+        copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+    }
     if (!modelHasRecommendation && !isWide && inferredScene === 'recruitment' && selectedFamily !== 'list-recruitment') {
         selectedFamily = 'list-recruitment';
-        copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        if (!prioritizeAiRecommendations) {
+            copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        }
     }
     if (!modelHasRecommendation && !isWide && inferredScene === 'course' && selectedFamily !== 'clean-course') {
         selectedFamily = 'clean-course';
-        copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        if (!prioritizeAiRecommendations) {
+            copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        }
     }
     if (!modelHasRecommendation && !isWide && inferredScene === 'commerce' && !['premium-offer', 'grid-product', 'hero-center'].includes(selectedFamily)) {
         selectedFamily = copyDeck.priceBlock ? 'premium-offer' : 'hero-center';
-        copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        if (!prioritizeAiRecommendations) {
+            copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        }
     }
     if (!modelHasRecommendation && !isWide && inferredScene === 'food' && !['hero-center', 'magazine-cover', 'premium-offer'].includes(selectedFamily)) {
         selectedFamily = copyDeck.priceBlock ? 'hero-center' : 'magazine-cover';
-        copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        if (!prioritizeAiRecommendations) {
+            copyDeck = buildFamilySpecializedCopyDeck(copyDeck, selectedFamily, input, result);
+        }
     }
+    const richnessLimits = getPosterCopyRichnessLimits(selectedFamily, sizeProfile, prioritizeAiRecommendations);
     head = dedupePosterTitleSlogan(copyDeck.heroHeadline || result.title, copyDeck.supportLine || result.slogan);
-    layoutTitle = normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(copyDeck.heroHeadline || result.title, '').trim());
-    layoutSlogan = normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(copyDeck.supportLine || result.slogan, '').trim());
-    bodySeed = [copyDeck.offerLine, ...(copyDeck.proofPoints || []), copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine]
+    layoutTitle = clipPosterLayerText(normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(copyDeck.heroHeadline || result.title, '').trim()), richnessLimits.titleMax);
+    layoutSlogan = clipPosterLayerText(normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(copyDeck.supportLine || result.slogan, '').trim()), richnessLimits.sloganMax);
+    bodySeed = limitPosterSegments([copyDeck.offerLine, ...(copyDeck.proofPoints || []), copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine, copyDeck.urgencyLine], richnessLimits.bodySegmentCount, richnessLimits.bodySegmentLen)
         .filter(Boolean)
         .join('｜');
     layoutBody = stripInternalPromptEcho(bodySeed || result.body) || getSafeText(result.body, '补充描述文案');
@@ -6714,7 +8830,7 @@ export function buildPosterLayout({ input, result }) {
         ? ''
         : highlights.bodyLines.length > 1
             ? highlights.bodyLines.join('\n')
-            : (highlights.bodyLines[0] || normalizePosterInfoLine(layoutBody, contentProfile.maxBodyChars || 16));
+            : (highlights.bodyLines[0] || normalizePosterInfoLine(layoutBody, Math.max(contentProfile.maxBodyChars || 16, richnessLimits.bodyFallbackChars)));
     const includeHeroLayer = Boolean(String(result.hero?.imageUrl || '').trim());
     const universalFullScreenPoster = includeHeroLayer;
     let heroWidth = 0;
@@ -6816,7 +8932,7 @@ export function buildPosterLayout({ input, result }) {
     if (selectedFamily === 'hero-left' && !isWide) {
         textWidth = Math.round(width * 0.8);
     }
-    let titleHeightLimit = Math.round(height * (isWide ? 0.24 : 0.18));
+    let titleHeightLimit = Math.round(height * (isWide ? 0.24 : 0.2));
     if (sizeProfile === 'banner') {
         titleHeightLimit = Math.round(height * (isWide ? 0.22 : 0.16));
     }
@@ -6824,7 +8940,7 @@ export function buildPosterLayout({ input, result }) {
         titleHeightLimit = Math.round(Math.min(titleHeightLimit, height * 0.14));
     }
     if (!isWide && (selectedFamily === 'premium-offer' || selectedFamily === 'hero-center' || selectedFamily === 'festive-frame')) {
-        titleHeightLimit = Math.round(Math.min(titleHeightLimit, height * 0.12));
+        titleHeightLimit = Math.round(Math.min(titleHeightLimit, height * 0.145));
     }
     let titleFontMax = sizeProfile === 'banner' ? (isWide ? 68 : 82) : isWide ? 90 : 108;
     let titleFontMin = sizeProfile === 'banner' ? 36 : 52;
@@ -6838,8 +8954,8 @@ export function buildPosterLayout({ input, result }) {
     if (!isWide && (selectedFamily === 'list-recruitment' || selectedFamily === 'xiaohongshu-note')) {
         titleFontMax = Math.min(titleFontMax, 82);
     }
-    const titleFont = fitTitleFont(layoutTitle, textWidth, titleHeightLimit, getTextFont(width, titleFontMax, titleFontMin));
-    const titleHeight = estimateTextHeight(layoutTitle, titleFont, textWidth);
+    let titleFont = fitTitleFont(layoutTitle, textWidth, titleHeightLimit, getTextFont(width, titleFontMax, titleFontMin));
+    let titleHeight = estimateTextHeight(layoutTitle, titleFont, textWidth);
     const sloganFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 22 : 26) : isWide ? 28 : 34, 20);
     const bodyFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 18 : 22) : isWide ? 23 : 28, 18);
     const ctaFont = getTextFont(width, sizeProfile === 'banner' ? (isWide ? 22 : 26) : isWide ? 28 : 32, 22);
@@ -6855,20 +8971,20 @@ export function buildPosterLayout({ input, result }) {
             : selectedFamily === 'premium-offer'
                 ? (sizeProfile === 'square' ? 0.4 : 0.34)
                 : 0.3;
-    const ctaWidth = Math.round(Math.max(width * baseCtaRatio, ctaFont * Math.max(String(result.cta || '').length, 4) + 54));
-    const textLeft = selectedFamily === 'clean-course' ? marginX + Math.round(width * 0.12) : marginX;
+    let ctaWidth = Math.round(Math.max(width * baseCtaRatio, ctaFont * Math.max(String(result.cta || '').length, 4) + 54));
+    let textLeft = selectedFamily === 'clean-course' ? marginX + Math.round(width * 0.12) : marginX;
     const badgeFont = getTextFont(width, sizeProfile === 'banner' ? 15 : 18, 12);
     const badgeHeight = Math.round(badgeFont * 1.95);
-    const badgeWidth = Math.round(Math.max(width * 0.14, badgeFont * Math.max(String(highlights.badge || '').length, 4) + 24));
+    let badgeWidth = Math.round(Math.max(width * 0.14, badgeFont * Math.max(String(highlights.badge || '').length, 4) + 24));
     const segmentFallbacks = splitBodyLines(layoutBody, 5)
-        .map((line) => normalizePosterInfoLine(line, 14))
+        .map((line) => normalizePosterInfoLine(line, Math.max(18, richnessLimits.bodySegmentLen)))
         .filter((line, index, arr) => line
         && !isSamePosterText(line, layoutTitle)
         && !isSamePosterText(line, layoutSlogan)
         && arr.findIndex((item) => isSamePosterText(item, line)) === index);
     const explicitFactCards = (copyDeck.factCards || []).map((item) => item.value).filter(Boolean);
     const fallbackInfoChips = (selectedFamily === 'premium-offer' || selectedFamily === 'festive-frame' || selectedFamily === 'grid-product' || (selectedFamily === 'hero-center' && immersiveCommerceLike))
-        ? segmentFallbacks.slice(0, selectedFamily === 'grid-product' ? 3 : 2)
+        ? segmentFallbacks.slice(0, selectedFamily === 'grid-product' ? 4 : 3)
         : [];
     const chipTexts = ((selectedFamily === 'grid-product'
         || selectedFamily === 'premium-offer'
@@ -6877,14 +8993,14 @@ export function buildPosterLayout({ input, result }) {
         ? explicitFactCards
         : highlights.infoChips && highlights.infoChips.length
         ? highlights.infoChips
-        : fallbackInfoChips).slice(0, contentProfile.maxChips || 5);
-    const detailLines = ([copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine]
+        : fallbackInfoChips).slice(0, Math.max(contentProfile.maxChips || 5, richnessLimits.maxChipsFloor));
+    const detailLines = ([copyDeck.actionReason, copyDeck.audienceLine, copyDeck.trustLine, copyDeck.urgencyLine]
         .filter(Boolean)
         .concat(highlights.detailLines && highlights.detailLines.length
         ? highlights.detailLines
         : (selectedFamily === 'premium-offer' || selectedFamily === 'festive-frame'
-            ? segmentFallbacks.slice(chipTexts.length, chipTexts.length + 2)
-            : []))).filter((item, index, arr) => item && arr.findIndex((cur) => isSamePosterText(cur, item)) === index);
+            ? segmentFallbacks.slice(chipTexts.length, chipTexts.length + 3)
+            : segmentFallbacks.slice(0, 3)))).filter((item, index, arr) => item && arr.findIndex((cur) => isSamePosterText(cur, item)) === index).slice(0, Math.max(3, richnessLimits.maxDetailsFloor));
     const structuredFacts = highlights.structuredFacts || {};
     const recruitmentMode = selectedFamily === 'list-recruitment'
         ? inferRecruitmentPosterMode(input, result)
@@ -6903,8 +9019,8 @@ export function buildPosterLayout({ input, result }) {
     const panelStyle = getReadablePanelStyle(palette, readability);
     const effectivePanelStyle = fitnessLike && (selectedFamily === 'hero-center' || selectedFamily === 'magazine-cover')
         ? {
-            panelBackground: '#08111df2',
-            panelBorder: withAlpha(blendColor('#08111d', palette.primary || '#F4C86A', 0.26), 'de'),
+            panelBackground: toSoftPanelBackground(palette, palette.primary || '#F4C86A', 'd8'),
+            panelBorder: toSoftPanelBorder(palette, palette.primary || '#F4C86A', '52'),
         }
         : panelStyle;
     const pushInfoChip = (name, text, left, top, chipWidth, backgroundColor = `${palette.surface}f2`, color = readability.text) => {
@@ -6956,14 +9072,99 @@ export function buildPosterLayout({ input, result }) {
             },
         }));
     };
-    let titleTop = selectedFamily === 'xiaohongshu-note' ? Math.round(height * 0.06) : selectedFamily === 'magazine-cover' ? Math.round(height * 0.62) : marginTop + badgeHeight + Math.round(height * 0.018);
+    const layoutStrategy = resolveLayoutStrategy(selectedFamily, result.designPlan, copyDeck, input);
+    const contentMetrics = measurePosterContent({
+        copyDeck,
+        title: layoutTitle,
+        slogan: layoutSlogan,
+        body: layoutBodyText,
+        pageWidth: width,
+        pageHeight: height,
+        isWide,
+        selectedFamily,
+        sizeProfile,
+    });
+    const backendCompositionReport = normalizeBackendCompositionReport(result.finalCompositionReport);
+    const layoutReadabilitySignals = evaluateBackgroundReadabilitySignals({
+        hints: multimodalHints,
+        metrics: contentMetrics,
+        includeHeroLayer,
+        designPlan: result.designPlan || {},
+        backendCompositionReport,
+    });
+    const layoutBudget = buildLayoutBudget({
+        strategy: layoutStrategy,
+        pageWidth: width,
+        pageHeight: height,
+        isWide,
+        sizeProfile,
+        metrics: contentMetrics,
+        multimodalHints,
+        readabilitySignals: layoutReadabilitySignals,
+        designPlan: result.designPlan || {},
+    });
+    const baseSolvedSections = solvePosterSections({
+        strategy: layoutStrategy,
+        selectedFamily,
+        pageWidth: width,
+        pageHeight: height,
+        isWide,
+        includeHeroLayer,
+        metrics: contentMetrics,
+        budget: layoutBudget,
+        readabilitySignals: layoutReadabilitySignals,
+    });
+    const baseSolvedScore = scorePosterLayoutVariant({
+        layout: baseSolvedSections,
+        metrics: contentMetrics,
+        budget: layoutBudget,
+        pageWidth: width,
+        pageHeight: height,
+        includeHeroLayer,
+        readabilitySignals: layoutReadabilitySignals,
+        backendCompositionReport,
+    });
+    const variantCandidates = buildPosterLayoutVariants({
+        strategy: layoutStrategy,
+        selectedFamily,
+        pageWidth: width,
+        pageHeight: height,
+        isWide,
+        includeHeroLayer,
+        metrics: contentMetrics,
+        budget: layoutBudget,
+    });
+    const bestVariant = pickBestLayoutVariant({
+        variants: variantCandidates,
+        metrics: contentMetrics,
+        budget: layoutBudget,
+        pageWidth: width,
+        pageHeight: height,
+        includeHeroLayer,
+        readabilitySignals: layoutReadabilitySignals,
+        backendCompositionReport,
+    });
+    const shouldReplaceSolvedLayout = Number(bestVariant?.score?.total || 0) >= Number(baseSolvedScore?.total || 0) + 0.7
+        || Number(baseSolvedScore?.total || 0) < 6.4;
+    const solvedSections = shouldReplaceSolvedLayout && bestVariant?.layout ? bestVariant.layout : baseSolvedSections;
+    const layoutSelectionReason = shouldReplaceSolvedLayout && bestVariant?.layout
+        ? (Number(bestVariant?.score?.total || 0) >= Number(baseSolvedScore?.total || 0) + 0.7 ? 'better-variant' : 'base-layout-under-threshold')
+        : 'keep-base-layout';
+    titleFont = Math.max(titleFont, Number(contentMetrics.headline.fontSize || 0));
+    titleHeight = Math.max(titleHeight, Number(contentMetrics.headline.height || 0));
+    textWidth = Math.max(Math.round(width * 0.24), Number(solvedSections?.titleRect?.width || textWidth));
+    textLeft = Number(solvedSections?.titleRect?.left || textLeft);
+    ctaWidth = Math.max(Math.round(width * 0.16), Number(solvedSections?.ctaRect?.width || ctaWidth));
+    badgeWidth = Math.max(Math.round(width * 0.1), Number(solvedSections?.badgeRect?.width || badgeWidth));
+    let titleTop = Number(solvedSections?.titleRect?.top || (selectedFamily === 'xiaohongshu-note' ? Math.round(height * 0.06) : selectedFamily === 'magazine-cover' ? Math.round(height * 0.62) : marginTop + badgeHeight + Math.round(height * 0.018)));
     if (selectedFamily === 'list-recruitment') {
         titleTop = marginTop;
     }
     const titleToSloganGap = Math.round(height * 0.024) + Math.min(Math.round(height * 0.016), Math.round(titleFont * 0.14));
-    const sloganTop = titleTop + titleHeight + titleToSloganGap;
-    const sloganHeight = estimateTextHeight(layoutSlogan, sloganFont, textWidth);
-    let bodyTop = sloganTop + sloganHeight + Math.round(height * 0.018);
+    let sloganTop = Number(solvedSections?.supportRect?.top || (titleTop + titleHeight + titleToSloganGap));
+    let sloganHeight = Math.max(estimateTextHeight(layoutSlogan, sloganFont, textWidth), Number(solvedSections?.supportRect?.height || 0));
+    sloganHeight = Math.max(sloganHeight, Math.round(height * (selectedFamily === 'hero-center' ? 0.065 : 0.052)));
+    let bodyTop = Number(solvedSections?.infoRect?.top || (sloganTop + sloganHeight + Math.round(height * 0.018)));
     if (selectedFamily === 'magazine-cover') {
         bodyTop = sloganTop + sloganHeight + Math.round(height * 0.02);
     }
@@ -6971,14 +9172,22 @@ export function buildPosterLayout({ input, result }) {
         bodyTop = sloganTop + sloganHeight + Math.round(height * 0.02);
     }
     let bodyHeight = layoutBodyText ? estimateTextHeight(layoutBodyText, bodyFont, textWidth) : Math.round(bodyFont * 0.4);
+    bodyHeight = Math.max(bodyHeight, Number(solvedSections?.infoRect?.height || 0));
+    bodyHeight = Math.max(bodyHeight, Math.round(height * (selectedFamily === 'hero-center' ? 0.09 : 0.062)));
     /** 竖版主图在文案下方时，正文过长会把主图压成一条「小图」，限制正文块高度为主图留出空间 */
     const portraitBigHeroFamilies = new Set(['hero-left', 'xiaohongshu-note', 'festive-frame']);
     if (includeHeroLayer && !isWide && portraitBigHeroFamilies.has(selectedFamily))
         bodyHeight = Math.min(bodyHeight, Math.round(height * 0.2));
-    let ctaTop = Math.min(bodyTop + bodyHeight + Math.round(height * 0.028), height - safeBottom - ctaHeight - (qrCorner && !isWide ? qrSize + 24 : 0));
+    let ctaTop = Number(solvedSections?.ctaRect?.top || Math.min(bodyTop + bodyHeight + Math.round(height * 0.028), height - safeBottom - ctaHeight - (qrCorner && !isWide ? qrSize + 24 : 0)));
     const heroBottomLimit = Math.max(Math.round(height * 0.2), height - safeBottom - (qrCorner && !isWide ? qrSize + 20 : 0));
     const portraitStackFamilies = HERO_BELOW_TEXT_FAMILIES;
     if (includeHeroLayer) {
+    if (solvedSections?.heroRect) {
+        heroLeft = Number(solvedSections.heroRect.left || heroLeft);
+        heroTop = Number(solvedSections.heroRect.top || heroTop);
+        heroWidth = Number(solvedSections.heroRect.width || heroWidth);
+        heroHeight = Number(solvedSections.heroRect.height || heroHeight);
+    }
     if (!isWide && portraitStackFamilies.has(selectedFamily)) {
         const textBottom = Math.max(bodyTop + bodyHeight, ctaTop + ctaHeight);
         const stackGap = Math.round(height * 0.029);
@@ -7034,14 +9243,24 @@ export function buildPosterLayout({ input, result }) {
     const contentPattern = String(result.designPlan?.contentPattern || '').trim();
     const explicitPanelRequested = String(result.designPlan?.textStrategy || '').trim() === 'panel';
     const multimodalNeedsPanel = Boolean(multimodalHints?.visualAnalysis?.needsPanel);
+    const backendSuggestedTreatments = inferBackendRecommendedTreatment(result.finalCompositionReport);
+    const backendNeedsPanel = backendSuggestedTreatments.includes('overlay');
     const foodLightScene = !isWide && isLightFoodPosterContext(panelSceneText, result.designPlan || {}, palette);
+    const heroVisualFirstFamily = includeHeroLayer
+        && new Set(['hero-center', 'premium-offer', 'festive-frame', 'magazine-cover']).has(selectedFamily);
+    const suppressWidePanelScene = heroVisualFirstFamily
+        && !isWide
+        && (foodLightScene || (commerceLike && backgroundTone !== 'dark'));
     const alwaysPanelFamilies = new Set(['grid-product', 'clean-course', 'list-recruitment']);
     const panelDensePattern = contentPattern === 'info-cards' || contentPattern === 'list-info';
     const familyNeedsPanel = (alwaysPanelFamilies.has(selectedFamily) && panelDensePattern)
         || (selectedFamily === 'list-recruitment')
         || (selectedFamily === 'premium-offer' && (!foodLightScene && contentPattern === 'price-first'))
         || (selectedFamily === 'hero-center' && backgroundTone === 'dark' && multimodalNeedsPanel);
-    const shouldUseTextPanel = familyNeedsPanel || (!foodLightScene && explicitPanelRequested) || (multimodalNeedsPanel && !hasAbsoluteLayoutPlan && !foodLightScene);
+    const shouldUseTextPanel = !suppressWidePanelScene
+        && (familyNeedsPanel
+            || (!foodLightScene && explicitPanelRequested)
+            || ((multimodalNeedsPanel || backendNeedsPanel) && !hasAbsoluteLayoutPlan && !foodLightScene));
     if (shouldUseTextPanel) {
         const panelLeft = selectedFamily === 'hero-center'
             ? immersiveCommerceLike ? Math.round(width * 0.04) : Math.round(width * 0.07)
@@ -7167,7 +9386,7 @@ export function buildPosterLayout({ input, result }) {
             },
         }),
         makeTextWidget('ai_cta', {
-            text: getSafeText(stripInternalPromptEcho(copyDeck.cta || result.cta), '立即了解'),
+            text: clipPosterLayerText(getSafeText(stripInternalPromptEcho(copyDeck.cta || result.cta), '立即了解'), richnessLimits.ctaMax),
             left: selectedFamily === 'hero-center' ? Math.round((width - ctaWidth) / 2) : textLeft,
             top: ctaTop,
             width: ctaWidth,
@@ -8022,7 +10241,7 @@ export function buildPosterLayout({ input, result }) {
         const listWidgets = widgets
             .filter((w) => w.name && w.name.startsWith('ai_list_'))
             .sort((a, b) => (Number(String(a.name).split('_').pop()) || 0) - (Number(String(b.name).split('_').pop()) || 0));
-        const visibleListCount = Math.min(listWidgets.length, 2);
+        const visibleListCount = Math.min(listWidgets.length, 3);
         const visibleRecruitCardCount = Math.min(recruitCardWidgets.length, 3);
         const panelLeft = Math.round(width * 0.055);
         const panelTop = Math.round(height * 0.058);
@@ -8528,11 +10747,13 @@ export function buildPosterLayout({ input, result }) {
     applyTextStrategyPlan(widgets, result.designPlan, palette);
     applyMultimodalLayoutHints(widgets, result, width, height, palette, selectedFamily);
     collapseEmptyPosterWidgets(widgets, selectedFamily);
-    refinePosterTemplateFinish(widgets, selectedFamily, width, height, {
-        input,
-        palette,
-        designPlan: result.designPlan || {},
-    });
+    if (!prioritizeAiRecommendations) {
+        refinePosterTemplateFinish(widgets, selectedFamily, width, height, {
+            input,
+            palette,
+            designPlan: result.designPlan || {},
+        });
+    }
     applyStructuredCtaStyle(widgets, width, height, palette, readability, {
         input,
         copyDeck,
@@ -8543,25 +10764,31 @@ export function buildPosterLayout({ input, result }) {
         palette,
         designPlan: result.designPlan || {},
     });
-    applyLateStageLightFoodPosterPolish(widgets, selectedFamily, width, height, {
-        input,
-        palette,
-        designPlan: result.designPlan || {},
-        copyDeck,
-    });
-    applyLateStageCommercialPosterPolish(widgets, selectedFamily, width, height, {
-        input,
-        palette,
-        designPlan: result.designPlan || {},
-        copyDeck,
-    });
-    compactPosterActionZone(widgets, selectedFamily, width, height);
-    tightenPosterInfoPanel(widgets, selectedFamily, width, height);
-    fitPanelTextStack(widgets, selectedFamily, width);
+    if (!prioritizeAiRecommendations) {
+        applyLateStageLightFoodPosterPolish(widgets, selectedFamily, width, height, {
+            input,
+            palette,
+            designPlan: result.designPlan || {},
+            copyDeck,
+        });
+    }
+    if (!prioritizeAiRecommendations) {
+        applyLateStageCommercialPosterPolish(widgets, selectedFamily, width, height, {
+            input,
+            palette,
+            designPlan: result.designPlan || {},
+            copyDeck,
+        });
+    }
+    if (!prioritizeAiRecommendations) {
+        compactPosterActionZone(widgets, selectedFamily, width, height);
+        tightenPosterInfoPanel(widgets, selectedFamily, width, height);
+        fitPanelTextStack(widgets, selectedFamily, width);
+    }
     collapseEmptyPosterWidgets(widgets, selectedFamily);
     cleanupWeakPosterWidgets(widgets, selectedFamily, width, height);
     removeDuplicatePosterNamedWidgets(widgets);
-    applyMinimumReadablePosterTypography(widgets, width, height);
+    applyMinimumReadablePosterTypography(widgets, width, height, { resolveCollisions: true, maxPasses: 2 });
     if (selectedFamily === 'list-recruitment') {
         const panel = widgets.find((item) => item.name === 'ai_text_panel');
         const badge = widgets.find((item) => item.name === 'ai_badge');
@@ -8609,7 +10836,7 @@ export function buildPosterLayout({ input, result }) {
         const recruitAvoidZones = getPrimaryAvoidZones(recruitHints, 3);
         const recruitTone = String(recruitHints?.visualAnalysis?.dominantTone || '').trim();
         const recruitTexture = String(recruitHints?.visualAnalysis?.texture || '').trim();
-        const panelPreferred = shouldUseLargeTextPanel(selectedFamily, recruitHints, '#ffffff');
+        const panelPreferred = false;
         const cleanRecruitScene = recruitTone !== 'dark' && recruitTexture !== 'detailed';
         const panelVisible = Boolean(panel && panelPreferred && !cleanRecruitScene);
         const panelLeft = panelVisible
@@ -8625,26 +10852,13 @@ export function buildPosterLayout({ input, result }) {
             ? Math.round(height * Math.max(0.58, Math.min(0.7, ((recruitSafeZone.h || 0.26) + 0.38))))
             : Math.round(height * 0.6);
         const contentLeft = panelVisible ? panelLeft + Math.round(width * 0.024) : panelLeft;
-        const contentWidth = panelVisible ? panelWidth - Math.round(width * 0.048) : Math.round(width * Math.max(0.28, Math.min(0.36, recruitSafeZone.w || 0.34)));
+          const contentWidth = panelVisible
+              ? panelWidth - Math.round(width * 0.048)
+              : Math.round(width * Math.max(0.4, Math.min(0.5, (recruitSafeZone.w || 0.34) + 0.1)));
         const titleColor = panelVisible ? '#111111' : (recruitTone === 'dark' || recruitTexture === 'detailed' ? '#fffaf4' : '#111827');
         const subColor = panelVisible ? '#38424d' : (titleColor === '#111827' ? '#334155' : '#eef2f7');
         if (panel) {
-            if (panelVisible) {
-                applyWidgetRect(panel, {
-                    left: panelLeft,
-                    top: panelTop,
-                    width: panelWidth,
-                    height: panelHeight,
-                });
-                panel.backgroundColor = recruitTone === 'dark' ? '#fffdf7dd' : '#ffffffe8';
-                panel.borderColor = recruitTone === 'dark' ? '#ffffff88' : '#1f283226';
-                panel.radius = Math.max(18, Math.round(width * 0.016));
-                panel.borderWidth = 1;
-                panel.opacity = 1;
-            }
-            else {
-                hidePanelSurface(panel);
-            }
+            hidePanelSurface(panel);
         }
         if (badge) {
             showWidgetBlock(badge);
@@ -8652,10 +10866,11 @@ export function buildPosterLayout({ input, result }) {
             applyWidgetRect(badge, {
                 left: contentLeft,
                 top: panelVisible ? panelTop + Math.round(height * 0.024) : Math.round(height * Math.max(0.05, (recruitSafeZone.y || 0.08) - 0.01)),
-                width: Math.round(width * 0.18),
-                height: Math.round(height * 0.04),
+                width: Math.round(width * 0.2),
+                height: Math.round(height * 0.044),
             });
-            badge.fontSize = getTextFont(width, 20, 16);
+            badge.fontSize = getTextFont(width, 22, 18);
+            badge.aiReadableMinFont = 18;
             badge.backgroundColor = panelVisible ? '#1f2832' : '#111827';
             badge.color = '#ffffff';
             setWidgetAlign(badge, 'center');
@@ -8665,14 +10880,15 @@ export function buildPosterLayout({ input, result }) {
             const nextTitle = tidyRecruitLine(title.text, 16);
             if (nextTitle)
                 title.text = nextTitle;
-            applyWidgetRect(title, {
-                left: contentLeft,
-                top: panelVisible ? panelTop + Math.round(height * 0.095) : Math.round(height * Math.max(0.12, recruitSafeZone.y || 0.12)),
-                width: contentWidth,
-                height: Math.round(height * 0.12),
-            });
-            title.fontSize = getTextFont(width, 42, 32);
-            title.lineHeight = 1.08;
+              applyWidgetRect(title, {
+                  left: contentLeft,
+                  top: panelVisible ? panelTop + Math.round(height * 0.095) : Math.round(height * Math.max(0.12, recruitSafeZone.y || 0.12)),
+                  width: contentWidth,
+                  height: Math.round(height * 0.155),
+              });
+              title.fontSize = getTextFont(width, 60, 46);
+              title.aiReadableMinFont = 46;
+              title.lineHeight = 1.04;
             title.color = titleColor;
             title.textEffects = panelVisible ? [] : [{
                     type: 'shadow',
@@ -8693,14 +10909,15 @@ export function buildPosterLayout({ input, result }) {
             else {
                 showWidgetBlock(slogan);
                 slogan.text = nextSlogan;
-                applyWidgetRect(slogan, {
-                    left: contentLeft,
-                    top: panelVisible ? panelTop + Math.round(height * 0.215) : Math.round(height * Math.max(0.25, (recruitSafeZone.y || 0.12) + 0.115)),
-                    width: contentWidth,
-                    height: Math.round(height * 0.042),
-                });
-                slogan.fontSize = getTextFont(width, 18, 15);
-                slogan.lineHeight = 1.12;
+                  applyWidgetRect(slogan, {
+                      left: contentLeft,
+                      top: panelVisible ? panelTop + Math.round(height * 0.215) : Math.round(height * Math.max(0.25, (recruitSafeZone.y || 0.12) + 0.115)),
+                      width: contentWidth,
+                      height: Math.round(height * 0.058),
+                  });
+                  slogan.fontSize = getTextFont(width, 27, 20);
+                  slogan.aiReadableMinFont = 20;
+                  slogan.lineHeight = 1.18;
                 slogan.color = subColor;
                 slogan.backgroundColor = '#ffffff00';
                 slogan.borderColor = '#ffffff00';
@@ -8757,14 +10974,15 @@ export function buildPosterLayout({ input, result }) {
             }
             showWidgetBlock(card);
             card.text = text;
-            applyWidgetRect(card, {
-                left: contentLeft,
-                top: (panelVisible ? panelTop + Math.round(height * 0.34) : Math.round(height * 0.42)) + index * Math.round(height * 0.07),
-                width: contentWidth,
-                height: Math.round(height * 0.048),
-            });
-            card.fontSize = getTextFont(width, 18, 14);
-            card.lineHeight = 1.16;
+              applyWidgetRect(card, {
+                  left: contentLeft,
+                  top: (panelVisible ? panelTop + Math.round(height * 0.34) : Math.round(height * 0.42)) + index * Math.round(height * 0.07),
+                  width: contentWidth,
+                  height: Math.round(height * 0.064),
+              });
+              card.fontSize = getTextFont(width, 24, 18);
+              card.aiReadableMinFont = 18;
+              card.lineHeight = 1.2;
             card.backgroundColor = panelVisible ? '#fffdfaf2' : '#ffffffd8';
             card.borderColor = panelVisible ? '#1f283220' : '#ffffff8a';
             card.borderWidth = 1;
@@ -8782,14 +11000,15 @@ export function buildPosterLayout({ input, result }) {
             }
             showWidgetBlock(row);
             row.text = `· ${text}`;
-            applyWidgetRect(row, {
-                left: contentLeft,
-                top: (panelVisible ? panelTop + Math.round(height * 0.57) : Math.round(height * 0.66)) + index * Math.round(height * 0.044),
-                width: contentWidth,
-                height: Math.round(height * 0.038),
-            });
-            row.fontSize = getTextFont(width, 17, 14);
-            row.lineHeight = 1.14;
+              applyWidgetRect(row, {
+                  left: contentLeft,
+                  top: (panelVisible ? panelTop + Math.round(height * 0.57) : Math.round(height * 0.66)) + index * Math.round(height * 0.044),
+                  width: contentWidth,
+                  height: Math.round(height * 0.05),
+              });
+              row.fontSize = getTextFont(width, 20, 17);
+              row.aiReadableMinFont = 17;
+              row.lineHeight = 1.18;
             row.backgroundColor = panelVisible ? '#fffaf4' : '#ffffffcc';
             row.borderColor = panelVisible ? '#1f283218' : '#ffffff74';
             row.borderWidth = 1;
@@ -8801,8 +11020,8 @@ export function buildPosterLayout({ input, result }) {
         });
         if (cta) {
             showWidgetBlock(cta);
-            const ctaWidth = Math.round(Math.min(width * (panelVisible ? 0.32 : 0.28), contentWidth));
-            const ctaHeight = Math.round(height * 0.068);
+            const ctaWidth = Math.round(Math.min(width * (panelVisible ? 0.34 : 0.32), contentWidth));
+            const ctaHeight = Math.round(height * 0.074);
             applyWidgetRect(cta, {
                 left: contentLeft,
                 top: panelVisible
@@ -8811,7 +11030,8 @@ export function buildPosterLayout({ input, result }) {
                 width: ctaWidth,
                 height: ctaHeight,
             });
-            cta.fontSize = Math.min(Math.max(Number(cta.fontSize || 0), getTextFont(width, 22, 18)), getTextFont(width, 24, 19));
+            cta.fontSize = Math.min(Math.max(Number(cta.fontSize || 0), getTextFont(width, 24, 20)), getTextFont(width, 28, 22));
+            cta.aiReadableMinFont = 20;
             cta.radius = Math.max(18, Math.round(width * 0.018));
             cta.backgroundColor = '#0f172a';
             cta.color = '#ffffff';
@@ -8829,13 +11049,14 @@ export function buildPosterLayout({ input, result }) {
         const chips = widgets.filter((item) => /^ai_chip(_detail)?_/.test(String(item?.name || '')) && !isCollapsedWidget(item));
         const metas = widgets.filter((item) => /^ai_meta_/.test(String(item?.name || '')) && !isCollapsedWidget(item));
         const tidyLine = (value, limit = 18) => compactDeckLine(String(value || '').trim(), limit).replace(/[之与和及可工岗店类中提您者]$/, '').trim();
+        const tidyDisplayLine = (value, limit = 24) => normalizePosterInfoLine(compactDeckLine(String(value || '').trim(), limit), limit + 4).replace(/[之与和及可工岗店类中提您者]$/, '').trim();
         if (title) {
-            const nextTitle = tidyLine(title.text, selectedFamily === 'split-editorial' ? 18 : 16);
+            const nextTitle = tidyDisplayLine(title.text, selectedFamily === 'split-editorial' ? 22 : selectedFamily === 'hero-center' ? 20 : 18);
             if (nextTitle)
                 title.text = nextTitle;
         }
         if (slogan && !isCollapsedWidget(slogan)) {
-            const nextSlogan = tidyLine(slogan.text, selectedFamily === 'hero-center' ? 20 : 18);
+            const nextSlogan = tidyDisplayLine(slogan.text, selectedFamily === 'hero-center' ? 34 : selectedFamily === 'split-editorial' ? 30 : 28);
             if (!nextSlogan || isPosterEchoText(nextSlogan, String(title?.text || '').trim())) {
                 hideWidgetBlock(slogan);
             }
@@ -8844,7 +11065,12 @@ export function buildPosterLayout({ input, result }) {
             }
         }
         if (body && !isCollapsedWidget(body)) {
-            const nextBody = tidyLine(body.text, 20);
+            const nextBody = String(body.text || '')
+                .split(/\n+/)
+                .map((line) => tidyDisplayLine(line, selectedFamily === 'hero-center' ? 32 : 28))
+                .filter(Boolean)
+                .slice(0, selectedFamily === 'hero-center' ? 3 : 2)
+                .join('\n');
             if (!nextBody || isPosterEchoText(nextBody, String(title?.text || '').trim())) {
                 hideWidgetBlock(body);
             }
@@ -8853,22 +11079,22 @@ export function buildPosterLayout({ input, result }) {
             }
         }
         chips.forEach((chip, index) => {
-            if (index > (selectedFamily === 'split-editorial' ? 2 : 1)) {
+            if (index > (selectedFamily === 'split-editorial' ? 4 : selectedFamily === 'hero-center' ? 4 : 3)) {
                 hideWidgetBlock(chip);
                 return;
             }
-            const nextText = tidyLine(chip.text, 14);
+            const nextText = tidyDisplayLine(chip.text, 18);
             if (!nextText)
                 hideWidgetBlock(chip);
             else
                 chip.text = nextText;
         });
         metas.forEach((meta, index) => {
-            if (index > 0) {
+            if (index > (selectedFamily === 'hero-center' ? 3 : selectedFamily === 'split-editorial' ? 2 : 2)) {
                 hideWidgetBlock(meta);
                 return;
             }
-            const nextText = tidyLine(meta.text, 12);
+            const nextText = tidyDisplayLine(meta.text, 18);
             if (!nextText || /^(限时|本周|周末|今日)$/.test(nextText))
                 hideWidgetBlock(meta);
             else
@@ -8895,16 +11121,46 @@ export function buildPosterLayout({ input, result }) {
             setWidgetAlign(cta, 'center');
         }
     }
-    applyProtocolDrivenPosterFinish(widgets, selectedFamily, width, height, {
-        input,
-        palette,
-        designPlan: result.designPlan || {},
-        copyDeck,
-        result,
-    });
-    applyMinimumReadablePosterTypography(widgets, width, height);
+    if (prioritizeAiRecommendations) {
+        applyAiPriorityPosterFinish(widgets, width, height, {
+            input,
+            palette,
+            designPlan: result.designPlan || {},
+            copyDeck,
+            result,
+        });
+    }
+    else {
+        applyProtocolDrivenPosterFinish(widgets, selectedFamily, width, height, {
+            input,
+            palette,
+            designPlan: result.designPlan || {},
+            copyDeck,
+            result,
+        });
+    }
+    applyMinimumReadablePosterTypography(widgets, width, height, { resolveCollisions: true, maxPasses: 2 });
     enforcePosterContrast(widgets, palette, result.designPlan || {});
+    enforcePosterAlignmentPolicy(widgets, selectedFamily);
+    enforcePosterHierarchyBudget(widgets);
+    tightenDecoratedTextBoxes(widgets, width);
+    const finalFlowAdjusted = settleFinalPosterTextFlow(widgets, width, height, 3);
+    neutralizeOversizedDarkPanels(widgets, width, height, palette);
+    const finalWidgetAudit = auditFinalPosterWidgets(widgets, width, height);
+    widgets = normalizeAiPosterLayerOrder(widgets);
     finalizeAiWidgetEditability(widgets);
+    const finalLayoutScore = scorePosterLayoutVariant({
+        layout: solvedSections,
+        metrics: contentMetrics,
+        budget: layoutBudget,
+        pageWidth: width,
+        pageHeight: height,
+        includeHeroLayer,
+        readabilitySignals: layoutReadabilitySignals,
+        backendCompositionReport,
+        finalWidgetAudit,
+    });
+    const finalChosenLayoutScore = Number(finalLayoutScore.total || 0);
     return {
         page: {
             width,
@@ -8917,32 +11173,86 @@ export function buildPosterLayout({ input, result }) {
         meta: {
             layoutFamily: selectedFamily,
             sizeProfile,
+            layoutStrategy,
+            selectedVariant: solvedSections?.variant || baseSolvedSections?.variant || '',
+            layoutSelectionReason,
+            contentMetrics: {
+                titleLines: contentMetrics.titleLines,
+                subtitleLines: contentMetrics.subtitleLines,
+                proofPointCount: contentMetrics.proofPointCount,
+                proofDensityLevel: contentMetrics.proofDensityLevel,
+                ctaWidthLevel: contentMetrics.ctaWidthLevel,
+                contentDensity: contentMetrics.contentDensity,
+                textCoverageEstimateRatio: Number(contentMetrics.textCoverageEstimateRatio || 0),
+            },
+            layoutBudget: {
+                titleMaxHeightRatio: layoutBudget.titleMaxHeightRatio,
+                subtitleMaxHeightRatio: layoutBudget.subtitleMaxHeightRatio,
+                proofMaxCount: layoutBudget.proofMaxCount,
+                textCoverageMaxRatio: layoutBudget.textCoverageMaxRatio,
+                ctaMinBottomGap: layoutBudget.ctaMinBottomGap,
+                heroSafeZonePolicy: layoutBudget.heroSafeZonePolicy,
+            },
+            layoutScore: {
+                base: Number(baseSolvedScore?.total || 0),
+                best: Number(bestVariant?.score?.total || 0),
+                chosen: Number(finalChosenLayoutScore.toFixed(3)),
+                breakdown: {
+                    ...finalLayoutScore.breakdown,
+                },
+            },
+            finalCompositionScore: {
+                backend: Number(backendCompositionReport?.totalScore || 0),
+                chosen: Number((finalChosenLayoutScore * 10).toFixed(1)),
+                breakdown: backendCompositionReport?.breakdown || {},
+                suggestions: backendCompositionReport?.suggestions || [],
+            },
+            readabilitySignals: {
+                heroFit: Number(layoutReadabilitySignals?.heroFit || 0),
+                titleTexturePenalty: Number(layoutReadabilitySignals?.titleTexturePenalty || 0),
+                ctaContrastPenalty: Number(layoutReadabilitySignals?.ctaContrastPenalty || 0),
+                textConflictPenalty: Number(layoutReadabilitySignals?.textConflictPenalty || 0),
+                recommendedTreatment: layoutReadabilitySignals?.recommendedTreatment || [],
+                shouldSuggestHeroSwap: Boolean(layoutReadabilitySignals?.shouldSuggestHeroSwap),
+            },
+            finalWidgetAudit: {
+                adjustedFlow: Boolean(finalFlowAdjusted),
+                overlapCount: finalWidgetAudit.overlapCount,
+                overlapArea: finalWidgetAudit.overlapArea,
+                decoratedWasteRatio: finalWidgetAudit.decoratedWasteRatio,
+                pageCoveragePenalty: finalWidgetAudit.pageCoveragePenalty,
+            },
         },
     };
 }
 export function replacePosterTexts(widgets, input, result) {
-    const copyDeck = getPosterCopyDeck(input, result);
+    const prioritizeAiRecommendations = shouldPrioritizeAiPosterRecommendations(result);
+    const copyDeck = prioritizeAiRecommendations ? getAiPreferredCopyDeck(input, result) : getPosterCopyDeck(input, result);
     const layoutFamily = normalizeLayoutFamily(result.designPlan?.layoutFamily)
         || (widgets.some((item) => item.name && item.name.startsWith('ai_card_')) ? 'grid-product'
             : widgets.some((item) => item.name && item.name.startsWith('ai_list_')) ? 'list-recruitment'
                 : widgets.some((item) => item.name === 'ai_course_bar') ? 'clean-course'
                     : 'hero-left');
-    const specializedDeck = buildFamilySpecializedCopyDeck(copyDeck, layoutFamily, input, result);
+    const inferredPageWidth = Math.max(1, ...widgets.map((item) => Math.round(Number(item.left || 0) + Number(item.width || 0))));
+    const inferredPageHeight = Math.max(1, ...widgets.map((item) => Math.round(Number(item.top || 0) + Number(item.height || 0))));
+    const sizeProfile = getSizeProfile(inferredPageWidth, inferredPageHeight);
+    const richnessLimits = getPosterCopyRichnessLimits(layoutFamily, sizeProfile, prioritizeAiRecommendations);
+    const specializedDeck = prioritizeAiRecommendations ? copyDeck : buildFamilySpecializedCopyDeck(copyDeck, layoutFamily, input, result);
     const head = dedupePosterTitleSlogan(specializedDeck.heroHeadline || result.title, specializedDeck.supportLine || result.slogan);
-    const layoutTitle = normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(specializedDeck.heroHeadline || result.title, '').trim());
-    const layoutSlogan = normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(specializedDeck.supportLine || result.slogan, '').trim());
+    const layoutTitle = clipPosterLayerText(normalizePosterHeadline(stripInternalPromptEcho(head.title) || getSafeText(specializedDeck.heroHeadline || result.title, '').trim()), richnessLimits.titleMax);
+    const layoutSlogan = clipPosterLayerText(normalizePosterSubline(stripInternalPromptEcho(head.slogan) || getSafeText(specializedDeck.supportLine || result.slogan, '').trim()), richnessLimits.sloganMax);
     const priceValueText = [specializedDeck.priceBlock?.value, specializedDeck.offerLine, result.offerLine, result.slogan].map((item) => String(item || '').trim()).filter(Boolean);
     const bodySegments = [specializedDeck.offerLine, ...(specializedDeck.proofPoints || []), specializedDeck.actionReason, specializedDeck.audienceLine, specializedDeck.trustLine]
         .map((item) => stripInternalPromptEcho(item))
         .filter((item) => item && !isSamePosterText(item, layoutTitle) && !isSamePosterText(item, layoutSlogan) && !priceValueText.some((price) => isSamePosterText(item, price)));
     const layoutBody = stripInternalPromptEcho(bodySegments.join('｜') || result.body) || getSafeText(result.body, '补充描述文案');
-    const contentProfile = getPosterContentProfile(layoutFamily, result.designPlan?.density || 'balanced', 'portrait');
+    const contentProfile = getPosterContentProfile(layoutFamily, result.designPlan?.density || 'balanced', sizeProfile);
     const highlights = sanitizePosterHighlights(layoutTitle, layoutSlogan, layoutBody, derivePosterHighlights(input, result, contentProfile));
     const layoutBodyText = !contentProfile.maxBodyLines
         ? ''
         : highlights.bodyLines.length > 1
             ? highlights.bodyLines.join('\n')
-            : (highlights.bodyLines[0] || normalizePosterInfoLine(layoutBody, contentProfile.maxBodyChars || 16));
+            : (highlights.bodyLines[0] || normalizePosterInfoLine(layoutBody, Math.max(contentProfile.maxBodyChars || 24, richnessLimits.bodyFallbackChars)));
     const title = widgets.find((item) => item.name === 'ai_title');
     const slogan = widgets.find((item) => item.name === 'ai_slogan');
     const body = widgets.find((item) => item.name === 'ai_body');
@@ -8973,7 +11283,7 @@ export function replacePosterTexts(widgets, input, result) {
         highlights.structuredFacts?.time ? `时间｜${highlights.structuredFacts.time}` : '',
         highlights.structuredFacts?.place ? `地点｜${highlights.structuredFacts.place}` : '',
         highlights.structuredFacts?.benefit ? `权益｜${highlights.structuredFacts.benefit}` : '',
-    ].filter(Boolean).slice(0, 2);
+    ].filter(Boolean).slice(0, 3);
     if (title)
         title.text = getSafeText(layoutTitle, 'AI 海报标题');
     if (slogan)
@@ -8981,7 +11291,7 @@ export function replacePosterTexts(widgets, input, result) {
     if (body)
         body.text = layoutBodyText || ' ';
     if (cta)
-        cta.text = getSafeText(stripInternalPromptEcho(specializedDeck.cta || result.cta), '立即了解');
+        cta.text = clipPosterLayerText(getSafeText(stripInternalPromptEcho(specializedDeck.cta || result.cta), '立即了解'), richnessLimits.ctaMax);
     if (badge)
         badge.text = specializedDeck.badge || highlights.badge || ' ';
     if (qr && input.qrUrl)
@@ -9013,37 +11323,56 @@ export function replacePosterTexts(widgets, input, result) {
         designPlan: result.designPlan || {},
     });
     collapseEmptyPosterWidgets(widgets, layoutFamily);
-    const inferredPageWidth = Math.max(1, ...widgets.map((item) => Math.round(Number(item.left || 0) + Number(item.width || 0))));
-    const inferredPageHeight = Math.max(1, ...widgets.map((item) => Math.round(Number(item.top || 0) + Number(item.height || 0))));
-    refinePosterTemplateFinish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
-        input,
-        palette: result.palette || {},
-        designPlan: result.designPlan || {},
-    });
-    applyLateStageLightFoodPosterPolish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
-        input,
-        palette: result.palette || {},
-        designPlan: result.designPlan || {},
-        copyDeck,
-    });
-    applyLateStageCommercialPosterPolish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
-        input,
-        palette: result.palette || {},
-        designPlan: result.designPlan || {},
-        copyDeck,
-    });
+    if (!prioritizeAiRecommendations) {
+        refinePosterTemplateFinish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
+            input,
+            palette: result.palette || {},
+            designPlan: result.designPlan || {},
+        });
+        applyLateStageLightFoodPosterPolish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
+            input,
+            palette: result.palette || {},
+            designPlan: result.designPlan || {},
+            copyDeck,
+        });
+    }
+    if (!prioritizeAiRecommendations) {
+        applyLateStageCommercialPosterPolish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
+            input,
+            palette: result.palette || {},
+            designPlan: result.designPlan || {},
+            copyDeck,
+        });
+    }
     cleanupWeakPosterWidgets(widgets, layoutFamily, inferredPageWidth, inferredPageHeight);
     removeDuplicatePosterNamedWidgets(widgets);
-    applyMinimumReadablePosterTypography(widgets, inferredPageWidth, inferredPageHeight);
-    applyProtocolDrivenPosterFinish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
-        input,
-        palette: result.palette || {},
-        designPlan: result.designPlan || {},
-        copyDeck,
-        result,
-    });
-    applyMinimumReadablePosterTypography(widgets, inferredPageWidth, inferredPageHeight);
+    applyMinimumReadablePosterTypography(widgets, inferredPageWidth, inferredPageHeight, { resolveCollisions: true, maxPasses: 2 });
+    if (prioritizeAiRecommendations) {
+        applyAiPriorityPosterFinish(widgets, inferredPageWidth, inferredPageHeight, {
+            input,
+            palette: result.palette || {},
+            designPlan: result.designPlan || {},
+            copyDeck,
+            result,
+        });
+    }
+    else {
+        applyProtocolDrivenPosterFinish(widgets, layoutFamily, inferredPageWidth, inferredPageHeight, {
+            input,
+            palette: result.palette || {},
+            designPlan: result.designPlan || {},
+            copyDeck,
+            result,
+        });
+    }
+    applyMinimumReadablePosterTypography(widgets, inferredPageWidth, inferredPageHeight, { resolveCollisions: true, maxPasses: 2 });
     enforcePosterContrast(widgets, result.palette || {}, result.designPlan || {});
+    enforcePosterAlignmentPolicy(widgets, layoutFamily);
+    enforcePosterHierarchyBudget(widgets);
+    tightenDecoratedTextBoxes(widgets, inferredPageWidth);
+    settleFinalPosterTextFlow(widgets, inferredPageWidth, inferredPageHeight, 3);
+    neutralizeOversizedDarkPanels(widgets, inferredPageWidth, inferredPageHeight, result.palette || {});
+    widgets = normalizeAiPosterLayerOrder(widgets);
     finalizeAiWidgetEditability(widgets);
     return widgets;
 }
@@ -9113,6 +11442,9 @@ export function applyPosterPalette(widgets, palette) {
             widget.textEffects = [];
         }
     });
+    const heroWidget = widgets.find((widget) => widget?.name === 'ai_hero');
+    neutralizeOversizedDarkPanels(widgets, Number(heroWidget?.width || 1242), Number(heroWidget?.height || 1660), palette);
+    widgets = normalizeAiPosterLayerOrder(widgets);
     finalizeAiWidgetEditability(widgets);
     return widgets;
 }

@@ -9,7 +9,7 @@
         <el-button plain type="primary" class="gounp__btn" @click="handleCombine">成组</el-button>
         <icon-item-select label="" :data="iconList" @finish="alignAction" />
       </div>
-      <component :is="dActiveElement?.type + '-style'" v-show="!showGroupCombined" v-if="dActiveElement?.type" />
+      <component :is="currentStyleComponent" v-show="!showGroupCombined" v-if="currentStyleComponent" />
     </div>
     <div v-show="activeTab === 1" class="layer-wrap">
       <layer-list :data="dWidgets" @change="layerChange" />
@@ -21,7 +21,7 @@
 // 样式设置面板
 import alignIconList, { AlignListData } from '@/assets/data/AlignListData'
 import iconItemSelect, { TIconItemSelectData } from '../settings/iconItemSelect.vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useControlStore, useGroupStore, useHistoryStore, useWidgetStore } from '@/store'
 import { storeToRefs } from 'pinia'
 import { TdWidgetData } from '@/store/design/widget'
@@ -41,6 +41,14 @@ const iconList = ref<AlignListData[]>(alignIconList)
 const showGroupCombined = ref(false)
 
 const { dActiveElement, dWidgets, dSelectWidgets } = storeToRefs(widgetStore)
+const supportedStyleTypes = new Set(['w-text', 'w-image', 'w-svg', 'w-qrcode', 'w-group'])
+const currentStyleComponent = computed(() => {
+  const rawType = String(dActiveElement.value?.type || '').trim().replace(/^\/+/, '')
+  if (!supportedStyleTypes.has(rawType)) {
+    return ''
+  }
+  return `${rawType}-style`
+})
 
 watch(
   dSelectWidgets,

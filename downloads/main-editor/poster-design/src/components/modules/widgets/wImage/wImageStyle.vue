@@ -27,19 +27,6 @@
                 <span class="image-action-card__title">替换图片</span>
               </span>
             </button>
-            <button
-              type="button"
-              class="image-action-card"
-              :class="{ 'image-action-card--active': state.innerElement.cropEdit }"
-              @click="imgCrop(!state.innerElement.cropEdit)"
-            >
-              <span class="image-action-card__icon">
-                <el-icon><Crop /></el-icon>
-              </span>
-              <span class="image-action-card__content">
-                <span class="image-action-card__title">{{ state.innerElement.cropEdit ? '完成裁剪' : '裁剪图片' }}</span>
-              </span>
-            </button>
             <button type="button" class="image-action-card" @click="openImageCutout('local')">
               <span class="image-action-card__icon">
                 <el-icon><Scissor /></el-icon>
@@ -91,7 +78,7 @@
 // const NAME = 'w-image-style'
 import { nextTick, reactive, ref, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Crop, MagicStick, PictureFilled, Scissor } from '@element-plus/icons-vue'
+import { MagicStick, PictureFilled, Scissor } from '@element-plus/icons-vue'
 
 import numberInput from '../../settings/numberInput.vue'
 import iconItemSelect, { TIconItemSelectData } from '../../settings/iconItemSelect.vue'

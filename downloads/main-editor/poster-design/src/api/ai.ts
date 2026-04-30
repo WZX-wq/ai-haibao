@@ -20,6 +20,8 @@ export type PosterGenerateInput = {
   generateHeroImage?: boolean
   /** 默认 true；传 false 时不调用 AI 背景图（画布用配色渐变） */
   generateBackgroundImage?: boolean
+  /** 高质量模式可回传用户在候选主图里选中的下标 */
+  selectedHeroCandidateIndex?: number
 }
 
 export type PosterPalette = {
@@ -204,10 +206,55 @@ export type PosterQualityReport = {
   failureTags?: string[]
 }
 
+export type PosterFinalCompositionBreakdown = {
+  heroFit: number
+  readability: number
+  copyStrength: number
+  hierarchy: number
+  whitespace: number
+  ctaVisibility: number
+  conflictPenalty: number
+  finishLevel: number
+}
+
+export type PosterFinalCompositionReport = {
+  totalScore: number
+  breakdown: PosterFinalCompositionBreakdown
+  suggestions: string[]
+}
+
+export type PosterHeroCandidateScoreBreakdown = {
+  whitespace: number
+  subjectPosition: number
+  clarity: number
+  toneMatch: number
+}
+
+export type PosterHeroCandidate = {
+  imageUrl: string
+  prompt: string
+  score: number
+  selected: boolean
+  sourceType?: 'text-to-image' | 'reference-edit' | 'repair-edit'
+  analysisSummary?: string
+  scoreBreakdown: PosterHeroCandidateScoreBreakdown
+  multimodalLayoutHints?: PosterMultimodalLayoutHints
+}
+
+export type PosterHeroSelectionMeta = {
+  recommendedIndex: number
+  selectedIndex: number
+  selectionMode: 'auto' | 'manual'
+  lowConfidence?: boolean
+  topScore?: number
+  spread?: number
+}
+
 export type PosterDesignPlan = {
   industry: string
   tone: string
   layoutFamily: string
+  layoutStrategy?: string
   density: 'light' | 'balanced' | 'dense'
   heroStrategy: 'product' | 'person' | 'scene' | 'editorial'
   ctaStrength: 'soft' | 'balanced' | 'strong'
@@ -217,6 +264,10 @@ export type PosterDesignPlan = {
   backgroundTone?: 'light' | 'dark' | 'mixed'
   contentPattern?: PosterContentPattern
   emphasisOrder?: PosterEmphasisRole[]
+  contentPriority?: PosterEmphasisRole[]
+  maxVisibleProofPoints?: number
+  titleSafeZonePolicy?: 'strict-avoid-subject' | 'prefer-clean-area' | 'allow-overlay'
+  ctaPlacementPolicy?: 'bottom-safe' | 'follow-price' | 'float-near-copy'
   templateCandidates: PosterTemplateCandidate[]
   /** 增强模式：AI 返回绝对坐标排版块；前端优先按此布局，缺失时回退骨架算法 */
   absoluteLayout?: PosterAbsoluteLayout
@@ -250,6 +301,11 @@ export type PosterGenerateResult = {
     imageUrl: string
     prompt: string
   }
+  heroCandidates?: PosterHeroCandidate[]
+  recommendedHeroCandidateIndex?: number
+  heroSelectionMode?: 'auto' | 'manual'
+  heroSelectionMeta?: PosterHeroSelectionMeta
+  referenceImageUsed?: boolean
   recommendedTemplate?: {
     id: number
     cover: string
@@ -267,6 +323,7 @@ export type PosterGenerateResult = {
   multimodalLayoutHints?: PosterMultimodalLayoutHints
   qualityHints?: string[]
   qualityReport?: PosterQualityReport
+  finalCompositionReport?: PosterFinalCompositionReport
   size: {
     key: string
     name: string

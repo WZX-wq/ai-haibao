@@ -11,7 +11,7 @@ import { TWidgetStore, TdWidgetData } from '..'
 import useCanvasStore from '../../canvas'
 import useWidgetStore from '../../widget'
 import { decodeTextIfNeeded, repairKnownMojibake } from '@/utils/decodeText'
-import { assignStableLayerUuids } from './widget'
+import { assignStableLayerUuids, normalizeWidget } from './widget'
 
 // TODO: 选择模板
 export function setTemplate(store: TWidgetStore, allWidgets: TdWidgetData[]) {
@@ -25,7 +25,7 @@ export function setTemplate(store: TWidgetStore, allWidgets: TdWidgetData[]) {
     if (item.fontClass?.alias) {
       item.fontClass.alias = repairKnownMojibake(item.fontClass.alias)
     }
-    store.dWidgets.push(item)
+    store.dWidgets.push(normalizeWidget(item))
   })
   widgetStore.updateDWidgets()
   canvasStore.reChangeCanvas()
