@@ -19,11 +19,21 @@
       >
         <edit-model v-if="props.edit" :options="props.edit" :data="{ item, i }">
           <div v-if="item.isDelect" class="list__mask">已删除</div>
-          <el-image class="img transparent-bg" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }" />
+          <el-image
+            class="img transparent-bg"
+            :src="getCardImage(item)"
+            :style="{ height: getInnerHeight(item) + 'px' }"
+            @error="handleImageError(item, i)"
+          />
         </edit-model>
         <template v-else>
           <imageTip :detail="item">
-            <el-image class="img" :src="item.thumb || item.url" :style="{ height: getInnerHeight(item) + 'px' }">
+            <el-image
+              class="img"
+              :src="getCardImage(item)"
+              :style="{ height: getInnerHeight(item) + 'px' }"
+              @error="handleImageError(item, i)"
+            >
               <template #placeholder>
                 <div :style="{ backgroundColor: item.color }" class="image-color" />
               </template>
@@ -42,6 +52,7 @@ import { reactive, watch, nextTick, ref } from 'vue'
 import DragHelper from '@/common/hooks/dragHelper'
 import setImageData, { TItem2DataParam } from '@/common/methods/DesignFeatures/setImage'
 import { IGetTempListData } from '@/api/home';
+import { normalizeLoopbackMediaUrl } from '@/utils/publicMediaUrl'
 
 type TProps = {
   listData: IGetTempListData[]
@@ -74,9 +85,44 @@ const state = reactive<TState>({
   list: [],
 })
 
+type TImageState = IGetTempListData & {
+  __imageRetryCount?: number
+  __fallbackSrc?: string
+}
+
 const dragHelper = new DragHelper()
 let isDrag = false
 let startPoint = { x: 99999, y: 99999 }
+
+const getFallbackByIndex = (index: number) => (index % 2 === 0 ? '/template-cover-1.png' : '/template-cover-2.png')
+
+const withRetryParam = (raw: string, key = 'retry') => {
+  if (!raw) return raw
+  return `${raw}${raw.includes('?') ? '&' : '?'}${key}=${Date.now()}`
+}
+
+const getCardImage = (item: TImageState) => {
+  const raw = item.__fallbackSrc || item.thumb || item.url || ''
+  const normalized = normalizeLoopbackMediaUrl(raw)
+  return normalized || '/template-cover-1.png'
+}
+
+const handleImageError = (item: TImageState, index: number) => {
+  const retryCount = Number(item.__imageRetryCount || 0)
+  const current = String(item.__fallbackSrc || item.thumb || item.url || '').trim()
+  if (current && retryCount < 1) {
+    item.__imageRetryCount = retryCount + 1
+    item.__fallbackSrc = withRetryParam(current, 'cacheRetry')
+    return
+  }
+  if (item.thumb && item.url && item.thumb !== item.url) {
+    item.thumb = item.url
+    item.__fallbackSrc = ''
+    item.__imageRetryCount = retryCount + 1
+    return
+  }
+  item.__fallbackSrc = getFallbackByIndex(index)
+}
 
 const mouseup = (e: MouseEvent) => {
   e.preventDefault()
