@@ -24,6 +24,7 @@ type NormalizedRemoteUser = {
 
 type RemoteTokenExtras = {
   apiWebToken: string
+  remoteAccessToken?: string
 }
 
 const oauthStateStore = new Map<string, OAuthStateRecord>()
@@ -250,6 +251,25 @@ function pickApiWebToken(...values: unknown[]) {
   return ''
 }
 
+function parseCookieHeader(cookieHeader: unknown) {
+  const map: Record<string, string> = {}
+  const raw = String(cookieHeader || '')
+  if (!raw) return map
+  raw.split(';').forEach((part) => {
+    const index = part.indexOf('=')
+    if (index <= 0) return
+    const key = part.slice(0, index).trim()
+    const value = part.slice(index + 1).trim()
+    if (!key) return
+    try {
+      map[key] = decodeURIComponent(value)
+    } catch {
+      map[key] = value
+    }
+  })
+  return map
+}
+
 function buildPermissionSnapshot(record?: any) {
   const isVip = !!record?.is_vip
   return {
@@ -473,7 +493,7 @@ async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayl
       userId,
       getOAuthConfig().providerName,
       remoteUser.providerUserId,
-      String(tokenPayload.access_token || ''),
+      String(tokenExtras.remoteAccessToken || tokenPayload.access_token || ''),
       tokenExtras.apiWebToken || null,
       String(tokenPayload.refresh_token || ''),
       String(tokenPayload.token_type || ''),
@@ -501,17 +521,32 @@ async function ensureUserAndIdentity(remoteUser: NormalizedRemoteUser, tokenPayl
 }
 
 function extractApiWebToken(req: any, tokenPayload: any) {
+  const cookies = parseCookieHeader(req.headers?.cookie)
   return pickApiWebToken(
-    req.body?.api_web_token,
-    req.body?.apiWebToken,
-    req.body?.kq_token,
-    req.body?.token,
     tokenPayload?.api_web_token,
     tokenPayload?.apiWebToken,
     tokenPayload?.kq_token,
     tokenPayload?.token,
     tokenPayload?.user_token,
+    req.body?.token,
+    req.body?.kq_token,
+    req.body?.api_web_token,
+    req.body?.apiWebToken,
+    cookies.kq_token,
+    cookies.user_token,
+    cookies.api_web_token,
   )
+}
+
+function extractRemoteSessionToken(req: any) {
+  const cookies = parseCookieHeader(req.headers?.cookie)
+  return String(
+    req.body?.kq_token ||
+      req.body?.token ||
+      cookies.kq_token ||
+      cookies.user_token ||
+      '',
+  ).trim()
 }
 
 async function createSession(req: any, userId: number) {
@@ -711,10 +746,12 @@ export async function handleOAuthCallback(req: any, res: any) {
       throw new Error('OAuth token 返回缺少 access_token')
     }
     const apiWebToken = extractApiWebToken(req, tokenPayload)
+    const remoteSessionToken = extractRemoteSessionToken(req)
     const remoteUserPayload = await fetchRemoteUser(accessToken)
     const remoteUser = normalizeRemoteUser(tokenPayload, remoteUserPayload)
     const userId = await ensureUserAndIdentity(remoteUser, tokenPayload, {
       apiWebToken,
+      remoteAccessToken: accessToken || remoteSessionToken,
     })
     const sessionInfo = await createSession(req, userId)
     const sessionData = await resolveSession({
@@ -735,6 +772,8 @@ export async function handleOAuthCallback(req: any, res: any) {
       permissions: sessionData.permissions,
       downloads_today_used: downloadsTodayUsed,
       has_api_web_token: !!apiWebToken,
+      api_web_token: apiWebToken || '',
+      kq_jwt: remoteSessionToken || accessToken || '',
     })
   } catch (error) {
     console.error(error)

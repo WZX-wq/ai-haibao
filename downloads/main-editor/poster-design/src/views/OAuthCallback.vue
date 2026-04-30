@@ -50,14 +50,35 @@ function readCookie(name: string) {
 }
 
 function resolveApiWebTokenFromBrowser() {
-  const fromQuery = queryString(route.query.api_web_token).trim()
-  if (fromQuery && !looksLikeJwt(fromQuery)) return fromQuery
+  const queryCandidates = [
+    queryString(route.query.token).trim(),
+    queryString(route.query.kq_token).trim(),
+    queryString(route.query.api_web_token).trim(),
+  ]
+  for (const candidate of queryCandidates) {
+    if (candidate && !looksLikeJwt(candidate)) return candidate
+  }
 
-  const cookieToken = readCookie('api_web_token').trim()
-  if (cookieToken && !looksLikeJwt(cookieToken)) return cookieToken
+  const cookieCandidates = [
+    readCookie('kq_token').trim(),
+    readCookie('user_token').trim(),
+    readCookie('api_web_token').trim(),
+  ]
+  for (const candidate of cookieCandidates) {
+    if (candidate && !looksLikeJwt(candidate)) return candidate
+  }
 
-  const localKq = (localStorage.getItem('kq_token') || localStorage.getItem('token') || '').trim()
-  if (localKq && !looksLikeJwt(localKq)) return localKq
+  const storageCandidates = [
+    (localStorage.getItem('kq_token') || '').trim(),
+    (sessionStorage.getItem('kq_token') || '').trim(),
+    (localStorage.getItem('api_web_token') || '').trim(),
+    (sessionStorage.getItem('api_web_token') || '').trim(),
+    (localStorage.getItem('token') || '').trim(),
+    (sessionStorage.getItem('token') || '').trim(),
+  ]
+  for (const candidate of storageCandidates) {
+    if (candidate && !looksLikeJwt(candidate)) return candidate
+  }
 
   return ''
 }
@@ -73,6 +94,26 @@ function resolveSessionTokenFromBrowser() {
   if (storedJwt) return storedJwt
 
   return ''
+}
+
+function persistRemoteTokens(apiWebToken: string, sessionToken: string) {
+  if (typeof localStorage === 'undefined') return
+  if (apiWebToken && !looksLikeJwt(apiWebToken)) {
+    localStorage.setItem('api_web_token', apiWebToken)
+    sessionStorage.setItem('api_web_token', apiWebToken)
+    localStorage.setItem('kq_token', apiWebToken)
+    sessionStorage.setItem('kq_token', apiWebToken)
+  }
+  if (sessionToken && !looksLikeJwt(sessionToken)) {
+    localStorage.setItem('kq_token', sessionToken)
+    sessionStorage.setItem('kq_token', sessionToken)
+    localStorage.setItem('api_web_token', sessionToken)
+    sessionStorage.setItem('api_web_token', sessionToken)
+  }
+  if (looksLikeJwt(sessionToken)) {
+    localStorage.setItem('kq_jwt', sessionToken)
+    sessionStorage.setItem('kq_jwt', sessionToken)
+  }
 }
 
 async function finishLogin() {
@@ -98,12 +139,16 @@ async function finishLogin() {
     throw new Error('回调参数无效或状态校验失败，请重新登录')
   }
 
+  const apiWebToken = resolveApiWebTokenFromBrowser()
+  const sessionToken = resolveSessionTokenFromBrowser()
+  persistRemoteTokens(apiWebToken, sessionToken)
+
   const result = await accountApi.callbackLogin({
     code,
     state,
     redirectUri: `${window.location.origin}${route.path}`,
-    api_web_token: resolveApiWebTokenFromBrowser(),
-    kq_token: resolveSessionTokenFromBrowser(),
+    api_web_token: apiWebToken,
+    kq_token: sessionToken,
   })
 
   if ((result as any).code === 400 || !result.local_token) {
@@ -124,6 +169,10 @@ async function finishLogin() {
   if (typeof result.downloads_today_used === 'number') {
     userStore.setDownloadsTodayUsed(result.downloads_today_used)
   }
+  persistRemoteTokens(
+    String((result as any).api_web_token || apiWebToken || '').trim(),
+    String((result as any).kq_jwt || sessionToken || '').trim(),
+  )
 
   localStorage.removeItem(LocalStorageKey.authStateKey)
   sessionStorage.removeItem(LocalStorageKey.authStateKey)
